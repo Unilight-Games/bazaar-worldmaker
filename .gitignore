@@ -1,0 +1,7 @@
+dist/
+dist-offline/
+dist-web/
+node_modules/
+shots/
+src/maps/
+*.log
