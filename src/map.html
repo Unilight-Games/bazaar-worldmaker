@@ -1,0 +1,186 @@
+<header class="mapbar">
+  <button type="button" class="btn" id="mmBack">← คลังแผนที่</button>
+  <h1 id="mmTitle"></h1>
+  <span class="sub" id="mmSub"></span>
+  <span class="grow"></span>
+  <button type="button" class="roomchip" id="roomChip" hidden title="เปิดหรือซ่อนแผงของห้อง" aria-controls="roomPanel"><i></i><span id="roomChipText"></span></button>
+  <button type="button" class="btn brass" id="roomOpen">เปิดห้องแก้ร่วมกัน</button>
+</header>
+<div class="card" id="roomName" hidden style="margin:0 20px 12px"><label class="field" for="roomNameIn" style="margin:0">ชื่อที่เพื่อนจะเห็นในห้อง พิมพ์แล้วกด Enter<input type="text" class="inp" id="roomNameIn" maxlength="24" autocomplete="off"></label></div>
+<div class="card" id="roomPanel" hidden>
+  <div class="rowx"><span class="lbl">รหัสห้อง</span><b class="code big" id="roomCode"></b><button type="button" class="btn" id="roomCopy">คัดลอกรหัส</button><span class="grow" style="flex:1"></span><button type="button" class="btn warn" id="roomClose">ปิดห้อง</button><button type="button" class="btn" id="roomHide" title="ซ่อนแผงนี้ กดป้ายห้องบนแถบเพื่อเปิดอีกครั้ง">ซ่อน</button></div>
+  <ul class="people" id="roomPeople"></ul>
+  <div class="bans" id="roomBans" hidden></div>
+  <ul class="roomlog" id="roomLog" hidden></ul>
+  <p class="hint" id="roomWhere" style="margin:0"></p>
+</div>
+<div class="wrap">
+  <div class="mapcol">
+    <div class="toolbar" id="toolbar">
+      <div class="tbrow">
+        <div class="seg" id="modes" role="group" aria-label="เครื่องมือ">
+          <button type="button" data-mode="view" aria-pressed="true">ดูแผนที่</button>
+          <button type="button" data-mode="terrain" aria-pressed="false">ระบายภูมิประเทศ</button>
+          <button type="button" data-mode="river" aria-pressed="false">วาดแม่น้ำ</button>
+          <button type="button" data-mode="city" aria-pressed="false">วางเมือง</button>
+          <button type="button" data-mode="label" aria-pressed="false">ใส่ชื่อสถานที่</button>
+          <button type="button" data-mode="route" aria-pressed="false">ถนน</button>
+          <button type="button" data-mode="trade" aria-pressed="false">การค้า</button>
+          <button type="button" data-mode="climate" aria-pressed="false">ภูมิอากาศ</button>
+          <button type="button" data-mode="econ" aria-pressed="false">เศรษฐกิจ</button>
+          <button type="button" data-mode="info" aria-pressed="false">แก้ข้อมูล</button>
+        </div>
+        <div class="seg" id="history">
+          <button type="button" id="undo" title="ย้อน (Ctrl+Z)" disabled>↶ ย้อน</button>
+          <button type="button" id="redo" title="ทำซ้ำ (Ctrl+Shift+Z)" disabled>↷ ทำซ้ำ</button>
+        </div>
+        <span class="status" id="status" role="status"></span>
+      </div>
+      <div class="opts" id="opts">
+        <div data-for="view">
+          <p class="hint" style="margin:0">ชี้ช่องบนแผนที่เพื่ออ่านเรื่องของพื้นที่นั้น หมุนล้อเมาส์เพื่อซูม กดปุ่มลูกศรหรือ W A S D เพื่อเลื่อน ลากเพื่อเลื่อนแผนที่ โหมดการค้ากับโหมดภูมิอากาศอยู่ในแถบด้านบน<span id="viewEditHint"> ลากเมือง ชื่อสถานที่ หรือยอดภูเขาสแตนเทอร์เพื่อย้าย เลือกเครื่องมืออื่นด้านบนเพื่อแก้แผนที่</span></p>
+        </div>
+        <div data-for="terrain" hidden>
+          <div class="pal" id="pal"></div>
+          <div class="optrow"><span class="lbl">ขนาดแปรง</span>
+            <div class="seg" id="bsize"><button type="button" data-n="1">1 ช่อง</button><button type="button" data-n="2">7 ช่อง</button><button type="button" data-n="3">19 ช่อง</button><button type="button" data-n="4">37 ช่อง</button></div>
+            <span class="lbl" id="bname"></span></div>
+          <p class="hint">เลือกภูมิประเทศแล้วลากบนแผนที่ ระบายลงทะเลได้เพื่อต่อแผ่นดิน ช่องคืนค่าเดิมลบสิ่งที่ระบายไว้และคืนแม่น้ำเดิมที่ซ่อนไว้ เลื่อนแผนที่ด้วยการลากเมาส์ปุ่มขวา หรือกดเว้นวรรคค้างแล้วลาก บนจอสัมผัสใช้สองนิ้ว</p>
+          <div class="autobox"><button type="button" class="btn" id="autoMt">วางเทือกเขาอัตโนมัติ</button><label for="autoMtAmt">ปริมาณ <select id="autoMtAmt"><option value="20">น้อย</option><option value="50" selected>ปานกลาง</option><option value="85">มาก</option></select></label><span class="lbl">วางเป็นแนวเทือกเขาบนแผ่นดินที่ระบายไว้ ตั้งห่างฝั่ง มีช่องเขาให้ผ่าน เกาะเล็กได้สันเขาสั้น</span></div>
+        </div>
+        <div data-for="river" hidden>
+          <div class="optrow" style="margin-top:0">
+            <div class="seg" id="rtool"><button type="button" data-rt="draw">วาดเส้น</button><button type="button" data-rt="erase">ลบแม่น้ำ</button></div>
+            <div class="seg" id="rkind"></div>
+            <div class="seg" id="rsize" hidden><button type="button" data-n="1">ทีละสาย</button><button type="button" data-n="2">วงเล็ก</button><button type="button" data-n="3">วงใหญ่</button></div>
+            <button type="button" class="btn" id="rfinish">จบเส้น</button>
+            <button type="button" class="btn" id="rcancel">ยกเลิกเส้น</button>
+          </div>
+          <p class="hint" id="rhint"></p>
+          <div class="autobox"><button type="button" class="btn" id="autoRiv">วางแม่น้ำอัตโนมัติ</button><label for="autoRivAmt">จำนวน <select id="autoRivAmt"><option value="0">น้อย</option><option value="1" selected>ปานกลาง</option><option value="2">มาก</option></select></label><span class="lbl">ต้นน้ำเริ่มที่ภูเขาหรือที่สูง ไหลลงที่ต่ำเสมอ สายย่อยรวมเข้าสายหลัก จบที่ทะเลหรือทะเลสาบ พื้นที่แล้งได้ลำน้ำตามฤดู</span></div>
+        </div>
+        <div data-for="city" hidden>
+          <div class="panes">
+          <div id="cityNew">
+            <div class="optrow" style="margin-top:0"><span class="lbl">ชนิดของเมืองใหม่</span><div class="seg" id="ckind"></div></div>
+            <p class="hint">คลิกที่ว่างเพื่อวางเมือง พิมพ์ชื่อแล้วกด Enter คลิกเมืองเพื่อแก้ชื่อและบันทึก ลากตัวเมืองหรือชื่อเมืองเพื่อย้าย ชื่อสถานที่กับภูเขาสแตนเทอร์ก็ลากย้ายได้ ลากที่ว่างเพื่อเลื่อนแผนที่ เมืองที่มากับแผนที่ก็ย้าย แก้ และลบได้เหมือนกัน</p>
+          </div>
+          <div id="cityForm" class="cf pane-off">
+            <div class="optrow" style="margin-top:0">
+              <label>ชื่อ <input id="cfName" maxlength="60" autocomplete="off"></label>
+              <label>ชนิด <select id="cfKind"></select></label>
+              <button type="button" class="btn warn" id="cfDel">ลบเมืองนี้</button>
+              <button type="button" class="btn" id="cfDone">เสร็จ</button>
+            </div>
+            <label class="full">บันทึก <textarea id="cfNote" rows="2" maxlength="600"></textarea></label>
+            <div class="optrow"><label>ประชากร <input id="cfPop" type="number" min="0" step="100" style="width:8em" autocomplete="off"> คน</label><span class="lbl">เว้นว่างเพื่อใช้ค่าตามชนิดเมือง ประชากรกำหนดความต้องการ กำลังผลิตของโรงงาน และลำดับที่พ่อค้าเลือกมาขาย</span></div>
+            <p class="hint" id="cfHint"></p>
+          </div>
+          </div>
+        </div>
+        <div data-for="label" hidden>
+          <div class="panes">
+          <div id="labelNew">
+            <div class="optrow" style="margin-top:0"><span class="lbl">ขนาดของชื่อใหม่</span><div class="seg" id="lsizeSeg"></div></div>
+            <p class="hint">คลิกที่ว่างเพื่อวางชื่อสถานที่ พิมพ์ชื่อแล้วกด Enter คลิกชื่อที่มีอยู่เพื่อแก้ข้อความ ขนาด มุม และสี ลากชื่อเพื่อย้าย ลากที่ว่างเพื่อเลื่อนแผนที่ ชื่อที่มากับแผนที่ก็แก้และลบได้เหมือนกัน</p>
+          </div>
+          <div id="labelForm" class="cf pane-off">
+            <div class="optrow" style="margin-top:0">
+              <label>ชื่อ <input id="lfText" maxlength="60" autocomplete="off"></label>
+              <label>ขนาด <select id="lfSize"></select></label>
+              <label>มุม <input id="lfAng" type="range" min="-90" max="90" step="5"><span id="lfAngV"></span></label>
+              <button type="button" class="btn warn" id="lfDel">ลบชื่อนี้</button>
+              <button type="button" class="btn" id="lfDone">เสร็จ</button>
+            </div>
+            <div class="optrow"><span class="lbl">สี</span><div id="lfColor"></div></div>
+            <p class="hint" id="lfHint"></p>
+          </div>
+          </div>
+        </div>
+        <div data-for="route" hidden>
+          <div class="panes">
+          <div id="routeNew">
+            <div class="optrow" style="margin-top:0">
+              <div class="seg" id="rtCls"></div>
+              <button type="button" class="btn" id="rtLoose">ต่อถนนให้เมืองที่ยังไม่มีถนน</button>
+            </div>
+            <p class="hint" id="rtHint"></p>
+          </div>
+          <div id="routeForm" class="cf pane-off">
+            <div class="optrow" style="margin-top:0">
+              <span id="rfInfo"></span>
+            </div>
+            <div class="optrow">
+              <div class="seg" id="rfCls"></div>
+              <button type="button" class="btn" id="rfFlat">ล้างจุดดัด</button>
+              <button type="button" class="btn warn" id="rfDel">ลบเส้นนี้</button>
+              <button type="button" class="btn" id="rfDone">เสร็จ</button>
+            </div>
+            <p class="hint">ลากเส้นเพื่อดัดทาง ลากจุดกลมเพื่อขยับ ดับเบิลคลิกจุดกลมเพื่อเอาออก</p>
+          </div>
+          </div>
+        </div>
+        <div data-for="trade" hidden>
+          <div class="optrow" style="margin-top:0">
+            <div class="seg" id="tdTool" hidden><button type="button" data-t="pick">เลือก</button><button type="button" data-t="add">วางเส้นการค้า</button></div>
+            <div class="seg" id="tdMode" hidden></div>
+            <label class="chk">หมวดสินค้า <select id="tdCat"></select></label>
+            <button type="button" class="btn" id="tdReset" hidden>คืนเครือข่ายอัตโนมัติ</button>
+          </div>
+          <p class="hint" id="tdHint"></p>
+        </div>
+        <div data-for="climate" hidden>
+          <div class="optrow" style="margin-top:0"><span class="lbl">ช่วงของปี</span><div class="seg" id="clSeason"></div></div>
+          <div class="optrow"><div class="seg" id="clLayer"></div></div>
+          <div class="optrow" id="clEditRow"><span class="lbl">แก้ค่าของชั้นที่ดูอยู่</span><div class="seg" id="clTool"><button type="button" data-t="">ไม่แก้</button><button type="button" data-t="up">เพิ่ม</button><button type="button" data-t="down">ลด</button><button type="button" data-t="clear">คืนค่าที่ระบบคิด</button></div><div class="seg" id="clBrush"><button type="button" data-n="1">1 ช่อง</button><button type="button" data-n="2">7 ช่อง</button><button type="button" data-n="3">19 ช่อง</button></div><div class="seg"><button type="button" id="clUndo" disabled>↶ ย้อน</button><button type="button" id="clRedo" disabled>↷ ทำซ้ำ</button></div><span class="lbl" id="clStep"></span></div>
+          <div class="optrow" id="clSetRow"><label class="lbl" for="clW">อุณหภูมิเฉลี่ยของแผ่นดินในฤดูหนาวที่สุด <input id="clW" type="number" step="1" style="width:5em"> °C</label><label class="lbl" for="clS">ในฤดูร้อนที่สุด <input id="clS" type="number" step="1" style="width:5em"> °C</label><label class="lbl" for="clG" id="clGL">ขอบใต้อุ่นกว่าขอบเหนือ <input id="clG" type="number" step="1" style="width:5em"> °C</label><label class="lbl" for="clLat0" id="clLatL">ละติจูดขอบบน <input id="clLat0" type="number" step="1" min="-89" max="89" style="width:4.6em"> ขอบล่าง <input id="clLat1" type="number" step="1" min="-89" max="89" style="width:4.6em" aria-label="ละติจูดขอบล่าง"> องศา (ใต้เส้นศูนย์สูตรเป็นค่าลบ)</label><label class="lbl" for="clWind">ลมประจำของแผนที่ <select id="clWind"></select></label><label class="lbl" for="clWa">น้ำหนักของลมต่อฝนทั้งปี <input id="clWa" type="number" step="0.1" min="0" max="1" style="width:4.6em"> (0 คือฝนทั้งปีตามพื้นที่ระบายไว้เท่านั้น)</label></div>
+          <p class="hint" id="clHint"></p>
+        </div>
+        <div data-for="econ" hidden>
+          <div class="optrow" style="margin-top:0"><div class="seg" id="ecoTab"><button type="button" data-t="goods">สินค้า</button><button type="button" data-t="cats">หมวดและราคา</button><button type="button" data-t="states">รัฐและเขตแดน</button><button type="button" data-t="gdp">GDP และค่าเงิน</button><button type="button" data-t="tune">ตัวเลข</button></div><div class="seg"><button type="button" id="ecoUndo" disabled>↶ ย้อน</button><button type="button" id="ecoRedo" disabled>↷ ทำซ้ำ</button></div></div>
+          <div class="optrow" id="ecoPaintRow" hidden><span class="lbl">ระบายเขตของ</span><div class="seg" id="ecoPaintSeg"></div><div class="seg" id="ecoBrush"><button type="button" data-n="1">1 ช่อง</button><button type="button" data-n="2">7 ช่อง</button><button type="button" data-n="3">19 ช่อง</button></div></div>
+          <p class="hint" id="ecoHint"></p>
+        </div>
+        <div data-for="info" hidden>
+          <div class="optrow" style="margin-top:0">
+            <div class="seg" id="ifTool"><button type="button" data-t="pick">เลือกข้อมูล</button><button type="button" data-t="point">วางจุดสำคัญ</button></div>
+            <div class="seg" id="ifKind" hidden></div>
+          </div>
+          <p class="hint" id="ifHint"></p>
+        </div>
+      </div>
+    </div>
+    <div class="mapbox" id="mapbox" data-mode="view">
+      <canvas id="map" aria-label="แผนที่ภูมิประเทศทวีปเกรสแลนด์"></canvas>
+      <canvas id="fx" aria-hidden="true"></canvas>
+      <div class="ctl"><button id="names" type="button" aria-pressed="true">ชื่อสถานที่</button><button id="cnames" type="button" aria-pressed="true">ชื่อเมือง</button><button id="layersBtn" type="button" aria-expanded="false" aria-controls="layers">เส้นทาง</button><button id="nsizeBtn" type="button" aria-expanded="false" aria-controls="nsize">ขนาดชื่อ</button></div>
+      <div class="layers" id="layers" hidden></div>
+      <div class="layers nsize" id="nsize" hidden></div>
+      <div class="zoom"><button id="zin" title="ซูมเข้า" aria-label="ซูมเข้า">+</button><button id="zout" title="ซูมออก" aria-label="ซูมออก">−</button><button id="zfit" title="ดูทั้งทวีป" aria-label="ดูทั้งทวีป">⤢</button></div>
+      <div id="scalebar"><span></span><i></i></div>
+      <div class="tip" id="tip"></div>
+      <div class="toast" id="toast" aria-live="polite"></div>
+    </div>
+  </div>
+  <aside>
+    <div class="card" id="setcard"><h2>แผนที่นี้</h2>
+      <label class="field" for="setTitle">ชื่อแผนที่<input type="text" class="inp" id="setTitle" maxlength="80" autocomplete="off"></label>
+      <label class="field" for="setKm">ระยะทางต่อหนึ่งช่อง (กิโลเมตร)<input type="number" class="inp" id="setKm" min="0.1" max="1000" step="0.5"></label>
+      <div class="btns" style="margin-top:0"><button type="button" class="btn" id="setExport">ส่งออกไฟล์แผนที่</button><button type="button" class="btn warn" id="setRestore" hidden>คืนแผนที่กลับไปก่อนเปิดห้องครั้งล่าสุด</button></div>
+      <p class="note" id="setNote" style="margin-bottom:0"></p>
+      <div class="bans" id="setBans" hidden></div>
+    </div>
+    <div class="card" id="fixcard" hidden><h2>เมืองที่ควรย้าย</h2><div id="fixbody"></div></div>
+    <div class="card" id="tradecard" hidden><h2>การค้า</h2><div id="tradebody"></div></div>
+    <div class="card" id="ecocard" hidden><h2 id="ecoHead">เศรษฐกิจ</h2><div id="ecobody"></div></div>
+    <div class="card" id="climcard" hidden><h2>ภูมิอากาศ</h2><div id="climbody"></div></div>
+    <div class="card cf" id="infocard" hidden><h2>ข้อมูลที่เลือก</h2><div id="infobody"></div></div>
+    <div class="card" id="editcard"><h2>งานแก้บนแผนที่</h2>
+      <div class="stats" id="stats"></div>
+      <div class="btns"><button type="button" class="btn" id="expPng" hidden>บันทึกภาพแผนที่</button><button type="button" class="btn" id="expJson" hidden>ส่งออกงานแก้</button><button type="button" class="btn warn" id="clearAll">ล้างงานแก้ทั้งหมด</button></div>
+      <p class="note" id="editnote">งานแก้บันทึกอัตโนมัติ เปิดหน้านี้ครั้งหน้าก็ยังอยู่ ภาพแผนที่ที่บันทึกมีชื่อสถานที่และเมืองเมื่อเปิดปุ่มชื่อสถานที่ไว้ ถ้าปิดไว้ ภาพจะมีแต่ภูมิประเทศ ถนนและการค้าลงภาพตามที่เปิดไว้ในปุ่มเส้นทาง ช่องที่ระบายใหม่วาดด้วยลายแบบเดียวกับแผนที่</p></div>
+    <div class="card" id="legcard"><h2>ภูมิประเทศ</h2><div class="legend" id="legend"></div></div>
+    <div class="card" id="ptscard"><h2>สถานที่น่าสนใจ</h2><div class="legend" id="points"></div></div>
+  </aside>
+</div>
+<section class="method"><div class="card" id="method"></div></section>

@@ -1,0 +1,91 @@
+<div id="menu">
+  <div id="menubg" aria-hidden="true"><i class="a"></i><i class="b"></i></div>
+  <div class="brand">
+    <h1><small>Kirana Worldbuilding Tools</small>Bazaar Worldmaker<em>ตลาดขายโลก</em></h1>
+    <p>สร้างแผนที่ช่องหกเหลี่ยม ระบายภูมิประเทศ วางแม่น้ำ เมือง ถนน และเส้นทางการค้า แล้วชวนเพื่อนเข้ามาแก้แผนที่ผืนเดียวกันพร้อมกัน</p>
+  </div>
+  <div class="menugrid">
+    <div class="side">
+      <div class="mcard lead">
+        <h2>สร้างแผนที่ใหม่</h2>
+        <p>เลือกขนาด เริ่มจากทะเลเปล่าหรือให้ระบบสุ่มแผ่นดิน ภูเขา และแม่น้ำให้</p>
+        <div class="rowx"><button type="button" class="btn brass" id="newBtn">สร้างแผนที่ใหม่</button>
+        <button type="button" class="btn" id="impBtn">นำเข้าไฟล์แผนที่</button></div>
+        <input type="file" id="impFile" accept=".json,application/json" hidden>
+      </div>
+      <div class="mcard">
+        <h2>แก้แผนที่ร่วมกัน</h2>
+        <p>เข้าห้องของเพื่อนด้วยรหัสที่เจ้าของแผนที่บอก ถ้าจะชวนเพื่อนมาแก้แผนที่ของคุณ เปิดแผนที่แล้วกดเปิดห้องแก้ร่วมกัน</p>
+        <div class="acct" id="acct" hidden><img id="acctPic" alt="" hidden><span id="acctWho"></span><button type="button" class="btn" id="acctBtn"></button></div>
+        <div class="joinrow"><label class="field" for="myName">ชื่อที่เพื่อนจะเห็น<input type="text" id="myName" maxlength="24" autocomplete="off" placeholder="เช่น นน"></label>
+        <label class="field" for="joinCode">รหัสห้อง<input type="text" id="joinCode" class="code" maxlength="12" autocomplete="off" placeholder="K7Q2XD-9FAB"></label></div>
+        <button type="button" class="btn brass" id="joinBtn">เข้าห้อง</button>
+      </div>
+      <div class="mcard tutor">
+        <img src="assets/nem/smile.webp" alt="เนเมสไซอาร์ ศาสดาสีชาด" width="950" height="1100">
+        <div id="tutorCard"></div>
+      </div>
+    </div>
+    <div>
+      <div class="libhead"><h2>คลังแผนที่</h2><span id="libCount"></span><span style="flex:1"></span><button type="button" class="btn" id="gresAgain" hidden>อ่านเกรสแลนด์จากหน้าเดิมอีกครั้ง</button><button type="button" class="btn" id="bakAll">สำรองทั้งคลังเป็นไฟล์เดียว</button></div>
+      <div class="lib" id="lib"></div>
+      <p class="note2" id="storeNote"></p>
+      <button type="button" class="btn" id="bakOn" hidden></button>
+    </div>
+  </div>
+</div>
+<div id="mapscreen" hidden></div>
+<div class="veil" id="newVeil" hidden>
+  <div class="sheet" role="dialog" aria-labelledby="nmHead">
+    <h2 id="nmHead">สร้างแผนที่ใหม่</h2>
+    <div class="sheetgrid">
+      <div>
+        <label class="field" for="nmTitle">ชื่อแผนที่<input type="text" id="nmTitle" maxlength="80" autocomplete="off" placeholder="แผนที่ใหม่"></label>
+        <span class="lblx">ขนาด Canvas</span>
+        <div class="sizes" id="nmSizes"></div>
+        <label class="field" for="nmKm">ระยะทางต่อหนึ่งช่อง (กิโลเมตร)<input type="number" id="nmKm" min="0.1" max="1000" step="0.5" value="30"></label>
+        <div class="lbl" id="nmKmNote"></div>
+        <div class="lbl">30 กม. คือระยะเดินเท้าหรือคาราวานราวหนึ่งวัน แผนที่เกรสแลนด์ใช้ช่องละ 34 กม. ตามขนาดทวีป 12 ล้าน ตร.กม.</div>
+        <span class="lblx">พื้นเริ่มต้น</span>
+        <div class="seg2" id="nmStart"><button type="button" data-v="random">สุ่มภูมิประเทศ</button><button type="button" data-v="blank">ทะเลเปล่า</button></div>
+        <div id="nmRandom">
+          <span class="lblx">รูปแผ่นดิน</span>
+          <div class="seg2" id="nmStyle"><button type="button" data-v="continent">ทวีปเดียว</button><button type="button" data-v="continents">หลายทวีป</button><button type="button" data-v="isles">หมู่เกาะ</button></div>
+          <label class="lblx" for="nmLand">สัดส่วนแผ่นดิน</label>
+          <div class="rng"><input type="range" id="nmLand" min="12" max="65" value="38"><output id="nmLandV">38%</output></div>
+          <label class="lblx" for="nmRelief">ภูเขา</label>
+          <div class="rng"><input type="range" id="nmRelief" min="0" max="100" value="45"><output id="nmReliefV">45%</output></div>
+          <span class="lblx">ภูมิอากาศ</span>
+          <div class="seg2" id="nmClimate"><button type="button" data-v="mixed">เหนือหนาว ใต้ร้อน</button><button type="button" data-v="cold">หนาว</button><button type="button" data-v="temperate">อบอุ่น</button><button type="button" data-v="hot">ร้อน</button></div>
+          <span class="lblx">ลมประจำพัดมาจาก</span>
+          <div class="seg2" id="nmWind"><button type="button" data-v="W">ตะวันตก</button><button type="button" data-v="E">ตะวันออก</button></div>
+          <span class="lblx">แม่น้ำ</span>
+          <div class="seg2" id="nmRivers"><button type="button" data-v="-1">ไม่วาง</button><button type="button" data-v="0">น้อย</button><button type="button" data-v="1">ปานกลาง</button><button type="button" data-v="2">มาก</button></div>
+        </div>
+      </div>
+      <div>
+        <span class="lblx" style="margin-top:0">ตัวอย่าง</span>
+        <canvas id="nmPrev" width="318" height="209"></canvas>
+        <div class="lbl" id="nmStat" style="margin-top:6px"></div>
+        <div class="rowx" style="margin-top:10px">
+          <label class="field" for="nmSeed" style="margin:0;flex:1">เลขสุ่ม<input type="number" id="nmSeed" min="1" max="999999" step="1"></label>
+          <button type="button" class="btn" id="nmReroll" style="align-self:flex-end">สุ่มใหม่</button>
+        </div>
+        <p class="hint">ฝั่งที่รับลมประจำชื้นกว่า หลังเทือกเขาแห้งกว่า แม่น้ำเริ่มจากภูเขาแล้วไหลลงทะเลหรือทะเลสาบ ทุกอย่างแก้ต่อได้หลังสร้าง</p>
+      </div>
+    </div>
+    <div class="foot"><button type="button" class="btn" id="nmCancel">ยกเลิก</button><button type="button" class="btn brass" id="nmCreate">สร้างแผนที่</button></div>
+  </div>
+</div>
+<div class="veil" id="brVeil" hidden>
+  <div class="sheet brsheet" role="dialog" aria-labelledby="brHead" aria-describedby="brText">
+    <h2 id="brHead">แนะนำให้ใช้งานบน Google Chrome</h2>
+    <p id="brText">Bazaar Worldmaker ทดสอบบน Google Chrome บนคอมพิวเตอร์เท่านั้น เบราว์เซอร์อื่นอาจเปิดได้ แต่ยังไม่ผ่านการทดสอบ ส่วนที่เสี่ยงที่สุดคือการเก็บแผนที่ลงเครื่องและห้องแก้ร่วมกัน</p>
+    <p id="brNow" class="note2"></p>
+    <p id="brOff" class="note2" hidden>ไฟล์นี้เป็นฉบับออฟไลน์ แผนที่เก็บอยู่ในเบราว์เซอร์ที่เปิดไฟล์นี้เท่านั้น ถ้าเปิดไฟล์เดียวกันด้วยเบราว์เซอร์อื่นจะไม่เห็นแผนที่ชุดเดิม ห้องแก้ร่วมกันใช้ได้เฉพาะระหว่างแท็บของเบราว์เซอร์เดียวกัน และก่อนลงมือทำงานจริงควรส่งออกไฟล์แผนที่ไว้สำรองเสมอ</p>
+    <label class="brkeep"><input type="checkbox" id="brKeep"> ไม่ต้องแสดงอีกในเบราว์เซอร์นี้</label>
+    <div class="foot"><button type="button" class="btn brass" id="brOk">เข้าใจแล้ว เริ่มใช้งาน</button></div>
+  </div>
+</div>
+<div id="mtoast" role="status" hidden></div>
+<div id="vtag"></div>
