@@ -61,20 +61,49 @@ function landDraw() {
 { const under = drawUnderNames; drawUnderNames = function () { landDraw(); if (under) under(); }; }   // under the borders, which are under the names
 { const b = $('landBtn'); if (b) { b.setAttribute('aria-pressed', landOn ? 'true' : 'false'); b.onclick = () => { landOn = !landOn; b.setAttribute('aria-pressed', landOn ? 'true' : 'false'); try { localStorage.setItem('mme-land', landOn ? '1' : '0'); } catch (err) { /* this view keeps nothing */ } requestDraw(); }; } }
 
-// the level, set on the map itself (the owner asked for it there): a small list beside the chips, kept in step with the document
-const tierSel = $('tierSel');
-function tierSet(k) { ECO.tier = ETIER[k] ? k : k === 'own' ? 'own' : ''; ECO.total = ETIER[k] ? ETIER[k][1] : k === 'own' ? Math.max(100, Math.round(LAND ? LAND.total : 3e6)) : 0; ecoChanged(true); ecoRender(); }
-function tierSync() {
-  if (!tierSel) return; const sig = ECO.tier + '|' + (editable ? 1 : 0) + '|' + Math.round(ECO.total);
-  if (tierSel.dataset.sig === sig) return; tierSel.dataset.sig = sig;
-  tierSel.innerHTML = `<option value="">ไม่กำหนด</option>` + Object.entries(ETIER).map(([k, z]) => `<option value="${k}">${z[0]} · ${z[2]}</option>`).join('') + `<option value="own">กำหนดเอง${ECO.tier === 'own' ? ' · ' + ecoNumF(ECO.total) + ' คน' : ''}</option>`;
-  tierSel.value = ECO.tier; tierSel.disabled = !editable;
+// the level, set on the map itself (the owner asked for it there): a small list beside the chips, kept in step with the document.
+// Three levels and a number of one's own (v0.11.1); the number is written in the box beside the list, as a person writes it.
+const tierSel = $('tierSel'), tierNum = $('tierNum');
+function ecoPeople(s) {                               // 250,000,000 · 250 ล้าน · 2.5 พันล้าน · 3 แสน · 2.5e8
+  s = String(s == null ? '' : s).replace(/[,\s_]/g, '').replace(/คน$/, '').toLowerCase();
+  const m = /^(\d+(?:\.\d+)?(?:e\d{1,2})?)(ล้านล้าน|หมื่นล้าน|พันล้าน|ร้อยล้าน|สิบล้าน|ล้าน|แสน|หมื่น|พัน|ร้อย|k|m|b)?$/.exec(s); if (!m) return NaN;
+  const u = { 'ล้านล้าน': 1e12, 'หมื่นล้าน': 1e10, 'พันล้าน': 1e9, 'ร้อยล้าน': 1e8, 'สิบล้าน': 1e7, 'ล้าน': 1e6, 'แสน': 1e5, 'หมื่น': 1e4, 'พัน': 1e3, 'ร้อย': 100, k: 1e3, m: 1e6, b: 1e9 };
+  return Math.round(+m[1] * (m[2] ? u[m[2]] : 1));
 }
-if (tierSel) tierSel.addEventListener('change', () => { if (!editable) { tierSync(); return; } tierSet(tierSel.value); });
+const tierNow = () => ECO.tier === 'own' ? ECO.total : ECON ? ECON.cities.reduce((a, c) => a + c.pop, 0) * ECO.unit : 0;   // with no level named, what the heads come to
+function tierSet(k, total) {
+  if (tierOk(k)) { ECO.tier = k; ECO.total = ETIER[k][1]; }
+  else { ECO.tier = 'own'; ECO.total = clamp(Math.round(total > 0 ? total : tierNow() || 3e6), 100, 1e12); }
+  ecoChanged(true); ecoRender();
+}
+const tierOpts = sel => Object.entries(ETIER).map(([k, z]) => `<option value="${k}"${sel === k ? ' selected' : ''}>${z[0]} · ${z[2]}</option>`).join('') + `<option value="own"${tierOk(sel) ? '' : ' selected'}>กำหนดเอง</option>`;
+function tierSync() {
+  if (!tierSel) return; const own = !tierOk(ECO.tier), n = Math.round(tierNow()), sig = ECO.tier + '|' + (editable ? 1 : 0) + '|' + (own ? n : 0);
+  if (tierSel.dataset.sig === sig) return; tierSel.dataset.sig = sig;
+  tierSel.innerHTML = tierOpts(ECO.tier); tierSel.value = own ? 'own' : ECO.tier; tierSel.disabled = !editable;
+  tierSel.parentNode.classList.toggle('own', own);
+  if (tierNum) { tierNum.hidden = !own; tierNum.disabled = !editable; tierNum.classList.remove('bad'); if (document.activeElement !== tierNum) tierNum.value = n > 0 ? n.toLocaleString('en-US') : ''; }
+}
+function tierTyped(el) {                              // a number written by hand; one that cannot be read is refused and the old one comes back
+  const v = ecoPeople(el.value); if (!(v >= 100) || !(v <= 1e12)) { el.classList.add('bad'); el.title = 'อ่านจำนวนนี้ไม่ออก เขียนได้ตั้งแต่ 100 ถึง 1 ล้านล้านคน เช่น 250,000,000 หรือ 250 ล้าน'; return false; }
+  el.classList.remove('bad'); tierSet('own', v); return true;
+}
+if (tierSel) tierSel.addEventListener('change', () => {
+  if (!editable) { tierSel.dataset.sig = ''; tierSync(); return; }
+  tierSet(tierSel.value); if (tierSel.value === 'own' && tierNum) { tierSel.dataset.sig = ''; tierSync(); tierNum.focus(); tierNum.select(); }
+});
+if (tierNum) {
+  tierNum.addEventListener('change', () => { if (!editable) return; if (tierTyped(tierNum)) { tierSel.dataset.sig = ''; tierSync(); } });
+  tierNum.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); tierNum.blur(); } else if (e.key === 'Escape') { tierNum.value = ''; tierSel.dataset.sig = ''; tierNum.blur(); tierSync(); } });
+  tierNum.addEventListener('blur', () => { if (tierNum.classList.contains('bad')) { tierSel.dataset.sig = ''; tierSync(); } });
+  tierNum.addEventListener('focus', () => tierNum.select());
+}
 // the head of the GDP tab: the level, what follows from it, and what the land says
 function landHeadHTML() {
   landCompute(); const L = LAND, own = ECO.tier === 'own';
-  let h = `<div class="erow"><label>ระดับประชากรของแผนที่ <select data-f="tier"${editable ? '' : ' disabled'}><option value=""${ECO.tier ? '' : ' selected'}>ไม่กำหนด (ใช้จำนวนคนต่อหน่วย)</option>${Object.entries(ETIER).map(([k, z]) => `<option value="${k}"${ECO.tier === k ? ' selected' : ''}>${z[0]} · ${z[2]}</option>`).join('')}<option value="own"${own ? ' selected' : ''}>กำหนดเอง</option></select></label>${own ? `<label>ทั้งแผนที่ <input type="number" data-f="total" min="100" step="1000" value="${Math.round(ECO.total)}" style="width:10em"${editable ? '' : ' disabled'}> คน</label>` : ''}</div>`;
+  const tn = Math.round(tierNow());
+  let h = `<div class="erow"><label>ประชากรรวมในแผนที่ <select data-f="tier"${editable ? '' : ' disabled'}>${tierOpts(ECO.tier)}</select></label>${tierOk(ECO.tier) ? '' : `<label>จำนวน <input type="text" inputmode="numeric" data-f="total" value="${tn > 0 ? tn.toLocaleString('en-US') : ''}" style="width:10em" title="เขียนได้เช่น 250,000,000 หรือ 250 ล้าน หรือ 2.5 พันล้าน"${editable ? '' : ' disabled'}> คน</label>`}</div>`;
+  if (!tierOk(ECO.tier)) h += `<p class="note">${own ? 'จำนวนนี้คุณเขียนเอง' : 'จำนวนนี้นับจากจำนวนคนต่อหน่วยที่ตั้งไว้'} เขียนใหม่ได้เป็นตัวเลขเต็มหรือย่อ เช่น 250,000,000 หรือ 250 ล้าน หรือ 2.5 พันล้าน</p>`;
   if (!L) return h;
   const dens = L.km2 > 0 ? L.total / L.km2 : 0, used = L.tot.farm + L.tot.cleared + L.tot.was, sw = t => `<i class="lsw" style="background:${LAND_COL[t]}"></i>`;
   h += `<p class="note">ทั้งแผนที่มี <b>${ecoNumF(L.total)}</b> คน หนาแน่น ${dens >= 10 ? Math.round(dens).toLocaleString('en-US') : dens.toFixed(2)} คนต่อตารางกิโลเมตรของแผ่นดิน หนึ่งหน่วยประชากรคือ ${ecoNumF(ECO.unit)} คน คนหนึ่งคนใช้ไร่นา ${L.crop} เฮกตาร์ หนึ่งช่องเลี้ยงคนได้ราว ${ecoNumF(L.haHex * LAND_TILL / L.crop)} คนเมื่อไถเต็มที่</p>`;
@@ -88,10 +117,18 @@ const __gdpLand = ecoGdpHTML;
 ecoGdpHTML = function () { return landHeadHTML() + __gdpLand(); };
 $('ecobody').addEventListener('change', e => {
   const el = e.target, f = el.dataset.f; if (!editable || !f) return;
-  if (f === 'tier') { tierSet(el.value); return; }
-  else if (f === 'total') { const v = +el.value; if (!(v >= 100)) return; ECO.tier = 'own'; ECO.total = Math.min(1e12, Math.round(v)); }
+  if (f === 'tier') { tierSet(el.value); if (el.value === 'own') { const t = $('ecobody').querySelector('input[data-f="total"]'); if (t) { t.focus(); t.select(); } } return; }
+  else if (f === 'total') { if (ecoPeople(el.value) >= 100 && document.activeElement === el) el.blur(); tierTyped(el); return; }
   else if (f === 'unit') { ECO.tier = ''; ECO.total = 0; ECO.cpp = clamp(ECO.central.per / ECO.unit, 1e-6, 1e9); }   // a head set by hand: the level lets go
   else if (f === 'cenper') { ECO.cpp = clamp(ECO.central.per / ECO.unit, 1e-6, 1e9); }
   else return;
   ecoChanged(true); ecoRender();
 });
+// The year is worked out again a moment after a change, and the GDP tab is drawn again when it is: a number half written in the
+// box for the people of the map is carried across, with the place of the caret.
+{ const er = ecoRender; ecoRender = function () {
+  const at = document.activeElement, hold = at && at.dataset && at.dataset.f === 'total' && at.closest && at.closest('#ecobody') ? [at.value, at.selectionStart, at.selectionEnd, at.classList.contains('bad')] : null;
+  er();
+  if (!hold) return; const el = $('ecobody').querySelector('input[data-f="total"]'); if (!el) return;
+  el.value = hold[0]; if (hold[3]) el.classList.add('bad'); el.focus(); try { el.setSelectionRange(hold[1], hold[2]); } catch (err) { /* a field that keeps no caret */ }
+}; }

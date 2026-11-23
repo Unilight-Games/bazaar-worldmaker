@@ -11,7 +11,12 @@ const ECO = { goods: {}, custom: [], cats: {}, ucats: [], tune: {}, work: {}, po
 const EUNIT = 1000, ECOIN = 40;
 // How many people the whole map holds (v0.10.0, the owner's five levels and his words for them). With a level chosen, the people
 // of a head of the model follow from it: the level's number shared over every city by its weight. The numbers inside each band are mine.
-const ETIER = { xs: ['ต่ำพิเศษ', 3e4, 'ไม่กี่หมื่นคน'], l: ['ต่ำ', 3e5, 'ไม่กี่แสนคน'], m: ['กลาง', 3e6, 'ไม่กี่ล้านคน'], h: ['สูง', 2e9, 'พันล้านคน'], xl: ['สูงพิเศษ', 2e10, 'หมื่นล้านคน'] };
+// The levels of people a map can hold (v0.11.1, the owner's three): a few million, a few hundred million, billions. Anything else
+// the owner writes as a number. Before that there were five under other keys; a map that named one of those keeps the people it
+// had, under the level that now means that many or as a number of its own.
+const ETIER = { low: ['ต่ำ', 3e6, 'ไม่กี่ล้านคน'], mid: ['กลาง', 3e8, 'ไม่กี่ร้อยล้านคน'], high: ['สูง', 2e9, 'พันล้านคน'] };
+const ETIER_OLD = { xs: 3e4, l: 3e5, m: 'low', h: 'high', xl: 2e10 };
+const tierOk = k => typeof k === 'string' && Object.prototype.hasOwnProperty.call(ETIER, k);
 function ecoScale() {
   if (!(ECO.total > 0)) return;
   let h0 = 0, own = 0, all = 0;
@@ -278,7 +283,9 @@ function ecoLoad(b) {
   ECO.unit = u0 && !old ? u0 : old && Object.keys(ECO.pop).length ? 5000 : EUNIT;
   ECO.central = { name: ecoStr(b.central && b.central.name, 30) || 'เหรียญกลาง', per: p0 && !old ? p0 : ECO.unit * ECOIN };
   ECO.noSlave = b.noSlave ? 1 : 0;
-  ECO.tier = ETIER[b.tier] ? b.tier : b.tier === 'own' && b.total > 0 ? 'own' : ''; ECO.total = ETIER[ECO.tier] ? ETIER[ECO.tier][1] : ECO.tier === 'own' ? ecoNum(b.total, 100, 1e12, 0) : 0;
+  { const t = b.tier, o = typeof t === 'string' && Object.prototype.hasOwnProperty.call(ETIER_OLD, t) ? ETIER_OLD[t] : 0;
+    ECO.tier = tierOk(t) ? t : typeof o === 'string' ? o : o > 0 || (t === 'own' && b.total > 0) ? 'own' : '';
+    ECO.total = tierOk(ECO.tier) ? ETIER[ECO.tier][1] : ECO.tier === 'own' ? ecoNum(o > 0 ? o : b.total, 100, 1e12, 0) : 0; if (ECO.tier === 'own' && !(ECO.total > 0)) ECO.tier = ''; }
   ECO.cpp = clamp(ECO.central.per / ECO.unit, 1e-6, 1e9);
   ecoStamp++; ecoApply();
 }

@@ -181,6 +181,8 @@ input[type=range] { accent-color: var(--brass); width: 100%; }
 #mapscreen.fit.noopts .opts, #mapscreen.fit .mapcol:has(#mapbox[data-mode="view"]) .opts { display: none; }
 #mapscreen.fit .layers, #mapscreen.fit .nsize { z-index: 9; }
 #mapscreen.fit .zoom { right: 352px; }
+#mapscreen.fit .ctl { right: 392px; }
+#mapscreen.fit.noside .ctl { right: 52px; }
 #mapscreen.fit.noside .zoom { right: 10px; }
 #mapscreen.fit aside { position: absolute; top: var(--tbh, 46px); right: 12px; bottom: 12px; width: 330px; z-index: 6; overflow-y: auto; overscroll-behavior: contain; padding: 0 0 4px; scrollbar-width: thin; }
 #mapscreen.fit.noside aside { display: none; }
@@ -316,6 +318,8 @@ body.tutoring #mapscreen.fit.dock #scalebar { left: calc(342px + var(--tush, 0px
 #mapscreen .zoom { gap: 4px; }
 #mapscreen .zoom button { width: 30px; height: 30px; font-size: 16px; }
 #mapscreen .ctl button { padding: 4px 9px; }
+#mapscreen .ctl { right: 52px; flex-wrap: wrap; pointer-events: none; }   /* a narrow window: the chips take a second row and stay clear of the zoom */
+#mapscreen .ctl > * { pointer-events: auto; }
 #mapscreen.fit .opts { padding: 7px 9px; }
 #mapscreen.fit .opts .optrow { margin-top: 5px; gap: 6px 10px; }
 #mapscreen.fit .opts .seg button { padding: 4px 9px; font-size: .8rem; }
@@ -420,6 +424,12 @@ body:not(.tutoring) #mapscreen.fit:not(.dock) .opts:not(.moved):not(.folded):not
 body:has(#mapscreen:not([hidden])) .uisize.fixed { display: none; }
 .lsw { width: 11px; height: 11px; display: inline-block; border: 1px solid rgba(255,255,255,.25); margin: 0 5px 0 8px; vertical-align: -1px; }
 .tr .lsw:first-child { margin-left: 0; }
-.tierpick { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 4px 0 8px; background: var(--panel, rgba(20,22,27,.9)); }
+.tierpick { order: 9; display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 4px 0 8px; background: var(--panel, rgba(20,22,27,.9)); }
 .tierpick select { border: 0; background: transparent; color: var(--text); font: inherit; padding: 5px 2px; max-width: 11em; }
 .tierpick select option { background: #1b1e24; color: #eee; }
+.tierpick.own select { width: 6.3em; }
+.tierpick input { width: 7.4em; border: 0; border-left: 1px solid var(--line); background: transparent; color: var(--text); font: inherit; padding: 5px 4px 5px 7px; text-align: right; font-variant-numeric: tabular-nums; }
+.tierpick input:focus { outline: 1px solid var(--brass); outline-offset: -1px; border-radius: 3px; }
+.tierpick input.bad, .erow input.bad { color: #ff9a8a; outline: 1px solid #c8553d; outline-offset: -1px; }
+.tierpick input[hidden], .tierpick input[hidden] + .tu { display: none; }
+.tierpick .tu { padding-right: 4px; }
