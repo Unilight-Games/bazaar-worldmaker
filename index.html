@@ -22,7 +22,7 @@
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-html, body { margin: 0; background: var(--ink); color: var(--text); font-family: var(--body); font-size: 15px; line-height: 1.6; }
+html, body { margin: 0; background: var(--ink); color: var(--text); font-family: var(--body); font-size: var(--ufs, 17px); line-height: 1.6; }
 header { padding: 18px 20px 10px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; }
 h1 { font-family: var(--display); font-weight: 700; font-size: 1.75rem; margin: 0; text-wrap: balance; }
 .sub { color: var(--muted); font-size: .92rem; }
@@ -399,7 +399,7 @@ body.tutoring #mapscreen.fit.dock #scalebar { left: 342px; top: 12px; }
 
 /* in a lesson on a short screen the options and the scale stand to her right (see applyFit) */
 body.tutoring #mapscreen.fit .opts { left: calc(10px + var(--tush, 0px)); max-height: min(44vh, var(--tumax, 9999px)); }
-body.tutoring #mapscreen.fit.dock .opts { max-height: min(var(--tuh, calc(100vh - 380px)), var(--tumax, 9999px)); max-height: min(var(--tuh, calc(100dvh - 380px)), var(--tumax, 9999px)); }
+body.tutoring #mapscreen.fit.dock .opts { max-height: min(var(--tuh, var(--tuh0, calc(100vh - 380px))), var(--tumax, 9999px)); max-height: min(var(--tuh, var(--tuh0, calc(100dvh - 380px))), var(--tumax, 9999px)); }
 body.tutoring #mapscreen.fit.dock #scalebar { left: calc(342px + var(--tush, 0px)); }
 
 /* ================= v0.7.0: Bazaar Worldmaker ================= */
@@ -549,6 +549,30 @@ body:not(.tutoring) #mapscreen.fit:not(.dock) .opts:not(.moved):not(.folded):not
 .acct span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .acct span b { color: var(--text); font-weight: 600; }
 .acct .btn { flex: none; padding: 3px 9px; font-size: .78rem; }
+
+/* ---- v0.9.0: the size of the page's letters, folds in the GDP list, organisations, a state's balance of trade ---- */
+.uisize { display: inline-flex; align-items: center; gap: 8px; font-size: .8rem; color: var(--muted); }
+.uisize.fixed { position: fixed; right: 12px; bottom: 44px; z-index: 5; background: rgba(20,22,27,.82); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+.uisize .seg button[data-ui="s"] { font-size: .72rem; } .uisize .seg button[data-ui="l"] { font-size: 1rem; }
+#ecocard details.efold { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 6px; }
+#ecocard details.efold > summary { cursor: pointer; font-family: var(--display, inherit); font-weight: 700; font-size: .92rem; padding: 2px 0 6px; list-style-position: inside; }
+#ecocard details.efold > summary small { font-weight: 400; color: var(--muted); font-size: .76rem; margin-left: 6px; }
+#ecocard .etable .eth.sortable span { cursor: pointer; user-select: none; }
+#ecocard .etable .eth.sortable span:hover { color: var(--text); }
+#ecocard .eform.picked { border-color: var(--brass, #d9b25c); box-shadow: 0 0 0 1px var(--brass, #d9b25c) inset; }
+#ecocard .ochip { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--line); border-radius: 999px; padding: 0 4px 0 8px; margin: 2px 4px 2px 0; font-size: .78rem; white-space: nowrap; }
+#ecocard .ochip button { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: .95rem; line-height: 1; padding: 2px 4px; }
+#ecocard .ochip button:hover { color: var(--warn); }
+.odot { width: 9px; height: 9px; display: inline-block; transform: rotate(45deg); margin-right: 6px; vertical-align: 0; flex: none; }
+#ecocard .btn.on { border-color: var(--brass, #d9b25c); color: var(--brass, #d9b25c); }
+.mapbox.orgpick canvas { cursor: pointer; }
+#tradecard .etable { display: grid; gap: 3px 8px; font-size: .8rem; font-variant-numeric: tabular-nums; }
+#tradecard .etable .eth, #tradecard .etable .etr { display: grid; grid-template-columns: minmax(0, 1.5fr) 1fr 1fr .9fr; gap: 6px; align-items: center; }
+#tradecard .etable .eth { color: var(--muted); border-bottom: 1px solid var(--line); padding-bottom: 2px; }
+#tradecard .etable span:not(:first-child) { text-align: right; }
+#tradecard .etable .pos { color: var(--good); } #tradecard .etable .neg { color: var(--warn); }
+#tradecard h4 { margin: 10px 0 4px; font-size: .86rem; }
+body:has(#mapscreen:not([hidden])) .uisize.fixed { display: none; }
 </style>
 </head>
 <body>
@@ -642,6 +666,7 @@ body:not(.tutoring) #mapscreen.fit:not(.dock) .opts:not(.moved):not(.folded):not
   </div>
 </div>
 <div id="mtoast" role="status" hidden></div>
+<div class="uisize fixed"><span>ขนาดตัวอักษร</span><div class="seg"><button type="button" data-ui="s">เล็ก</button><button type="button" data-ui="m">กลาง</button><button type="button" data-ui="l">ใหญ่</button></div></div>
 <div id="vtag"></div>
 <template id="tpl-map">
 <header class="mapbar">
@@ -783,7 +808,7 @@ body:not(.tutoring) #mapscreen.fit:not(.dock) .opts:not(.moved):not(.folded):not
           <p class="hint" id="clHint"></p>
         </div>
         <div data-for="econ" hidden>
-          <div class="optrow" style="margin-top:0"><div class="seg" id="ecoTab"><button type="button" data-t="goods">สินค้า</button><button type="button" data-t="cats">หมวดและราคา</button><button type="button" data-t="states">รัฐและเขตแดน</button><button type="button" data-t="gdp">GDP และค่าเงิน</button><button type="button" data-t="tune">ตัวเลข</button></div><div class="seg"><button type="button" id="ecoUndo" disabled>↶ ย้อน</button><button type="button" id="ecoRedo" disabled>↷ ทำซ้ำ</button></div></div>
+          <div class="optrow" style="margin-top:0"><div class="seg" id="ecoTab"><button type="button" data-t="goods">สินค้า</button><button type="button" data-t="cats">หมวดและราคา</button><button type="button" data-t="states">รัฐและเขตแดน</button><button type="button" data-t="orgs">องค์กร</button><button type="button" data-t="gdp">GDP และค่าเงิน</button><button type="button" data-t="tune">ตัวเลข</button></div><div class="seg"><button type="button" id="ecoUndo" disabled>↶ ย้อน</button><button type="button" id="ecoRedo" disabled>↷ ทำซ้ำ</button></div></div>
           <div class="optrow" id="ecoPaintRow" hidden><span class="lbl">ระบายเขตของ</span><div class="seg" id="ecoPaintSeg"></div><div class="seg" id="ecoBrush"><button type="button" data-n="1">1 ช่อง</button><button type="button" data-n="2">7 ช่อง</button><button type="button" data-n="3">19 ช่อง</button></div></div>
           <p class="hint" id="ecoHint"></p>
         </div>
@@ -812,6 +837,7 @@ body:not(.tutoring) #mapscreen.fit:not(.dock) .opts:not(.moved):not(.folded):not
     <div class="card" id="setcard"><h2>แผนที่นี้</h2>
       <label class="field" for="setTitle">ชื่อแผนที่<input type="text" class="inp" id="setTitle" maxlength="80" autocomplete="off"></label>
       <label class="field" for="setKm">ระยะทางต่อหนึ่งช่อง (กิโลเมตร)<input type="number" class="inp" id="setKm" min="0.1" max="1000" step="0.5"></label>
+      <div class="uisize" style="margin:0 0 8px"><span>ขนาดตัวอักษรของหน้า</span><div class="seg"><button type="button" data-ui="s">เล็ก</button><button type="button" data-ui="m">กลาง</button><button type="button" data-ui="l">ใหญ่</button></div></div>
       <div class="btns" style="margin-top:0"><button type="button" class="btn" id="setExport">ส่งออกไฟล์แผนที่</button><button type="button" class="btn warn" id="setRestore" hidden>คืนแผนที่กลับไปก่อนเปิดห้องครั้งล่าสุด</button></div>
       <p class="note" id="setNote" style="margin-bottom:0"></p>
       <div class="bans" id="setBans" hidden></div>
@@ -832,16 +858,16 @@ body:not(.tutoring) #mapscreen.fit:not(.dock) .opts:not(.moved):not(.folded):not
 <section class="method"><div class="card" id="method"></div></section>
 </template>
 <script>window.MME_BUILD = "web"; window.MME_NO_GRESLAND = true;</script>
-<script src="firebase-config.js?v=0.8.2"></script>
-<script src="engine/gen.js?v=0.8.2"></script>
-<script src="engine/store.js?v=0.8.2"></script>
-<script src="engine/backup.js?v=0.8.2"></script>
-<script src="engine/net.js?v=0.8.2"></script>
-<script src="engine/fire.js?v=0.8.2"></script>
-<script src="engine/defaults.js?v=0.8.2"></script>
-<script src="engine/runtime.js?v=0.8.2"></script>
-<script src="engine/shell.js?v=0.8.2"></script>
-<script src="engine/tutor-lines.js?v=0.8.2"></script>
-<script src="engine/tutor.js?v=0.8.2"></script>
+<script src="firebase-config.js?v=0.9.0"></script>
+<script src="engine/gen.js?v=0.9.0"></script>
+<script src="engine/store.js?v=0.9.0"></script>
+<script src="engine/backup.js?v=0.9.0"></script>
+<script src="engine/net.js?v=0.9.0"></script>
+<script src="engine/fire.js?v=0.9.0"></script>
+<script src="engine/defaults.js?v=0.9.0"></script>
+<script src="engine/runtime.js?v=0.9.0"></script>
+<script src="engine/shell.js?v=0.9.0"></script>
+<script src="engine/tutor-lines.js?v=0.9.0"></script>
+<script src="engine/tutor.js?v=0.9.0"></script>
 </body>
 </html>

@@ -52,6 +52,7 @@ function tradeClick(x, y) {
   if (c) { selectTrade(c.id); return; }
   const ch = chainAt(x, y);
   if (ch) { const ls = chainLines(ch), i = ls.findIndex(L => L.id === tlsel); selectLink(ls[(i + 1) % ls.length].id); return; }   // again: the next line on the stretch
+  { const hz = hexAt(x, y), zs = hz >= 0 ? ECO.cells[hz] : '.'; if (zs !== '.' && ECOX.byKey.get(zs)) { selectState(zs); return; } }   // inside a state's borders: that state's balance of trade
   selectTrade(null);
 }
 function setTtool(t) {

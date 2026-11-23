@@ -244,7 +244,7 @@ body.tutoring #mapscreen.fit.dock #scalebar { left: 342px; top: 12px; }
 
 /* in a lesson on a short screen the options and the scale stand to her right (see applyFit) */
 body.tutoring #mapscreen.fit .opts { left: calc(10px + var(--tush, 0px)); max-height: min(44vh, var(--tumax, 9999px)); }
-body.tutoring #mapscreen.fit.dock .opts { max-height: min(var(--tuh, calc(100vh - 380px)), var(--tumax, 9999px)); max-height: min(var(--tuh, calc(100dvh - 380px)), var(--tumax, 9999px)); }
+body.tutoring #mapscreen.fit.dock .opts { max-height: min(var(--tuh, var(--tuh0, calc(100vh - 380px))), var(--tumax, 9999px)); max-height: min(var(--tuh, var(--tuh0, calc(100dvh - 380px))), var(--tumax, 9999px)); }
 body.tutoring #mapscreen.fit.dock #scalebar { left: calc(342px + var(--tush, 0px)); }
 
 /* ================= v0.7.0: Bazaar Worldmaker ================= */
@@ -394,3 +394,27 @@ body:not(.tutoring) #mapscreen.fit:not(.dock) .opts:not(.moved):not(.folded):not
 .acct span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .acct span b { color: var(--text); font-weight: 600; }
 .acct .btn { flex: none; padding: 3px 9px; font-size: .78rem; }
+
+/* ---- v0.9.0: the size of the page's letters, folds in the GDP list, organisations, a state's balance of trade ---- */
+.uisize { display: inline-flex; align-items: center; gap: 8px; font-size: .8rem; color: var(--muted); }
+.uisize.fixed { position: fixed; right: 12px; bottom: 44px; z-index: 5; background: rgba(20,22,27,.82); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+.uisize .seg button[data-ui="s"] { font-size: .72rem; } .uisize .seg button[data-ui="l"] { font-size: 1rem; }
+#ecocard details.efold { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 6px; }
+#ecocard details.efold > summary { cursor: pointer; font-family: var(--display, inherit); font-weight: 700; font-size: .92rem; padding: 2px 0 6px; list-style-position: inside; }
+#ecocard details.efold > summary small { font-weight: 400; color: var(--muted); font-size: .76rem; margin-left: 6px; }
+#ecocard .etable .eth.sortable span { cursor: pointer; user-select: none; }
+#ecocard .etable .eth.sortable span:hover { color: var(--text); }
+#ecocard .eform.picked { border-color: var(--brass, #d9b25c); box-shadow: 0 0 0 1px var(--brass, #d9b25c) inset; }
+#ecocard .ochip { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--line); border-radius: 999px; padding: 0 4px 0 8px; margin: 2px 4px 2px 0; font-size: .78rem; white-space: nowrap; }
+#ecocard .ochip button { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: .95rem; line-height: 1; padding: 2px 4px; }
+#ecocard .ochip button:hover { color: var(--warn); }
+.odot { width: 9px; height: 9px; display: inline-block; transform: rotate(45deg); margin-right: 6px; vertical-align: 0; flex: none; }
+#ecocard .btn.on { border-color: var(--brass, #d9b25c); color: var(--brass, #d9b25c); }
+.mapbox.orgpick canvas { cursor: pointer; }
+#tradecard .etable { display: grid; gap: 3px 8px; font-size: .8rem; font-variant-numeric: tabular-nums; }
+#tradecard .etable .eth, #tradecard .etable .etr { display: grid; grid-template-columns: minmax(0, 1.5fr) 1fr 1fr .9fr; gap: 6px; align-items: center; }
+#tradecard .etable .eth { color: var(--muted); border-bottom: 1px solid var(--line); padding-bottom: 2px; }
+#tradecard .etable span:not(:first-child) { text-align: right; }
+#tradecard .etable .pos { color: var(--good); } #tradecard .etable .neg { color: var(--warn); }
+#tradecard h4 { margin: 10px 0 4px; font-size: .86rem; }
+body:has(#mapscreen:not([hidden])) .uisize.fixed { display: none; }

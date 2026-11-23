@@ -102,6 +102,7 @@ function marker(c, px, v, selected) {
     if (c === ctx) LBL.set(v.id, [x - lb.w / 2 - 3 * px, ly - lb.fs * 0.65, x + lb.w / 2 + 3 * px, ly + lb.fs * 0.65]);
   }
 }
+let drawUnderNames = null;                          // what a later part of the engine draws just under the names (the borders of states)
 function drawNames(c, px, withLabels, withCities) {
   if (withLabels) for (const v of visibleLabels()) {
     const sz = LSIZE[v.size] || LSIZE.mid, ang = v.ang * Math.PI / 180, text = v.text || (mode === 'label' && c === ctx ? '…' : '');
@@ -178,6 +179,7 @@ function draw() {
   drawFixes(ctx, px);
   if (mode === 'info' && isel && isel.t === 'hex') { ctx.beginPath(); hexPath(ctx, isel.h, 1); ctx.lineWidth = 2.2 * px; ctx.strokeStyle = 'rgba(255,214,120,.95)'; ctx.stroke(); }
   LBL.clear(); LBX.clear();
+  if (drawUnderNames) { drawUnderNames(); ctx.setTransform(dpr * view.s, 0, 0, dpr * view.s, dpr * view.x, dpr * view.y); ctx.globalAlpha = 1; }
   drawNames(ctx, px, labelsShown(), citiesShown());
 }
 

@@ -19,7 +19,7 @@ function econCompute() {
   const Ho = eStats(cities, outer, () => 0.5);
   cities.forEach((c, k) => { c.cm = climCity(c.h, c.zone); const raw = SB(Hs[k], 'gvhes'); c.cm.grain = raw > 1e-6 ? SBA(Hs[k], 'gvhes') / raw : 1; });
   const n = cities.length;
-  ecoCities(cities);
+  ecoCities(cities); orgCities(cities);
   // what each city has the boats for: the sea, a lake or a navigable river at its quay
   for (const c of cities) {
     let sea = false, wet = false;
@@ -31,7 +31,7 @@ function econCompute() {
   const prod = cities.map(() => new Map());
   cities.forEach((c, k) => {
     const H = Hs[k], cn = ECANON[c.id] || {};
-    for (const g of EGOODS) { if (g.off) continue; let v = (g.f(H) + (g.far ? g.f(Ho[k]) : 0)) * (g.pct == null ? 1 : g.pct); if (!(v > 0.004)) continue; v *= cn[g.cat] || 1; if (g.id === 'silver' && c.id === 'vidsaga') v *= 1.5; prod[k].set(g.id, v); }
+    for (const g of EGOODS) { if (g.off) continue; let v = (g.f(H) + (g.far ? g.f(Ho[k]) : 0)) * (g.pct == null ? 1 : g.pct); if (!(v > 0.004)) continue; v *= (cn[g.cat] || 1) * orgProd(c, g.cat); if (g.id === 'silver' && c.id === 'vidsaga') v *= 1.5; prod[k].set(g.id, v); }
   });
   // what each city needs, before its workshops
   const need = cities.map(c => {
@@ -50,7 +50,7 @@ function econCompute() {
       ships: c.port === 2 ? 1 : c.port === 1 ? 0.4 : 0,
       books: (z === 'T' ? 3 : 1) * [1, 0.5, 0.2, 0.1, 0][c.ki],
     };
-    for (const m of EMADEC) { const v = ind * EWORK[m].base * spec[m] * (cn[m] || 1); if (v > 0.01) p[m] = v; }
+    for (const m of EMADEC) { const v = ind * EWORK[m].base * spec[m] * (cn[m] || 1) * orgProd(c, m); if (v > 0.01) p[m] = v; }
     for (const m in p) for (const [cat, q] of Object.entries(EWORK[m].in)) need[k][cat] += p[m] * q;
     return p;
   });
@@ -60,7 +60,7 @@ function econCompute() {
   // to be sorted and sent on, and pays the quay both ways, as it does wherever it changes between boat and caravan.
   const wetEnd = (L, atA) => { const st = L.states; if (!st) return false; for (let q = 1; q <= 2 && q < st.length; q++) if (st[atA ? q : st.length - 1 - q] & 1) return true; return false; };
   const adj = cities.map(() => []);
-  links.forEach((L, li) => { if (L.fail) return; const wa = wetEnd(L, true), wb = wetEnd(L, false); const lc = ecoLinkCost(L, cities); adj[L.ia].push([L.ib, lc, li, wa, wb]); adj[L.ib].push([L.ia, lc, li, wb, wa]); });
+  links.forEach((L, li) => { if (L.fail) return; const wa = wetEnd(L, true), wb = wetEnd(L, false); const lc = ecoLinkCost(L, cities) * orgHaul(cities[L.ia], cities[L.ib]); adj[L.ia].push([L.ib, lc, li, wa, wb]); adj[L.ib].push([L.ia, lc, li, wb, wa]); });
   const NT = [], NWAY = [];                         // NWAY[i][j]: the lines from i to j, each as [line, +1 from its first city or -1]
   for (let i = 0; i < n; i++) {                     // states: a city, reached by land (2k) or still afloat (2k + 1)
     const d = new Float64Array(2 * n).fill(Infinity), pv = new Int32Array(2 * n).fill(-1), pl = new Int32Array(2 * n).fill(-1), done = new Uint8Array(2 * n); d[2 * i] = 0;
@@ -148,7 +148,7 @@ function econCompute() {
       const earn = (a, b) => {                      // what a load from the a-th seller to the b-th buyer earns now; nothing when it is out
         const i = sup[a], j = dem[b];
         if (i === j || S[i] - B[i] - exp[i] <= 0.02 || B[j] - S[j] - imp[j] <= 0.02) return 0;
-        const w = ECOX.on ? ecoWay(i, j) : null, t = w ? w.t : NT[i][j]; if (!isFinite(t)) return 0;
+        const w = ECOX.on ? ecoWay(i, j, cat) : null, t = w ? w.t : NT[i][j]; if (!isFinite(t)) return 0;
         return ecoEarn(i, j, cat, price(i), price(j), v, t, bulk, phase, w);
       };
       for (const ph of ecoPhases()) { phase = ph; hn = 0;      // who may trade with whom, in turn: a lord's due, then the realm, then the world
@@ -168,7 +168,7 @@ function econCompute() {
         if (Math.min(room, lack, sum) < 0.03) continue;   // a scrap is not worth a boat: the pair stays out of the heap
         const step = Math.min(room, lack, sum, Math.max(0.05, 0.25 * Math.min(room, lack))), f = step / sum, zj = cities[bj].zone;
         let fl = pair.get(bi * n + bj);
-        if (!fl) pair.set(bi * n + bj, fl = { from: bi, to: bj, cat, amt: 0, goods: {}, cost: ECOX.on ? ecoWay(bi, bj).t : NT[bi][bj], via: ECOX.on ? ecoWay(bi, bj).mids : null, broker: ECOX.on ? ecoWay(bi, bj).broker : -1, hub: ECOX.on && ecoWay(bi, bj).hub >= 0 });
+        if (!fl) { const wy = ECOX.on ? ecoWay(bi, bj, cat) : null; pair.set(bi * n + bj, fl = { from: bi, to: bj, cat, amt: 0, goods: {}, cost: wy ? wy.t : NT[bi][bj], via: wy ? wy.mids : null, broker: wy ? wy.broker : -1, hub: !!wy && wy.hub >= 0, org: wy && wy.org ? orgNet(cities[bi], cities[bj], cat) : null }); }
         for (const [id, a] of take) {
           const x = a * f; fl.goods[id] = (fl.goods[id] || 0) + x; left[bi].set(id, left[bi].get(id) - x);
           for (const key of [bi + ':' + id, bi + ':' + id + ':' + zj]) if (budget.has(key)) budget.set(key, budget.get(key) - x);

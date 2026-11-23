@@ -30,4 +30,5 @@
 29-economy.js
 29b-seasons.js
 29c-brush-reach.js
+29d-orgs.js
 30-api.js

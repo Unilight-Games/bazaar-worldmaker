@@ -3,7 +3,21 @@
 // a mountain, c within c hexes of the sea, l beside a lake, o a forest's open edge }.
 function ecoTerm(t) { const o = { on: t[0], rate: t[1] }; for (const m of String(t[2] || '').match(/[a-z]\d*/g) || []) { const k = m[0]; o[k] = k === 'm' || k === 'c' ? +m.slice(1) || 1 : 1; } return o; }
 function ecoRuleF(g) { return H => { let v = (H.gx && H.gx[g.id]) || 0; for (const t of g.terms) if (t.on[0] === '@') v += t.rate * (H.pt[t.on.slice(1)] || 0); return v; }; }
-const ECO = { goods: {}, custom: [], cats: {}, ucats: [], tune: {}, work: {}, pop: {}, danger: {}, auto: BLANK, states: [], cells: new Array(N).fill('.'), unit: 5000, central: { name: 'เหรียญกลาง', per: 1000 } };
+const ECO = { goods: {}, custom: [], cats: {}, ucats: [], tune: {}, work: {}, pop: {}, danger: {}, auto: BLANK, states: [], orgs: [], cells: new Array(N).fill('.'), unit: 1000, central: { name: 'เหรียญกลาง', per: 40000 } };
+// What the model's two scales stand for (v0.9.0, the owner asked for numbers that read as a world's). A head of the model is
+// EUNIT people, so a village is 1,600 and a capital 12,000 before the owner counts them. A unit of base value, the worth of a
+// load of staple food, is ECOIN coins for each of those people: a person's grain for a year costs 40 coins, and what a person
+// makes in a year comes to about 250, when a coin is roughly what unskilled work earns in most of a day. Both are my numbers.
+const EUNIT = 1000, ECOIN = 40;
+// an organisation's kinds, each with the effects it starts with (the owner changes them): what it adds to output and to the worth
+// of what is made, what it gives the people, what it takes off the cost of carrying, and whether its houses trade past the states
+const OKIND = {
+  guild: ['กิลด์ช่างฝีมือ', { prod: 0.15, val: 0.1, well: 0, haul: 0, net: 0 }, '#d9a24a'],
+  assoc: ['สมาคมการค้า', { prod: 0, val: 0, well: 0, haul: 0.15, net: 1 }, '#4fb0c9'],
+  charity: ['องค์กรสาธารณกุศล', { prod: 0, val: 0, well: 0.1, haul: 0, net: 0 }, '#7cc47f'],
+  faith: ['องค์กรศาสนา', { prod: 0, val: 0.05, well: 0.06, haul: 0, net: 0 }, '#c9a0d0'],
+  other: ['องค์กรอื่น', { prod: 0, val: 0, well: 0, haul: 0, net: 0 }, '#b0b0b0'],
+};
 const ECAT0 = JSON.parse(JSON.stringify(ECAT)), EGOODS0 = EGOODS.map(g => ({ ...g })), EWORK0 = JSON.parse(JSON.stringify(EWORK));   // as the map's base gives them
 // The model's own numbers, every one of them mine until the owner rules otherwise: [what it starts at, least, most, step, what it is].
 // The owner changes them in the economy card; a map keeps only the ones that differ from these.
@@ -34,6 +48,8 @@ const ETUNE = {
   pop1: [9.5, 1, 1000, 0.5, 'ประชากรที่ทำให้เมืองทำงานระดับเมืองหลวง (หน่วยของแบบจำลอง)', 'ประชากร'],
   pop2: [5.5, 1, 1000, 0.5, 'ประชากรที่ทำให้ทำงานระดับเมืองใหญ่', 'ประชากร'],
   pop3: [2.4, 0.5, 1000, 0.1, 'ประชากรที่ทำให้ทำงานระดับเมืองเล็ก ต่ำกว่านี้เป็นหมู่บ้าน', 'ประชากร'],
+  orgYears: [5, 0, 50, 0.5, 'มูลค่าองค์กรนับมูลค่าที่องค์กรสร้างต่อปีกี่ปี บวกกับทุนตั้งต้น', 'องค์กร'],
+  orgFee: [0.03, 0, 0.5, 0.005, 'ค่าธรรมเนียมที่องค์กรเก็บจากของที่ค้าผ่านเครือข่ายขององค์กร เป็นส่วนของมูลค่าที่ขาย', 'องค์กร'],
 };
 function TU(k) { const v = ECO.tune[k]; return v == null ? ETUNE[k][0] : v; }
 const SKEYS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', SCOLS = ['#d9534f', '#4f8fd9', '#58b368', '#e0a83a', '#a56cd6', '#3bb5ad', '#e07a3a', '#c95f9c', '#8a9a3a', '#7480e0'];
@@ -42,6 +58,7 @@ const ESYS = {
   feud: ['ศักดินา', 'ชุมชนส่งของเหลือให้ศูนย์ที่ตนขึ้นอยู่ก่อน ของที่ชุมชนขายหรือซื้อกับที่อื่นต้องผ่านศูนย์นั้น แล้วจึงค้าในรัฐ แล้วจึงค้านอกรัฐ'],
   merc: ['พาณิชยนิยม', 'ซื้อของถูก ขายของเหลือให้ผู้ให้ราคาดีที่สุดโดยนับค่าเงินที่แข็งกว่าเป็นราคาที่ดีกว่า ตั้งกำแพงกับสินค้าโรงงานต่างรัฐ และหวงวัตถุดิบไว้ในรัฐ'],
   cap: ['ทุนนิยม', 'ค้าเสรี ค่าขนระหว่างรัฐทุนนิยมด้วยกันถูกลง เลือกผู้ซื้อตามค่าเงินที่แข็งกว่า ตลาดของรัฐที่อยู่บนทางผ่านรับของของผู้อื่นไปส่งต่อในค่าขนที่ถูกลงโดยเก็บค่าฝาก และรับของจากคู่อริสองฝ่ายไปขายต่อให้กันโดยเก็บส่วนคนกลาง'],
+  anar: ['อนาธิปไตย', 'ดินแดนที่ไม่มีรัฐใดปกครอง นับเป็นทุนนิยมทุกอย่าง และมีตลาดมืดที่ขายให้ใครก็ได้ ไม่ถือคู่อริของใคร กำแพงภาษีและการหวงวัตถุดิบของรัฐอื่นใช้กับของที่เข้าออกดินแดนนี้ไม่ได้ ตลาดของดินแดนนี้รับของจากคู่อริสองฝ่ายไปขายต่อให้กันได้ เส้นทางในดินแดนนี้นับว่าไม่มีรัฐคุ้มครอง'],
   soc: ['สังคมนิยม', 'ของในรัฐถูกรวมที่เมืองศูนย์กลางแล้วแจกตามความขาดโดยรัฐรับค่าขนเอง ของเข้าออกรัฐผ่านเมืองศูนย์กลาง ส่งออกเฉพาะส่วนที่เหลือ']
 };
 const MERCKEEP = new Set(['ore', 'timber', 'cloth', 'mana', 'rare']), DANGER = ['ปลอดภัย', 'มีโจรบ้าง', 'อันตราย', 'อันตรายมาก'];
@@ -52,7 +69,10 @@ const KIK = ['capital', 'city', 'town', 'fort', 'village'];
 // the level a city works at: its kind, or the one its people make it once the owner has counted them (a fort stays a fort until it is a city)
 function ecoKi(id, kind) { const ki = KIX[kind] != null ? KIX[kind] : 1; if (!(ECO.pop[id] > 0)) return ki; const h = ECO.pop[id] / ECO.unit, fit = h >= TU('pop1') ? 0 : h >= TU('pop2') ? 1 : h >= TU('pop3') ? 2 : 4; return ki === 3 && fit >= 2 ? 3 : fit; }
 const ecoFx = s => Math.pow(clamp(s.rate || 1, 0.25, 4), TU('fxPow'));
-const ecoCoin = s => (s && s.cur ? s.cur.trim().toLowerCase() : '');   // a state that names no coin of its own uses the central one
+const ecoCoin = s => (s && s.cur ? s.cur.trim().toLowerCase() : '');
+const ecoCap = s => !!s && (s.sys === 'cap' || s.sys === 'anar');     // a land without a state trades as a capitalist one does
+const ecoRival = (a, b) => !!a && !!b && a !== b && a.sys !== 'anar' && b.sys !== 'anar' && (a.rel[b.id] === 'rival' || b.rel[a.id] === 'rival');   // the black market has no enemies
+const ecoRivalCell = (s, z) => { if (!s || s.sys === 'anar' || s.rel[z] !== 'rival') return false; const o = ECOX.byKey.get(z); return !o || o.sys !== 'anar'; };   // a state that names no coin of its own uses the central one
 
 function ecoApply() {                              // the tables the year's trade reads, from the base and the owner's changes
   for (const c of [...ECATS]) if (ECAT[c].own) { delete ECAT[c]; delete ENEED[c]; ECATS.splice(ECATS.indexOf(c), 1); ERAW.splice(ERAW.indexOf(c), 1); }   // the owner's own classes, afresh
@@ -108,7 +128,7 @@ function ecoLinkCost(L, cities) {
   L.danger = own === 4 ? 0 : own || (L.dauto ? L.dauto.lv : 0); let k = 1 + TU('dstep') * L.danger; L.hostile = 0;
   if (ECOX.on && L.states && L.states.length) {
     const sa = cities[L.ia].sto, sb = cities[L.ib].sto; let bad = 0;
-    if (sa || sb) for (const s of L.states) { const z = ECO.cells[s >> 1]; if (z !== '.' && ((sa && sa.rel[z] === 'rival') || (sb && sb.rel[z] === 'rival'))) bad++; }
+    if (sa || sb) for (const s of L.states) { const z = ECO.cells[s >> 1]; if (z !== '.' && (ecoRivalCell(sa, z) || ecoRivalCell(sb, z))) bad++; }
     L.hostile = bad / L.states.length; k *= 1 + TU('hostile') * L.hostile;      // what could not be gone around is paid for
   }
   return L.cost * k;
@@ -118,7 +138,7 @@ function ecoLinkCost(L, cities) {
 function ecoAutoDanger(L) {
   const st = L.states; if (!st || !st.length || !ECODC) return null;
   let far = 0, free = 0, rough = 0;
-  for (const t of st) { const h = t >> 1, b = eff(h); far += clamp((ECODC[h] - 4) / 8, 0, 1); if (ECOX.on && ECO.cells[h] === '.') free++; if (t & 1 ? isSea(b) && !SHORE[h] : (CAR[b] || 3) >= 4.5) rough++; }
+  for (const t of st) { const h = t >> 1, b = eff(h); far += clamp((ECODC[h] - 4) / 8, 0, 1); if (ECOX.on && (ECO.cells[h] === '.' || (ECOX.byKey.get(ECO.cells[h]) || {}).sys === 'anar')) free++; if (t & 1 ? isSea(b) && !SHORE[h] : (CAR[b] || 3) >= 4.5) rough++; }
   const n = st.length, sc = TU('dfar') * far / n + TU('dfree') * free / n + TU('drough') * rough / n;
   return { lv: sc < TU('d1') ? 0 : sc < TU('d2') ? 1 : sc < TU('d3') ? 2 : 3, sc, far: far / n, free: free / n, rough: rough / n };
 }
@@ -132,7 +152,7 @@ function ecoWays(NT) {
     const s = c.sto; if (!s) return;
     const b = ECOX.cap.has(s) ? ECOX.C[ECOX.cap.get(s)] : null;
     if (!b || c.id === s.cap || (b.id !== s.cap && (c.rank > b.rank || (c.rank === b.rank && c.pop > b.pop)))) ECOX.cap.set(s, k);
-    if (s.sys === 'cap' && c.rank >= 1) ECOX.brokers.push(k);
+    if (ecoCap(s) && c.rank >= 1) ECOX.brokers.push(k);
   });
   // a feudal community answers to a seat of its own state: the centre it already sends to, or the nearest market of the state
   ECOX.C.forEach((c, k) => {
@@ -148,14 +168,17 @@ function ecoGate(k) {                               // the city a community's go
   if (s.sys === 'soc') { const cap = ECOX.cap.get(s); return cap != null && cap !== k ? cap : -1; }
   return -1;
 }
-function ecoWay(i, j) {
-  const C = ECOX.C, key = i * C.length + j; let w = WAYS.get(key); if (w) return w;
+function ecoWay(i, j, cat) {
+  const C = ECOX.C;
+  // two houses of one organisation that trades past the states deal with each other directly: no seat, no capital, no broker
+  if (cat && orgNet(C[i], C[j], cat)) { const ko = -(i * C.length + j) - 1; let wo = WAYS.get(ko); if (!wo) WAYS.set(ko, wo = { t: ECOX.NT[i][j], mids: null, broker: -1, hub: -1, org: true }); return wo; }
+  const key = i * C.length + j; let w = WAYS.get(key); if (w) return w;
   const si = C[i].sto, sj = C[j].sto, gi = ecoGate(i), gj = ecoGate(j), a = gi >= 0 && gi !== j ? gi : i, z = gj >= 0 && gj !== i ? gj : j;
   const nodes = [i]; if (a !== i) nodes.push(a);
   let broker = -1;
-  if (si && sj && si !== sj && si.rel[sj.id] === 'rival') {
+  if (ecoRival(si, sj)) {
     let best = Infinity;
-    for (const r of ECOX.brokers) { const sr = C[r].sto; if (sr === si || sr === sj || sr.rel[si.id] === 'rival' || sr.rel[sj.id] === 'rival') continue; const t = ecoLeg(a, r) + ecoLeg(r, z); if (t < best) { best = t; broker = r; } }
+    for (const r of ECOX.brokers) { const sr = C[r].sto; if (sr === si || sr === sj || ecoRival(sr, si) || ecoRival(sr, sj)) continue; const t = ecoLeg(a, r) + ecoLeg(r, z); if (t < best) { best = t; broker = r; } }
     if (broker >= 0) nodes.push(broker);
   }
   if (z !== j && nodes[nodes.length - 1] !== z) nodes.push(z);
@@ -164,9 +187,9 @@ function ecoWay(i, j) {
   // A load that would go straight may instead be left with a market of a capitalist state that stands on its way: such a market
   // gathers loads and sends them on at a lower cost a load, and keeps a fee. It never pays to go far out of the way for it.
   let hub = -1;
-  if (nodes.length === 2 && broker < 0 && ECOX.brokers.length && !(si && sj && si !== sj && si.rel[sj.id] === 'rival')) {
+  if (nodes.length === 2 && broker < 0 && ECOX.brokers.length && !ecoRival(si, sj)) {
     const disc = TU('hubDisc'); let best = t;
-    if (disc < 1) for (const r of ECOX.brokers) { if (r === i || r === j) continue; const sr = C[r].sto; if ((si && sr.rel[si.id] === 'rival') || (sj && sr.rel[sj.id] === 'rival')) continue; const t2 = (ecoLeg(i, r) + ecoLeg(r, j)) * disc; if (t2 < best) { best = t2; hub = r; } }
+    if (disc < 1) for (const r of ECOX.brokers) { if (r === i || r === j) continue; const sr = C[r].sto; if (ecoRival(sr, si) || ecoRival(sr, sj)) continue; const t2 = (ecoLeg(i, r) + ecoLeg(r, j)) * disc; if (t2 < best) { best = t2; hub = r; } }
     if (hub >= 0) { t = best; nodes.splice(1, 0, hub); }
   }
   WAYS.set(key, w = { t, mids: nodes.length > 2 ? nodes.slice(1, -1) : null, broker, hub });
@@ -180,20 +203,23 @@ function ecoRide(f, NWAY) {                         // the lines a flow rides, b
 // what a load from city i to city j earns, under the systems of their two states. Without states on the map this is the plain rule.
 function ecoEarn(i, j, cat, pi, pj, v, t, bulk, phase, w) {
   const ci = ECOX.C[i], cj = ECOX.C[j]; let cost = t * bulk * EKAPPA * ECOX.km, gain = pj - pi;
-  if (phase >= 0) {
-    const si = ci.sto, sj = cj.sto, same = !!si && si === sj, rl = si && sj && !same ? si.rel[sj.id] || sj.rel[si.id] : null;
+  if (phase >= 0 && w && w.org) {                     // inside an organisation's own network the states' rules do not reach: its fee, and the money changer
+    if (phase === 0) return 0;
+    cost += TU('orgFee') * pj * v; if (ci.sto && cj.sto && ecoCoin(ci.sto) !== ecoCoin(cj.sto)) cost += TU('fxFee') * pj * v;
+  } else if (phase >= 0) {
+    const si = ci.sto, sj = cj.sto, same = !!si && si === sj, black = !same && ((!!si && si.sys === 'anar') || (!!sj && sj.sys === 'anar')), rl = si && sj && !same && !black ? si.rel[sj.id] || sj.rel[si.id] : null;
     if (rl === 'rival') { if (!(phase === 2 && w && w.broker >= 0)) return 0; cost += TU('cut') * pj * v; }   // rivals do not trade, unless a market at odds with neither sells it on, for its cut
     if (phase === 0) { if (!(same && si.sys === 'feud' && ECOX.seat[i] === j)) return 0; }                    // the lord's due comes first
     else if (phase === 1) { if (!(same || (rl === 'ally' && ((ci.ki === 4 && ci.near.has(sj.id)) || (cj.ki === 4 && cj.near.has(si.id)))))) return 0; }   // then the realm, and a border village's allied neighbours
     const ti = !!si && si.sys === 'trad', tj = !!sj && sj.sys === 'trad';
     if (ti && tj) { if (t * ECOX.km > TU('tradFar')) return 0; } else if (ti || tj) cost *= TU('tradOut');                              // nobody of theirs carries it far: an outsider must come
-    if (si && sj && si.sys === 'cap' && sj.sys === 'cap') cost *= TU('capLeg');
+    if (ecoCap(si) && ecoCap(sj)) cost *= TU('capLeg');
     if (w && w.hub >= 0) cost += TU('hubCut') * pj * v;                                                  // the market on the way keeps its fee
     if (!same) {
-      if (si && sj && (si.sys === 'cap' || si.sys === 'merc')) gain = pj * ecoFx(sj) / ecoFx(si) - pi;   // a seller who sells to the best bidder sees the harder coin as the better price
+      if (si && sj && (ecoCap(si) || si.sys === 'merc')) gain = pj * ecoFx(sj) / ecoFx(si) - pi;   // a seller who sells to the best bidder sees the harder coin as the better price
       if (si && sj && ecoCoin(si) !== ecoCoin(sj)) cost += TU('fxFee') * pj * v;                         // two coins: the money changer is paid, under every system
-      if (sj && sj.sys === 'merc' && ECAT[cat].made) cost += TU('wall') * v;                             // a wall against foreign wares
-      if (si && si.sys === 'merc' && MERCKEEP.has(cat)) cost += TU('keep') * v;                          // and raw stuff kept at home
+      if (!black && sj && sj.sys === 'merc' && ECAT[cat].made) cost += TU('wall') * v;                             // a wall against foreign wares
+      if (!black && si && si.sys === 'merc' && MERCKEEP.has(cat)) cost += TU('keep') * v;                          // and raw stuff kept at home
     }
   }
   let m = gain * v - cost;
@@ -222,10 +248,16 @@ function ecoLoad(b) {
   ECO.danger = {}; for (const [id, n] of Object.entries(b.danger || {}).slice(0, 4000)) if (n > 0) ECO.danger[ecoStr(id, 120)] = Math.round(ecoNum(n, 0, 4, 0));
   ECO.states = []; for (const s of (Array.isArray(b.states) ? b.states : []).slice(0, 52)) { if (!s || typeof s.id !== 'string' || !SKEYS.includes(s.id) || s.id.length !== 1 || ECO.states.some(x => x.id === s.id)) continue; const rel = {}; for (const [k, r] of Object.entries(s.rel || {})) if (SKEYS.includes(k) && (r === 'ally' || r === 'rival')) rel[k] = r; ECO.states.push({ id: s.id, name: ecoStr(s.name, 60) || 'รัฐใหม่', color: HEXC.test(s.color) ? s.color : SCOLS[0], sys: ESYS[s.sys] ? s.sys : 'merc', cur: ecoStr(s.cur, 30), rate: ecoNum(s.rate, 0.01, 1000, 1), cap: ecoStr(s.cap, 60), rel }); }
   const cells = typeof b.cells === 'string' && b.cells.length === N ? b.cells : ''; for (let i = 0; i < N; i++) ECO.cells[i] = cells && SKEYS.includes(cells[i]) ? cells[i] : '.';
-  ECO.unit = ecoNum(b.unit, 100, 1e6, 5000); ECO.central = { name: ecoStr(b.central && b.central.name, 30) || 'เหรียญกลาง', per: ecoNum(b.central && b.central.per, 0.001, 1e9, 1000) };
+  ECO.orgs = []; for (const o of (Array.isArray(b.orgs) ? b.orgs : []).slice(0, 60)) { if (!o || typeof o.id !== 'string' || !/^o[a-z0-9]{2,30}$/.test(o.id) || ECO.orgs.some(x => x.id === o.id)) continue; ECO.orgs.push({ id: o.id, name: ecoStr(o.name, 60) || 'องค์กรใหม่', kind: OKIND[o.kind] ? o.kind : 'other', color: HEXC.test(o.color) ? o.color : '#d9a24a', cat: typeof o.cat === 'string' && o.cat.length <= 40 ? o.cat : '', prod: ecoNum(o.prod, 0, 2, 0), val: ecoNum(o.val, 0, 2, 0), well: ecoNum(o.well, 0, 1, 0), haul: ecoNum(o.haul, 0, 0.9, 0), net: o.net ? 1 : 0, base: ecoNum(o.base, 0, 1e12, 0), seats: [...new Set((Array.isArray(o.seats) ? o.seats : []).filter(x => typeof x === 'string' && x.length <= 60))].slice(0, 400) }); }
+  // The two scales. A map saved before v0.9.0 that still had the old starting numbers (5,000 people a head, 1,000 coins a unit of
+  // value) takes the new ones; where the owner had counted the people of some city, the head stays at 5,000 so those counts mean
+  // what they meant, and only the coin changes. Numbers the owner had set are kept as they are. The year's trade is the same either way.
+  const u0 = ecoNum(b.unit, 100, 1e6, 0), p0 = ecoNum(b.central && b.central.per, 0.001, 1e9, 0), old = !(b.v >= 2) && u0 === 5000 && p0 === 1000;
+  ECO.unit = u0 && !old ? u0 : old && Object.keys(ECO.pop).length ? 5000 : EUNIT;
+  ECO.central = { name: ecoStr(b.central && b.central.name, 30) || 'เหรียญกลาง', per: p0 && !old ? p0 : ECO.unit * ECOIN };
   ecoStamp++; ecoApply();
 }
-const ecoSerial = () => ({ v: 1, goods: ECO.goods, custom: ECO.custom, cats: ECO.cats, ucats: ECO.ucats, tune: ECO.tune, work: ECO.work, pop: ECO.pop, danger: ECO.danger, auto: ECO.auto, states: ECO.states, cells: ECO.cells.join(''), unit: ECO.unit, central: ECO.central });
+const ecoSerial = () => ({ v: 2, orgs: ECO.orgs, goods: ECO.goods, custom: ECO.custom, cats: ECO.cats, ucats: ECO.ucats, tune: ECO.tune, work: ECO.work, pop: ECO.pop, danger: ECO.danger, auto: ECO.auto, states: ECO.states, cells: ECO.cells.join(''), unit: ECO.unit, central: ECO.central });
 async function ecoSaveNow() { if (!ENV.db || !ecoLoaded || !ecoDirty || ecoSaving) return; ecoSaving = true; ecoDirty = false; try { await ENV.db.doc('map/economy').set(ecoSerial()); } catch (err) { ecoDirty = true; } ecoSaving = false; if (ecoDirty) ecoSaveNow(); }
 async function ecoFlush() { clearTimeout(ecoT); await ecoSaveNow(); }
 function ecoChanged(tables) {                      // the owner changed something: the tables, the year, the card, the save
@@ -255,19 +287,20 @@ function ecoBuildPaths() {
   ecoPathStamp = ecoStamp;
 }
 function drawBorders() {
-  if (!ECO.states.length) return;
+  if (!ECO.states.length) { orgDraw(1 / view.s); return; }
   if (!ecoPaths || ecoPathStamp !== ecoStamp) ecoBuildPaths();
   ctx.setTransform(dpr * view.s, 0, 0, dpr * view.s, dpr * view.x, dpr * view.y);
   const px = 1 / view.s;
   for (const s of ECO.states) {
     const P = ecoPaths.get(s.id); if (!P || !P.n) continue;
-    if (mode === 'econ') { ctx.globalAlpha = 0.2; ctx.fillStyle = s.color; ctx.fill(P.fill); ctx.globalAlpha = 1; }
+    if (mode === 'econ' || (mode === 'trade' && tstate === s.id)) { ctx.globalAlpha = 0.2; ctx.fillStyle = s.color; ctx.fill(P.fill); ctx.globalAlpha = 1; }
     ctx.lineCap = 'round'; ctx.lineWidth = Math.max(2.2, 4.2 * px); ctx.strokeStyle = 'rgba(15,17,20,.55)'; ctx.stroke(P.edge);
-    ctx.lineWidth = Math.max(1.1, 2.2 * px); ctx.strokeStyle = s.color; ctx.stroke(P.edge);
+    if (s.sys === 'anar') ctx.setLineDash([5 * Math.max(1, px), 5 * Math.max(1, px)]);   // a land without a state: a broken line
+    ctx.lineWidth = Math.max(1.1, 2.2 * px); ctx.strokeStyle = s.color; ctx.stroke(P.edge); ctx.setLineDash([]);
   }
+  orgDraw(px);
 }
-const __drawEco = draw;
-draw = function () { __drawEco(); drawBorders(); };
+drawUnderNames = drawBorders;                       // the borders go under the names of places and cities (the owner's ruling, v0.9.0)
 
 // painting a state's land and waters
 let ecoTab = 'goods', ecoSel = null, ecoPaint = null, ecoBrushN = 2, ecoPainting = false, ecoPainted = false;
@@ -361,7 +394,7 @@ function ecoStatesHTML() {
   if (!ECO.states.length) return h + `<p class="note">ยังไม่มีรัฐ เพิ่มรัฐแล้วเลือกชื่อรัฐในแถบเครื่องมือเพื่อระบายเขตลงบนแผนที่ ระบายลงทะเลได้เพื่อกำหนดน่านน้ำ เมืองขึ้นกับรัฐของช่องที่ตั้งอยู่</p>`;
   const cnt = {}; for (const z of ECO.cells) if (z !== '.') cnt[z] = (cnt[z] || 0) + 1;
   for (const s of ECO.states) {
-    const others = ECO.states.filter(o => o !== s);
+    const others = s.sys === 'anar' ? [] : ECO.states.filter(o => o !== s && o.sys !== 'anar');
     h += `<div class="eform" data-s="${s.id}"><div class="erow"><input type="color" data-f="scolor" value="${s.color}" aria-label="สีของรัฐ"><input type="text" data-f="sname" maxlength="60" value="${esc(s.name)}" style="flex:1"></div>`
       + ecoIn('ระบอบเศรษฐกิจ', `<select data-f="ssys">${Object.entries(ESYS).map(([k, v]) => `<option value="${k}"${k === s.sys ? ' selected' : ''}>${v[0]}</option>`).join('')}</select>`) + `<div class="tr w">${ESYS[s.sys][1]}</div>`
       + (s.sys === 'soc' ? ecoCapHTML(s) : '')
@@ -374,7 +407,7 @@ function ecoStatesHTML() {
 function ecoGdp() {
   const E = ECON; if (!E) return [];
   return E.cities.map((c, k) => {
-    let g = 0; for (const cat of ECATS) { const mk = E.MK[k][cat]; if (mk) g += mk[0] * (E.P1[k][cat] || 1) * ECAT[cat].v; }
+    let g = 0; for (const cat of ECATS) { const mk = E.MK[k][cat]; if (mk) g += mk[0] * (E.P1[k][cat] || 1) * ECAT[cat].v * (1 + orgVal(c, cat)); }
     for (const m in E.plan[k] || {}) { const out = E.prod[k].get(madeId(m, c.zone)) || 0; for (const [cat, q] of Object.entries(EWORK[m].in)) g -= out * q * (E.P1[k][cat] || 1) * ECAT[cat].v; }   // what the workshops used up is not counted twice
     return { c, gdp: Math.max(0, g) * ECO.central.per, people: Math.max(1, Math.round(c.pop * ECO.unit)), s: ECOX.byKey.get(c.st) || null, short: Object.keys(c.short || {}).length };
   });
@@ -386,25 +419,33 @@ function ecoIncome(rows) {
   const E = ECON; for (const r of rows) { r.inc = r.gdp; r.why = ''; }
   rows.forEach((r, k) => {
     const sys = r.s ? r.s.sys : '';
-    if (sys === 'cap' && r.c.through > 0) { const x = TU('cut') * r.c.through * ECO.central.per; r.inc += x; if (x > 0.005 * r.gdp) r.why = 'ได้ส่วนคนกลาง'; }
+    if ((sys === 'cap' || sys === 'anar') && r.c.through > 0) { const x = TU('cut') * r.c.through * ECO.central.per; r.inc += x; if (x > 0.005 * r.gdp) r.why = 'ได้ส่วนคนกลาง'; }
     const seat = sys === 'feud' && ECOX.seat && k < ECOX.seat.length ? ECOX.seat[k] : -1;
     if (seat >= 0 && rows[seat] && rows[seat].s === r.s) { const x = TU('tithe') * r.gdp; r.inc -= x; rows[seat].inc += x; r.why = 'ส่งส่วยให้' + rows[seat].c.name; if (!rows[seat].why) rows[seat].why = 'ได้ส่วย'; }
   });
+  for (const r of rows) { const wl = orgWell(r.c); if (wl > 0) { r.inc += wl * r.gdp; r.why = (r.why ? r.why + ' และ' : '') + 'ได้ความช่วยเหลือจากองค์กร'; } }
   const pool = new Map();
   for (const r of rows) if (r.s && r.s.sys === 'soc') { const o = pool.get(r.s) || { sum: 0, people: 0 }; o.sum += TU('pool') * r.gdp; o.people += r.people; pool.set(r.s, o); }
   for (const r of rows) if (r.s && r.s.sys === 'soc') { const o = pool.get(r.s), back = o.sum * r.people / o.people, d = back - TU('pool') * r.gdp; r.inc += d; r.why = d > 0.02 * r.gdp ? 'รัฐเกลี่ยให้' : d < -0.02 * r.gdp ? 'รัฐเกลี่ยออก' : ''; }
   return rows;
 }
 const ecoPc = x => Math.round(x * 1000) / 10;
+const GDPV = (() => { try { return Object.assign({ k: 'inc', d: -1 }, JSON.parse(localStorage.getItem('mme-gdp') || '{}')); } catch (err) { return { k: 'inc', d: -1 }; } })();
+const gdpKeep = () => { try { localStorage.setItem('mme-gdp', JSON.stringify(GDPV)); } catch (err) { /* this view keeps nothing */ } };
 const ecoNumF = v => v >= 100 ? Math.round(v).toLocaleString('en-US') : v >= 1 ? v.toFixed(1) : v.toFixed(2);
 function ecoGdpHTML() {
-  const rows = ecoIncome(ecoGdp()); let h = `<div class="erow"><label>เงินกลางชื่อ <input type="text" data-f="cenname" maxlength="30" value="${esc(ECO.central.name)}" style="width:8em"></label><label>หนึ่งหน่วยมูลค่าฐาน = <input type="number" data-f="cenper" min="0.001" step="1" value="${ECO.central.per}"> ${esc(ECO.central.name)}</label><label>ประชากรหนึ่งหน่วยของแบบจำลอง = <input type="number" data-f="unit" min="100" step="100" value="${ECO.unit}"> คน</label></div>`;
+  const rows = ecoIncome(ecoGdp()); let h = `<div class="erow"><label>เงินกลางชื่อ <input type="text" data-f="cenname" maxlength="30" value="${esc(ECO.central.name)}" style="width:8em"></label><label>หนึ่งหน่วยมูลค่าฐาน = <input type="number" data-f="cenper" min="0.001" step="1" value="${ECO.central.per}"> ${esc(ECO.central.name)}</label><label>ประชากรหนึ่งหน่วยของแบบจำลอง = <input type="number" data-f="unit" min="100" step="100" value="${ECO.unit}"> คน</label></div><p class="note">สองตัวเลขนี้เป็นมาตราของทั้งแผนที่ หมู่บ้านคือ ${Math.round(EPOP[4] * ECO.unit).toLocaleString('en-US')} คน เมืองหลวงคือ ${Math.round(EPOP[0] * ECO.unit).toLocaleString('en-US')} คน จนกว่าจะกรอกประชากรของเมืองเอง ธัญพืชของคนหนึ่งคนตลอดปีมีราคาฐาน ${ecoNumF(ECO.central.per / ECO.unit)} ${esc(ECO.central.name)} สินค้าหนึ่งหน่วยคือปริมาณที่คน ${ECO.unit.toLocaleString('en-US')} คนกินธัญพืชในหนึ่งปี แก้สองตัวเลขนี้แล้วผลการค้าไม่เปลี่ยน เปลี่ยนเฉพาะจำนวนคนกับจำนวนเงินที่แสดง</p>`;
   if (!rows.length) return h + `<p class="note">ยังไม่มีเมืองบนแผนที่ หรือยังคิดการค้าไม่เสร็จ</p>`;
   const tot = rows.reduce((a, r) => a + r.gdp, 0), ppl = rows.reduce((a, r) => a + r.people, 0), mean = rows.reduce((a, r) => a + r.inc, 0) / ppl;
   h += `<div class="tr">ทั้งแผนที่ GDP <b>${ecoNumF(tot)}</b> ${esc(ECO.central.name)} ประชากร ${ppl.toLocaleString('en-US')} คน เฉลี่ยคนละ ${ecoNumF(mean)}</div>`;
   const by = new Map(); for (const r of rows) { const key = r.s ? r.s.id : '.'; const o = by.get(key) || { s: r.s, gdp: 0, people: 0, n: 0 }; o.gdp += r.gdp; o.people += r.people; o.n++; by.set(key, o); }
-  if (ECO.states.length) h += `<h4>รายรัฐ</h4><div class="etable g4"><div class="eth"><span>รัฐ</span><span>GDP (เงินกลาง)</span><span>เงินท้องถิ่น</span><span>ต่อหัว</span></div>` + [...by.values()].sort((a, b) => b.gdp - a.gdp).map(o => `<div class="etr"><span>${o.s ? `<i class="sdot" style="background:${o.s.color}"></i>${esc(o.s.name)} · ${ESYS[o.s.sys][0]}` : 'ไม่ขึ้นกับรัฐใด'}</span><span>${ecoNumF(o.gdp)}</span><span>${o.s ? ecoNumF(o.gdp / o.s.rate) + ' ' + esc(o.s.cur || ECO.central.name) : ''}</span><span>${ecoNumF(o.gdp / o.people)}</span></div>`).join('') + `</div>`;
-  h += `<h4>รายเมือง</h4><div class="etable g5"><div class="eth"><span>เมือง</span><span>ประชากร</span><span>GDP</span><span>รายได้</span><span>ต่อหัว</span></div>` + rows.sort((a, b) => b.inc - a.inc).map(r => { const ph = r.inc / r.people, w = ph >= 1.4 * mean ? 'มั่งคั่ง' : ph <= 0.6 * mean ? 'ยากจน' : ''; return `<div class="etr"><span>${r.s ? `<i class="sdot" style="background:${r.s.color}"></i>` : ''}${esc(r.c.name)}${r.short ? ` <em>ขาด ${r.short} ประเภท</em>` : ''}</span><span>${r.people.toLocaleString('en-US')}</span><span>${ecoNumF(r.gdp)}</span><span${r.why ? ` title="${esc(r.why)}"` : ''}>${ecoNumF(r.inc)}${r.why ? '*' : ''}</span><span>${ecoNumF(ph)}${w ? ' <em>' + w + '</em>' : ''}</span></div>`; }).join('') + `</div>`;
+  const orgT = ECO.orgs.length ? orgTableHTML(rows) : '';   // before the rows are put in the order asked for: it reads them by city
+  const SK = { name: ['เมือง', (a, b) => a.c.name.localeCompare(b.c.name, 'th')], people: ['ประชากร', (a, b) => a.people - b.people], gdp: ['GDP', (a, b) => a.gdp - b.gdp], inc: ['รายได้', (a, b) => a.inc - b.inc], pc: ['ต่อหัว', (a, b) => a.inc / a.people - b.inc / b.people] };
+  const sk = SK[GDPV.k] ? GDPV.k : 'inc', dir = GDPV.d > 0 ? 1 : -1, arrow = k => k === sk ? (dir > 0 ? ' ▲' : ' ▼') : '';
+  const fold = (id, title, body) => `<details class="efold" data-fold="${id}"${GDPV[id] === 0 ? '' : ' open'}><summary>${title}</summary>${body}</details>`;
+  if (ECO.states.length) h += fold('gst', `รายรัฐ <small>${by.size} แถว</small>`, `<div class="etable g4"><div class="eth"><span>รัฐ</span><span>GDP (เงินกลาง)</span><span>เงินท้องถิ่น</span><span>ต่อหัว</span></div>` + [...by.values()].sort((a, b) => b.gdp - a.gdp).map(o => `<div class="etr"><span>${o.s ? `<i class="sdot" style="background:${o.s.color}"></i>${esc(o.s.name)} · ${ESYS[o.s.sys][0]}` : 'ไม่ขึ้นกับรัฐใด'}</span><span>${ecoNumF(o.gdp)}</span><span>${o.s ? ecoNumF(o.gdp / o.s.rate) + ' ' + esc(o.s.cur || ECO.central.name) : ''}</span><span>${ecoNumF(o.gdp / o.people)}</span></div>`).join('') + `</div>`);
+  h += fold('gct', `รายเมือง <small>${rows.length} แถว</small>`, `<div class="erow"><label>เรียงตาม <select data-f="gsort">${Object.entries(SK).map(([k, v]) => `<option value="${k}"${k === sk ? ' selected' : ''}>${v[0]}</option>`).join('')}</select></label><label><select data-f="gdir"><option value="-1"${dir < 0 ? ' selected' : ''}>มากไปน้อย</option><option value="1"${dir > 0 ? ' selected' : ''}>น้อยไปมาก</option></select></label></div><div class="etable g5"><div class="eth sortable">${Object.entries(SK).map(([k, v]) => `<span data-a="gsortc" data-k="${k}" title="กดเพื่อเรียงตามช่องนี้">${v[0]}${arrow(k)}</span>`).join('')}</div>` + rows.sort((a, b) => dir * SK[sk][1](a, b) || a.c.name.localeCompare(b.c.name, 'th')).map(r => { const ph = r.inc / r.people, w = ph >= 1.4 * mean ? 'มั่งคั่ง' : ph <= 0.6 * mean ? 'ยากจน' : ''; return `<div class="etr"><span>${r.s ? `<i class="sdot" style="background:${r.s.color}"></i>` : ''}${esc(r.c.name)}${r.short ? ` <em>ขาด ${r.short} ประเภท</em>` : ''}</span><span>${r.people.toLocaleString('en-US')}</span><span>${ecoNumF(r.gdp)}</span><span${r.why ? ` title="${esc(r.why)}"` : ''}>${ecoNumF(r.inc)}${r.why ? '*' : ''}</span><span>${ecoNumF(ph)}${w ? ' <em>' + w + '</em>' : ''}</span></div>`; }).join('') + `</div>`);
+  if (ECO.orgs.length) h += fold('gor', `องค์กร <small>${ECO.orgs.length} แถว</small>`, orgT);
   return h + `<p class="note">GDP ของเมืองคือมูลค่าของทุกอย่างที่เมืองผลิตได้ในหนึ่งปีตามราคาในเมืองหลังการค้า หักวัตถุดิบที่โรงงานใช้ไป เงินท้องถิ่นแปลงด้วยอัตราของแต่ละรัฐ รายได้คือ GDP หลังมือของระบอบ เมืองทุนนิยมได้ส่วนคนกลางร้อยละ ${ecoPc(TU('cut'))} ของมูลค่าที่ผ่านเมือง ชุมชนศักดินาส่งส่วยร้อยละ ${ecoPc(TU('tithe'))} ให้ศูนย์ที่ตนขึ้นอยู่ รัฐสังคมนิยมรวมร้อยละ ${ecoPc(TU('pool'))} ของทุกเมืองแล้วแบ่งตามหัว สัดส่วนทั้งสามแก้ได้ที่แท็บตัวเลข ช่องที่มีดอกจันชี้ค้างไว้เพื่อดูเหตุ ความมั่งคั่งวัดจากรายได้ต่อหัว</p>`;
 }
 function ecoRender() {

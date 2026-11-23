@@ -12,7 +12,7 @@
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-html, body { margin: 0; background: var(--ink); color: var(--text); font-family: var(--body); font-size: 15px; line-height: 1.6; }
+html, body { margin: 0; background: var(--ink); color: var(--text); font-family: var(--body); font-size: var(--ufs, 17px); line-height: 1.6; }
 header { padding: 18px 20px 10px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; }
 h1 { font-family: var(--display); font-weight: 700; font-size: 1.75rem; margin: 0; text-wrap: balance; }
 .sub { color: var(--muted); font-size: .92rem; }

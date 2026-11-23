@@ -2,7 +2,7 @@
 // the sheet for a new map, and the room around an open map.
 (function () {
   const MME = window.MME;
-  MME.VERSION = '0.8.2';
+  MME.VERSION = '0.9.0';
   MME.NAME = 'Bazaar Worldmaker';
   MME.GRESLAND_KM = 34;   // canon: the continent is about 12 million square kilometres, and the map draws it on 12,208 hexes
   const $ = id => document.getElementById(id);
@@ -309,11 +309,20 @@
   $('myName').value = LS.get('mme-name') || '';
   $('myName').onchange = () => LS.set('mme-name', $('myName').value.trim().slice(0, 24));
 
+  // the size of the page's letters: the owner found the first size too small (v0.9.0), so the middle one is larger and there are three
+  const UIS = { s: 15, m: 17, l: 19 };
+  function setUi(k, keep) {
+    k = UIS[k] ? k : 'm'; document.documentElement.style.setProperty('--ufs', UIS[k] + 'px'); if (keep) LS.set('mme-ui', k);
+    for (const b of document.querySelectorAll('[data-ui]')) b.setAttribute('aria-pressed', b.dataset.ui === k ? 'true' : 'false');
+    if (keep && cur) { try { applyFit(false); cur.rt.refit && cur.rt.refit(); } catch (err) { /* the next resize sets it right */ } }
+  }
+  document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-ui]'); if (b) setUi(b.dataset.ui, true); });
+  setUi(LS.get('mme-ui') || 'm');
   function showScreen(map) { $('menu').hidden = map; $('mapscreen').hidden = !map; window.scrollTo(0, 0); }
   async function mount(meta, db, guestRoom, practice) {
     const scr = $('mapscreen'); scr.innerHTML = '<div id="mapload">กำลังเปิดแผนที่</div>'; showScreen(true);
     let base; try { base = await baseFor(meta); } catch (err) { showScreen(false); toast(err && err.code === 'nobase' ? 'แผนที่ผืนนี้วาดบนพื้นเกรสแลนด์ ซึ่งหน้านี้ไม่มี ให้ส่งออกไฟล์ใหม่จากหน้าที่มีเกรสแลนด์ด้วยเวอร์ชัน 0.8.2 ขึ้นไป แล้วนำเข้าอีกครั้ง' : 'โหลดพื้นแผนที่ไม่สำเร็จ ลองเปิดใหม่อีกครั้ง', err && err.code === 'nobase' ? 9000 : undefined); return false; }
-    scr.innerHTML = ''; scr.appendChild($('tpl-map').content.cloneNode(true)); scr.classList.toggle('blank', !!base.blank);
+    scr.innerHTML = ''; scr.appendChild($('tpl-map').content.cloneNode(true)); scr.classList.toggle('blank', !!base.blank); setUi(LS.get('mme-ui') || 'm');
     const side = scr.querySelector('aside'), meth = scr.querySelector('section.method'); if (side && meth) side.appendChild(meth);   // the notes under the map live in the side panel
     applyFit(true);
     if (base.blank) {                               // words that belong to Gresland alone
@@ -363,8 +372,10 @@
     scr.style.setProperty('--tush', shift + 'px'); scr.style.setProperty('--tumax', cap ? cap + 'px' : '9999px');
     // beside her, the options may run down to where her box of words begins
     const reach = fig && /^(ask|mad)$/.test(fig.dataset.pose || ''), tub = fig && shift && !reach ? document.querySelector('#tutor .tu-box') : null,   // two of her poses hold an arm far out at the height of her box: under those the options keep their shorter length
-     tb0 = tub ? tub.getBoundingClientRect() : null, tl = tb0 && tb0.height > 0 && $('toolbar') ? Math.round(tb0.top - ($('toolbar').getBoundingClientRect().bottom + 46) - 8) : 0;
+     tb0 = tub ? tub.getBoundingClientRect() : null, o0 = scr.querySelector('.opts'), ot = o0 && o0.getBoundingClientRect().height > 0 ? o0.getBoundingClientRect().top : $('toolbar') ? $('toolbar').getBoundingClientRect().bottom + 46 : 164,   // where the options begin: measured, since the size of the page's letters moves it
+     tl = tb0 && tb0.height > 0 ? Math.round(tb0.top - ot - 8) : 0;
     if (tl >= 140) scr.style.setProperty('--tuh', tl + 'px'); else scr.style.removeProperty('--tuh');
+    scr.style.setProperty('--tuh0', Math.max(120, Math.round(innerHeight - ot - 216)) + 'px');
     scr.classList.toggle('dock', dock); box.dataset.padl = dock ? String(DOCKW + shift) : '0';
     if (op) {                                       // where the owner dragged the options: kept inside the map's box, whatever its size now
       if (moved) { const t = $('toolbar').getBoundingClientRect(), b = box.getBoundingClientRect(), w = op.offsetWidth || 310, h = Math.min(op.offsetHeight || 40, b.height - 8); op.style.left = Math.round(b.left - t.left + Math.max(4, Math.min(b.width - w - 4, PAN.ox))) + 'px'; op.style.top = Math.round(b.top - t.top + Math.max(4, Math.min(b.height - h - 4, PAN.oy))) + 'px'; }
