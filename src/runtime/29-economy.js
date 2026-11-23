@@ -3,7 +3,7 @@
 // a mountain, c within c hexes of the sea, l beside a lake, o a forest's open edge }.
 function ecoTerm(t) { const o = { on: t[0], rate: t[1] }; for (const m of String(t[2] || '').match(/[a-z]\d*/g) || []) { const k = m[0]; o[k] = k === 'm' || k === 'c' ? +m.slice(1) || 1 : 1; } return o; }
 function ecoRuleF(g) { return H => { let v = (H.gx && H.gx[g.id]) || 0; for (const t of g.terms) if (t.on[0] === '@') v += t.rate * (H.pt[t.on.slice(1)] || 0); return v; }; }
-const ECO = { goods: {}, custom: [], cats: {}, ucats: [], tune: {}, work: {}, pop: {}, danger: {}, auto: BLANK, states: [], orgs: [], cells: new Array(N).fill('.'), unit: 1000, central: { name: 'เหรียญกลาง', per: 40000 }, tier: '', total: 0, cpp: 40 };
+const ECO = { goods: {}, custom: [], cats: {}, ucats: [], tune: {}, work: {}, pop: {}, danger: {}, auto: BLANK, states: [], orgs: [], cells: new Array(N).fill('.'), unit: 1000, central: { name: 'เหรียญกลาง', per: 40000 }, tier: '', total: 0, cpp: 40, noSlave: 0 };
 // What the model's two scales stand for (v0.9.0, the owner asked for numbers that read as a world's). A head of the model is
 // EUNIT people, so a village is 1,600 and a capital 12,000 before the owner counts them. A unit of base value, the worth of a
 // load of staple food, is ECOIN coins for each of those people: a person's grain for a year costs 40 coins, and what a person
@@ -22,6 +22,12 @@ function ecoScale() {
 }
 // an organisation's kinds, each with the effects it starts with (the owner changes them): what it adds to output and to the worth
 // of what is made, what it gives the people, what it takes off the cost of carrying, and whether its houses trade past the states
+// What a state's law says of slaves (v0.11.0, the owner's three). A city under no state, and a land without one, trade freely.
+const ESLAVE = {
+  abol: ['เลิกทาสสมบูรณ์', 'ไม่มีใครถือทาสได้ คนของรัฐนี้ถูกขายไม่ได้ และเมืองของรัฐนี้ซื้อทาสไม่ได้'],
+  pat: ['ระบบอุปถัมภ์', 'ถือทาสได้ตามเงื่อนไข และทาสเป็นไทได้ง่าย เมืองจึงมีทาสน้อยกว่าและได้แรงงานจากทาสน้อยกว่า ซื้อขายกันได้เฉพาะภายในรัฐ'],
+  free: ['ค้าทาสเสรี', 'ซื้อขายทาสได้ทั้งในรัฐและข้ามรัฐ เว้นแต่กับคู่อริ'],
+};
 const OKIND = {
   guild: ['กิลด์ช่างฝีมือ', { prod: 0.15, val: 0.1, well: 0, haul: 0, net: 0 }, '#d9a24a'],
   assoc: ['สมาคมการค้า', { prod: 0, val: 0, well: 0, haul: 0.15, net: 1 }, '#4fb0c9'],
@@ -59,6 +65,11 @@ const ETUNE = {
   pop1: [9.5, 1, 1000, 0.5, 'ประชากรที่ทำให้เมืองทำงานระดับเมืองหลวง (หน่วยของแบบจำลอง)', 'ประชากร'],
   pop2: [5.5, 1, 1000, 0.5, 'ประชากรที่ทำให้ทำงานระดับเมืองใหญ่', 'ประชากร'],
   pop3: [2.4, 0.5, 1000, 0.1, 'ประชากรที่ทำให้ทำงานระดับเมืองเล็ก ต่ำกว่านี้เป็นหมู่บ้าน', 'ประชากร'],
+  slaveOut: [0.06, 0, 0.5, 0.005, 'ส่วนของคนในเมืองที่ยากจนที่สุดที่ตกเป็นทาส เมืองที่จนน้อยกว่าได้น้อยลงตามส่วน', 'แรงงานทาส'],
+  slaveIn: [0.08, 0, 0.6, 0.005, 'จำนวนทาสที่เมืองมั่งคั่งที่สุดต้องการ เป็นส่วนของประชากรเมือง', 'แรงงานทาส'],
+  slaveCheap: [100000, 100, 1e9, 1000, 'จำนวนคนของเมืองที่ทำให้แรงงานอิสระถูกจนความต้องการทาสเหลือครึ่ง เมืองยิ่งใหญ่กว่านี้ยิ่งต้องการทาสน้อย', 'แรงงานทาส'],
+  slaveGain: [0.5, 0, 2, 0.05, 'รายได้ที่เมืองได้จากทาสหนึ่งคนต่อปี เป็นส่วนของรายได้ต่อหัวเฉลี่ยของแผนที่', 'แรงงานทาส'],
+  slavePrice: [3, 0.1, 30, 0.1, 'ราคาทาสหนึ่งคน เป็นจำนวนปีของรายได้ต่อหัวเฉลี่ยของแผนที่', 'แรงงานทาส'],
   orgYears: [5, 0, 50, 0.5, 'มูลค่าองค์กรนับมูลค่าที่องค์กรสร้างต่อปีกี่ปี บวกกับทุนตั้งต้น', 'องค์กร'],
   orgFee: [0.03, 0, 0.5, 0.005, 'ค่าธรรมเนียมที่องค์กรเก็บจากของที่ค้าผ่านเครือข่ายขององค์กร เป็นส่วนของมูลค่าที่ขาย', 'องค์กร'],
 };
@@ -257,7 +268,7 @@ function ecoLoad(b) {
   ECO.work = {}; for (const m of EMADEC) { const o = (b.work || {})[m]; if (!o || typeof o !== 'object') continue; const w = {}; if (o.base > 0) w.base = ecoNum(o.base, 0.001, 5, EWORK0[m].base); if (o.in && typeof o.in === 'object') { w.in = {}; for (const [c, q] of Object.entries(o.in).slice(0, 8)) if (typeof c === 'string' && c.length <= 40 && q > 0) w.in[c] = ecoNum(q, 0.001, 20, 0.1); } if (w.base || w.in) ECO.work[m] = w; }
   ECO.pop = {}; for (const [id, n] of Object.entries(b.pop || {}).slice(0, 2000)) if (n > 0) ECO.pop[ecoStr(id, 40)] = Math.round(ecoNum(n, 1, 5e7, 0));
   ECO.danger = {}; for (const [id, n] of Object.entries(b.danger || {}).slice(0, 4000)) if (n > 0) ECO.danger[ecoStr(id, 120)] = Math.round(ecoNum(n, 0, 4, 0));
-  ECO.states = []; for (const s of (Array.isArray(b.states) ? b.states : []).slice(0, 52)) { if (!s || typeof s.id !== 'string' || !SKEYS.includes(s.id) || s.id.length !== 1 || ECO.states.some(x => x.id === s.id)) continue; const rel = {}; for (const [k, r] of Object.entries(s.rel || {})) if (SKEYS.includes(k) && (r === 'ally' || r === 'rival')) rel[k] = r; ECO.states.push({ id: s.id, name: ecoStr(s.name, 60) || 'รัฐใหม่', color: HEXC.test(s.color) ? s.color : SCOLS[0], sys: ESYS[s.sys] ? s.sys : 'merc', cur: ecoStr(s.cur, 30), rate: ecoNum(s.rate, 0.01, 1000, 1), cap: ecoStr(s.cap, 60), rel }); }
+  ECO.states = []; for (const s of (Array.isArray(b.states) ? b.states : []).slice(0, 52)) { if (!s || typeof s.id !== 'string' || !SKEYS.includes(s.id) || s.id.length !== 1 || ECO.states.some(x => x.id === s.id)) continue; const rel = {}; for (const [k, r] of Object.entries(s.rel || {})) if (SKEYS.includes(k) && (r === 'ally' || r === 'rival')) rel[k] = r; ECO.states.push({ id: s.id, name: ecoStr(s.name, 60) || 'รัฐใหม่', color: HEXC.test(s.color) ? s.color : SCOLS[0], sys: ESYS[s.sys] ? s.sys : 'merc', cur: ecoStr(s.cur, 30), rate: ecoNum(s.rate, 0.01, 1000, 1), cap: ecoStr(s.cap, 60), slave: ESLAVE[s.slave] ? s.slave : 'abol', rel }); }
   const cells = typeof b.cells === 'string' && b.cells.length === N ? b.cells : ''; for (let i = 0; i < N; i++) ECO.cells[i] = cells && SKEYS.includes(cells[i]) ? cells[i] : '.';
   ECO.orgs = []; for (const o of (Array.isArray(b.orgs) ? b.orgs : []).slice(0, 60)) { if (!o || typeof o.id !== 'string' || !/^o[a-z0-9]{2,30}$/.test(o.id) || ECO.orgs.some(x => x.id === o.id)) continue; ECO.orgs.push({ id: o.id, name: ecoStr(o.name, 60) || 'องค์กรใหม่', kind: OKIND[o.kind] ? o.kind : 'other', color: HEXC.test(o.color) ? o.color : '#d9a24a', cat: typeof o.cat === 'string' && o.cat.length <= 40 ? o.cat : '', prod: ecoNum(o.prod, 0, 2, 0), val: ecoNum(o.val, 0, 2, 0), well: ecoNum(o.well, 0, 1, 0), haul: ecoNum(o.haul, 0, 0.9, 0), net: o.net ? 1 : 0, base: ecoNum(o.base, 0, 1e12, 0), seats: [...new Set((Array.isArray(o.seats) ? o.seats : []).filter(x => typeof x === 'string' && x.length <= 60))].slice(0, 400) }); }
   // The two scales. A map saved before v0.9.0 that still had the old starting numbers (5,000 people a head, 1,000 coins a unit of
@@ -266,11 +277,12 @@ function ecoLoad(b) {
   const u0 = ecoNum(b.unit, 0.01, 1e9, 0), p0 = ecoNum(b.central && b.central.per, 0.001, 1e9, 0), old = !(b.v >= 2) && u0 === 5000 && p0 === 1000;
   ECO.unit = u0 && !old ? u0 : old && Object.keys(ECO.pop).length ? 5000 : EUNIT;
   ECO.central = { name: ecoStr(b.central && b.central.name, 30) || 'เหรียญกลาง', per: p0 && !old ? p0 : ECO.unit * ECOIN };
+  ECO.noSlave = b.noSlave ? 1 : 0;
   ECO.tier = ETIER[b.tier] ? b.tier : b.tier === 'own' && b.total > 0 ? 'own' : ''; ECO.total = ETIER[ECO.tier] ? ETIER[ECO.tier][1] : ECO.tier === 'own' ? ecoNum(b.total, 100, 1e12, 0) : 0;
   ECO.cpp = clamp(ECO.central.per / ECO.unit, 1e-6, 1e9);
   ecoStamp++; ecoApply();
 }
-const ecoSerial = () => ({ v: 2, tier: ECO.tier, total: ECO.tier === 'own' ? ECO.total : 0, orgs: ECO.orgs, goods: ECO.goods, custom: ECO.custom, cats: ECO.cats, ucats: ECO.ucats, tune: ECO.tune, work: ECO.work, pop: ECO.pop, danger: ECO.danger, auto: ECO.auto, states: ECO.states, cells: ECO.cells.join(''), unit: ECO.unit, central: ECO.central });
+const ecoSerial = () => ({ v: 2, noSlave: ECO.noSlave, tier: ECO.tier, total: ECO.tier === 'own' ? ECO.total : 0, orgs: ECO.orgs, goods: ECO.goods, custom: ECO.custom, cats: ECO.cats, ucats: ECO.ucats, tune: ECO.tune, work: ECO.work, pop: ECO.pop, danger: ECO.danger, auto: ECO.auto, states: ECO.states, cells: ECO.cells.join(''), unit: ECO.unit, central: ECO.central });
 async function ecoSaveNow() { if (!ENV.db || !ecoLoaded || !ecoDirty || ecoSaving) return; ecoSaving = true; ecoDirty = false; try { await ENV.db.doc('map/economy').set(ecoSerial()); } catch (err) { ecoDirty = true; } ecoSaving = false; if (ecoDirty) ecoSaveNow(); }
 async function ecoFlush() { clearTimeout(ecoT); await ecoSaveNow(); }
 function ecoChanged(tables) {                      // the owner changed something: the tables, the year, the card, the save
@@ -410,6 +422,7 @@ function ecoStatesHTML() {
     const others = s.sys === 'anar' ? [] : ECO.states.filter(o => o !== s && o.sys !== 'anar');
     h += `<div class="eform" data-s="${s.id}"><div class="erow"><input type="color" data-f="scolor" value="${s.color}" aria-label="สีของรัฐ"><input type="text" data-f="sname" maxlength="60" value="${esc(s.name)}" style="flex:1"></div>`
       + ecoIn('ระบอบเศรษฐกิจ', `<select data-f="ssys">${Object.entries(ESYS).map(([k, v]) => `<option value="${k}"${k === s.sys ? ' selected' : ''}>${v[0]}</option>`).join('')}</select>`) + `<div class="tr w">${ESYS[s.sys][1]}</div>`
+      + (s.sys === 'anar' ? `<div class="tr w">แรงงานทาส: ดินแดนที่ไม่มีรัฐค้าทาสเสรีเสมอ</div>` : ecoIn('แรงงานทาส', `<select data-f="sslave">${Object.entries(ESLAVE).map(([k, v]) => `<option value="${k}"${k === (s.slave || 'abol') ? ' selected' : ''}>${v[0]}</option>`).join('')}</select>`) + `<div class="tr w">${ESLAVE[s.slave || 'abol'][1]}</div>`)
       + (s.sys === 'soc' ? ecoCapHTML(s) : '')
       + `<div class="erow"><label>สกุลเงิน <input type="text" data-f="scur" maxlength="30" value="${esc(s.cur)}" placeholder="${esc(ECO.central.name)}" style="width:8em"></label><label>1 หน่วย = <input type="number" data-f="srate" min="0.01" max="1000" step="0.05" value="${s.rate}"> ${esc(ECO.central.name)}</label></div>`
       + (others.length ? `<div class="erow">${others.map(o => `<label><i class="sdot" style="background:${o.color}"></i>${esc(o.name)} <select data-f="srel" data-o="${o.id}"><option value="">เป็นกลาง</option><option value="ally"${(s.rel[o.id] || o.rel[s.id]) === 'ally' ? ' selected' : ''}>พันธมิตร</option><option value="rival"${(s.rel[o.id] || o.rel[s.id]) === 'rival' ? ' selected' : ''}>คู่อริ</option></select></label>`).join('')}</div>` : '')

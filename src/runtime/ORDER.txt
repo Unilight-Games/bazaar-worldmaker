@@ -32,4 +32,5 @@
 29c-brush-reach.js
 29d-orgs.js
 29e-land.js
+29f-labor.js
 30-api.js

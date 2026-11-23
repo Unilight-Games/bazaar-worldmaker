@@ -10,6 +10,7 @@ const { chromium } = require('playwright');
   await p.waitForFunction(() => MME.shell.cur && MME.shell.cur.rt && MME.shell.cur.rt.state().editable && MME.shell.cur.rt.state().econ, null, { timeout: 90000 });
   const settle = async () => { for (let n = 0, last = -1; n < 40; n++) { await p.waitForTimeout(2200); const v = await p.evaluate(() => { const e = MME.shell.cur.rt.test.econ(); return e ? e.ver : -1; }); if (v === last && v >= 0) return; last = v; } };
   const read = () => p.evaluate(() => { const x = MME.shell.cur.rt.test, L = x.land(), e = x.eco(), g = x.gdp(), ec = x.econ(), ppl = g.reduce((a, r) => a + r.people, 0); return { total: L.total, unit: e.unit, tier: e.tier, crop: L.crop, tot: L.tot, short: L.short, ppl, pc: g.reduce((a, r) => a + r.inc, 0) / ppl, vol: ec.vol, flows: ec.flows, rows: L.rows }; });
+  await p.evaluate(() => { const x = MME.shell.cur.rt.test, e = x.eco(); e.noSlave = 1; x.ecoSet(e); }); await settle();   // slaves thin out as cities grow (t32): kept out of this comparison
   const base = await read();
   await p.click('#modes button[data-mode="econ"]'); await p.click('#ecoTab button[data-t="gdp"]'); await p.waitForSelector('#ecobody select[data-f="tier"]');
   ok('the GDP tab offers the five levels, a number of one\'s own, and none', await p.evaluate(() => [...document.querySelectorAll('#ecobody select[data-f="tier"] option')].map(o => o.value).join() === ',xs,l,m,h,xl,own'));

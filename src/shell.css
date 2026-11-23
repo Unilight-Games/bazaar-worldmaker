@@ -420,3 +420,6 @@ body:not(.tutoring) #mapscreen.fit:not(.dock) .opts:not(.moved):not(.folded):not
 body:has(#mapscreen:not([hidden])) .uisize.fixed { display: none; }
 .lsw { width: 11px; height: 11px; display: inline-block; border: 1px solid rgba(255,255,255,.25); margin: 0 5px 0 8px; vertical-align: -1px; }
 .tr .lsw:first-child { margin-left: 0; }
+.tierpick { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 4px 0 8px; background: var(--panel, rgba(20,22,27,.9)); }
+.tierpick select { border: 0; background: transparent; color: var(--text); font: inherit; padding: 5px 2px; max-width: 11em; }
+.tierpick select option { background: #1b1e24; color: #eee; }

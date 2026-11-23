@@ -49,6 +49,7 @@ function landCompute() {
   LAND = { ver: E.ver, unit: ECO.unit, use, rows, tot, total, crop, haHex, short, landN, km2: landN * haHex / 100 };
 }
 function landDraw() {
+  tierSync();
   if (!landOn || !ECON) return; landCompute(); const L = LAND; if (!L || !(L.tot.farm + L.tot.cleared + L.tot.logged + L.tot.mine)) return;
   ctx.setTransform(dpr * view.s, 0, 0, dpr * view.s, dpr * view.x, dpr * view.y); ctx.globalAlpha = 1; ctx.setLineDash([]);
   for (const t of [3, 1, 2, 4]) { ctx.beginPath(); let any = false; for (let i = 0; i < N; i++) if (L.use[i] === t) { hexPath(ctx, i, 1); any = true; } if (any) { ctx.fillStyle = LAND_COL[t]; ctx.fill(); } }
@@ -60,6 +61,16 @@ function landDraw() {
 { const under = drawUnderNames; drawUnderNames = function () { landDraw(); if (under) under(); }; }   // under the borders, which are under the names
 { const b = $('landBtn'); if (b) { b.setAttribute('aria-pressed', landOn ? 'true' : 'false'); b.onclick = () => { landOn = !landOn; b.setAttribute('aria-pressed', landOn ? 'true' : 'false'); try { localStorage.setItem('mme-land', landOn ? '1' : '0'); } catch (err) { /* this view keeps nothing */ } requestDraw(); }; } }
 
+// the level, set on the map itself (the owner asked for it there): a small list beside the chips, kept in step with the document
+const tierSel = $('tierSel');
+function tierSet(k) { ECO.tier = ETIER[k] ? k : k === 'own' ? 'own' : ''; ECO.total = ETIER[k] ? ETIER[k][1] : k === 'own' ? Math.max(100, Math.round(LAND ? LAND.total : 3e6)) : 0; ecoChanged(true); ecoRender(); }
+function tierSync() {
+  if (!tierSel) return; const sig = ECO.tier + '|' + (editable ? 1 : 0) + '|' + Math.round(ECO.total);
+  if (tierSel.dataset.sig === sig) return; tierSel.dataset.sig = sig;
+  tierSel.innerHTML = `<option value="">ไม่กำหนด</option>` + Object.entries(ETIER).map(([k, z]) => `<option value="${k}">${z[0]} · ${z[2]}</option>`).join('') + `<option value="own">กำหนดเอง${ECO.tier === 'own' ? ' · ' + ecoNumF(ECO.total) + ' คน' : ''}</option>`;
+  tierSel.value = ECO.tier; tierSel.disabled = !editable;
+}
+if (tierSel) tierSel.addEventListener('change', () => { if (!editable) { tierSync(); return; } tierSet(tierSel.value); });
 // the head of the GDP tab: the level, what follows from it, and what the land says
 function landHeadHTML() {
   landCompute(); const L = LAND, own = ECO.tier === 'own';
@@ -77,7 +88,7 @@ const __gdpLand = ecoGdpHTML;
 ecoGdpHTML = function () { return landHeadHTML() + __gdpLand(); };
 $('ecobody').addEventListener('change', e => {
   const el = e.target, f = el.dataset.f; if (!editable || !f) return;
-  if (f === 'tier') { const k = el.value; ECO.tier = ETIER[k] ? k : k === 'own' ? 'own' : ''; ECO.total = ETIER[k] ? ETIER[k][1] : k === 'own' ? Math.max(100, Math.round(LAND ? LAND.total : 3e6)) : 0; }
+  if (f === 'tier') { tierSet(el.value); return; }
   else if (f === 'total') { const v = +el.value; if (!(v >= 100)) return; ECO.tier = 'own'; ECO.total = Math.min(1e12, Math.round(v)); }
   else if (f === 'unit') { ECO.tier = ''; ECO.total = 0; ECO.cpp = clamp(ECO.central.per / ECO.unit, 1e-6, 1e9); }   // a head set by hand: the level lets go
   else if (f === 'cenper') { ECO.cpp = clamp(ECO.central.per / ECO.unit, 1e-6, 1e9); }
