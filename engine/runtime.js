@@ -5519,7 +5519,7 @@ function landPaint() {
   }
 }
 function landSheet() {                               // the sheet as the year now stands; null while there is nothing to lay down
-  if (!landOn || !ECON || mode === 'terrain') return null;   // while the ground itself is being painted, the ground shows as it is
+  if (!landOn || !ECON || mode === 'terrain' || mode === 'river') return null;   // while the ground or its rivers are being drawn, the ground shows as it is
   landCompute(); const L = LAND; if (!L || !(L.tot.farm + L.tot.cleared + L.tot.logged + L.tot.mine + L.tot.terrace + L.tot.garden)) return null;
   const key = L.ver + '|' + L.unit + '|' + painted.size + '|' + ED.rivers.length;
   if (key !== landKey) { landKey = key; const t0 = performance.now(); try { landPaint(); } catch (err) { landAny = false; console.error('land sheet', err); } landMs = performance.now() - t0; }
@@ -5528,7 +5528,7 @@ function landSheet() {                               // the sheet as the year no
 drawOverGround = function (c, w, h) { const cvs = landSheet(); if (cvs) c.drawImage(cvs, 0, 0, w, h); };
 { const under = drawUnderNames; drawUnderNames = function () { tierSync(); if (under) under(); }; }
 function landTipHTML(id) {                           // the hover card's line for a hex of the cities' land
-  const L = LAND; if (!landOn || !L || !ECON || L.ver !== ECON.ver || mode === 'terrain') return '';
+  const L = LAND; if (!landOn || !L || !ECON || L.ver !== ECON.ver || mode === 'terrain' || mode === 'river') return '';
   const t = L.use[id]; if (!landIs(t)) return ''; const c = ECON.cities[L.own[id]];
   return `<div class="s">${LAND_NAME[t]}${c ? ' ของ' + esc(c.name) : ''}</div>`;
 }
