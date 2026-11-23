@@ -2,7 +2,7 @@
 // the sheet for a new map, and the room around an open map.
 (function () {
   const MME = window.MME;
-  MME.VERSION = '0.8.0';
+  MME.VERSION = '0.8.1';
   MME.NAME = 'Bazaar Worldmaker';
   MME.GRESLAND_KM = 34;   // canon: the continent is about 12 million square kilometres, and the map draws it on 12,208 hexes
   const $ = id => document.getElementById(id);
@@ -514,7 +514,7 @@
     bansUI();
     if (!inRoom) return;
     $('roomCode').textContent = showCode(cur.room.code); $('roomClose').hidden = guest;
-    $('roomWhere').textContent = cur.online === false ? 'ห้องทดลอง ใช้ได้เฉพาะระหว่างแท็บของเบราว์เซอร์นี้ เพราะหน้านี้ต่อห้องออนไลน์ไม่ได้' : guest ? 'คุณอยู่ในห้องของเจ้าของแผนที่ ทุกการแก้ส่งไปเก็บที่เครื่องของเจ้าของ แผนที่นี้ไม่ถูกเก็บลงคลังของคุณ' : 'บอกรหัสนี้กับเพื่อน เพื่อนเปิดหน้านี้' + (fire ? ' เข้าสู่ระบบด้วย Google' : '') + 'แล้วใส่รหัสที่เมนู แผนที่ยังอยู่ในเครื่องนี้เท่านั้น ถ้าคุณปิดห้องหรือออกจากหน้านี้ ทุกคนจะหลุดออกทันที';
+    $('roomWhere').textContent = cur.online === false ? 'ห้องทดลอง ใช้ได้เฉพาะระหว่างแท็บของเบราว์เซอร์นี้ เพราะหน้านี้ต่อห้องออนไลน์ไม่ได้' : guest ? 'คุณอยู่ในห้องของเจ้าของแผนที่ ทุกการแก้ส่งไปเก็บที่เครื่องของเจ้าของ แผนที่นี้ไม่ถูกเก็บลงคลังของคุณ' : 'บอกรหัสนี้กับเพื่อน เพื่อนเปิดหน้านี้' + (fire ? ' เข้าสู่ระบบด้วย Google ' : '') + 'แล้วใส่รหัสที่เมนู แผนที่ยังอยู่ในเครื่องนี้เท่านั้น ถ้าคุณปิดห้องหรือออกจากหน้านี้ ทุกคนจะหลุดออกทันที';
     const list = cur.people || [];
     $('roomChipText').textContent = (guest ? 'อยู่ในห้อง ' : 'ห้องเปิดอยู่ ') + showCode(cur.room.code) + ' · ' + Math.max(1, list.length) + ' คน';
     $('roomPeople').innerHTML = list.map(p => {
