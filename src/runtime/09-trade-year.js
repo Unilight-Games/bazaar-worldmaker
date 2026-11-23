@@ -5,7 +5,7 @@ function econCompute() {
   ensureRoutes();                                    // the roads as they stand, and the river crossings
   eWaterways();
   CL_DIRTY = true; climEnsure();                     // the climate as the map now stands
-  ecoPrep();
+  ecoPrep(); ecoScale();
   const cities = visibleCities().map(c => {
     const h = landHex(hexAt(c.x, c.y)), ki0 = KIX[c.kind] != null ? KIX[c.kind] : 1, ki = ecoKi(c.id, c.kind);
     return { id: c.id, name: c.name || 'เมืองไม่มีชื่อ', kind: c.kind, ki, x: c.x, y: c.y, h, zone: h >= 0 ? ZO[h] : '.', pop: ecoPop(c.id, ki0), lk: KIK[ki], st: h >= 0 ? ECO.cells[h] : '.' };

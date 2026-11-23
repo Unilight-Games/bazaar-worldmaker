@@ -418,3 +418,5 @@ body:not(.tutoring) #mapscreen.fit:not(.dock) .opts:not(.moved):not(.folded):not
 #tradecard .etable .pos { color: var(--good); } #tradecard .etable .neg { color: var(--warn); }
 #tradecard h4 { margin: 10px 0 4px; font-size: .86rem; }
 body:has(#mapscreen:not([hidden])) .uisize.fixed { display: none; }
+.lsw { width: 11px; height: 11px; display: inline-block; border: 1px solid rgba(255,255,255,.25); margin: 0 5px 0 8px; vertical-align: -1px; }
+.tr .lsw:first-child { margin-left: 0; }

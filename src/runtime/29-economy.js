@@ -3,12 +3,23 @@
 // a mountain, c within c hexes of the sea, l beside a lake, o a forest's open edge }.
 function ecoTerm(t) { const o = { on: t[0], rate: t[1] }; for (const m of String(t[2] || '').match(/[a-z]\d*/g) || []) { const k = m[0]; o[k] = k === 'm' || k === 'c' ? +m.slice(1) || 1 : 1; } return o; }
 function ecoRuleF(g) { return H => { let v = (H.gx && H.gx[g.id]) || 0; for (const t of g.terms) if (t.on[0] === '@') v += t.rate * (H.pt[t.on.slice(1)] || 0); return v; }; }
-const ECO = { goods: {}, custom: [], cats: {}, ucats: [], tune: {}, work: {}, pop: {}, danger: {}, auto: BLANK, states: [], orgs: [], cells: new Array(N).fill('.'), unit: 1000, central: { name: 'เหรียญกลาง', per: 40000 } };
+const ECO = { goods: {}, custom: [], cats: {}, ucats: [], tune: {}, work: {}, pop: {}, danger: {}, auto: BLANK, states: [], orgs: [], cells: new Array(N).fill('.'), unit: 1000, central: { name: 'เหรียญกลาง', per: 40000 }, tier: '', total: 0, cpp: 40 };
 // What the model's two scales stand for (v0.9.0, the owner asked for numbers that read as a world's). A head of the model is
 // EUNIT people, so a village is 1,600 and a capital 12,000 before the owner counts them. A unit of base value, the worth of a
 // load of staple food, is ECOIN coins for each of those people: a person's grain for a year costs 40 coins, and what a person
 // makes in a year comes to about 250, when a coin is roughly what unskilled work earns in most of a day. Both are my numbers.
 const EUNIT = 1000, ECOIN = 40;
+// How many people the whole map holds (v0.10.0, the owner's five levels and his words for them). With a level chosen, the people
+// of a head of the model follow from it: the level's number shared over every city by its weight. The numbers inside each band are mine.
+const ETIER = { xs: ['ต่ำพิเศษ', 3e4, 'ไม่กี่หมื่นคน'], l: ['ต่ำ', 3e5, 'ไม่กี่แสนคน'], m: ['กลาง', 3e6, 'ไม่กี่ล้านคน'], h: ['สูง', 2e9, 'พันล้านคน'], xl: ['สูงพิเศษ', 2e10, 'หมื่นล้านคน'] };
+function ecoScale() {
+  if (!(ECO.total > 0)) return;
+  let h0 = 0, own = 0, all = 0;
+  for (const c of visibleCities()) { const k = KIX[c.kind] != null ? KIX[c.kind] : 1; all += EPOP[k]; if (ECO.pop[c.id] > 0) own += ECO.pop[c.id]; else h0 += EPOP[k]; }
+  if (!(all > 0)) return;
+  ECO.unit = clamp(h0 > 0 && ECO.total > own ? (ECO.total - own) / h0 : ECO.total / all, 0.01, 1e9);   // cities the owner counted keep their count; the rest share what is left
+  ECO.central.per = ECO.unit * ECO.cpp;                // a person's year stays worth what it was, whatever the map holds
+}
 // an organisation's kinds, each with the effects it starts with (the owner changes them): what it adds to output and to the worth
 // of what is made, what it gives the people, what it takes off the cost of carrying, and whether its houses trade past the states
 const OKIND = {
@@ -252,12 +263,14 @@ function ecoLoad(b) {
   // The two scales. A map saved before v0.9.0 that still had the old starting numbers (5,000 people a head, 1,000 coins a unit of
   // value) takes the new ones; where the owner had counted the people of some city, the head stays at 5,000 so those counts mean
   // what they meant, and only the coin changes. Numbers the owner had set are kept as they are. The year's trade is the same either way.
-  const u0 = ecoNum(b.unit, 100, 1e6, 0), p0 = ecoNum(b.central && b.central.per, 0.001, 1e9, 0), old = !(b.v >= 2) && u0 === 5000 && p0 === 1000;
+  const u0 = ecoNum(b.unit, 0.01, 1e9, 0), p0 = ecoNum(b.central && b.central.per, 0.001, 1e9, 0), old = !(b.v >= 2) && u0 === 5000 && p0 === 1000;
   ECO.unit = u0 && !old ? u0 : old && Object.keys(ECO.pop).length ? 5000 : EUNIT;
   ECO.central = { name: ecoStr(b.central && b.central.name, 30) || 'เหรียญกลาง', per: p0 && !old ? p0 : ECO.unit * ECOIN };
+  ECO.tier = ETIER[b.tier] ? b.tier : b.tier === 'own' && b.total > 0 ? 'own' : ''; ECO.total = ETIER[ECO.tier] ? ETIER[ECO.tier][1] : ECO.tier === 'own' ? ecoNum(b.total, 100, 1e12, 0) : 0;
+  ECO.cpp = clamp(ECO.central.per / ECO.unit, 1e-6, 1e9);
   ecoStamp++; ecoApply();
 }
-const ecoSerial = () => ({ v: 2, orgs: ECO.orgs, goods: ECO.goods, custom: ECO.custom, cats: ECO.cats, ucats: ECO.ucats, tune: ECO.tune, work: ECO.work, pop: ECO.pop, danger: ECO.danger, auto: ECO.auto, states: ECO.states, cells: ECO.cells.join(''), unit: ECO.unit, central: ECO.central });
+const ecoSerial = () => ({ v: 2, tier: ECO.tier, total: ECO.tier === 'own' ? ECO.total : 0, orgs: ECO.orgs, goods: ECO.goods, custom: ECO.custom, cats: ECO.cats, ucats: ECO.ucats, tune: ECO.tune, work: ECO.work, pop: ECO.pop, danger: ECO.danger, auto: ECO.auto, states: ECO.states, cells: ECO.cells.join(''), unit: ECO.unit, central: ECO.central });
 async function ecoSaveNow() { if (!ENV.db || !ecoLoaded || !ecoDirty || ecoSaving) return; ecoSaving = true; ecoDirty = false; try { await ENV.db.doc('map/economy').set(ecoSerial()); } catch (err) { ecoDirty = true; } ecoSaving = false; if (ecoDirty) ecoSaveNow(); }
 async function ecoFlush() { clearTimeout(ecoT); await ecoSaveNow(); }
 function ecoChanged(tables) {                      // the owner changed something: the tables, the year, the card, the save
@@ -432,7 +445,7 @@ function ecoIncome(rows) {
 const ecoPc = x => Math.round(x * 1000) / 10;
 const GDPV = (() => { try { return Object.assign({ k: 'inc', d: -1 }, JSON.parse(localStorage.getItem('mme-gdp') || '{}')); } catch (err) { return { k: 'inc', d: -1 }; } })();
 const gdpKeep = () => { try { localStorage.setItem('mme-gdp', JSON.stringify(GDPV)); } catch (err) { /* this view keeps nothing */ } };
-const ecoNumF = v => v >= 100 ? Math.round(v).toLocaleString('en-US') : v >= 1 ? v.toFixed(1) : v.toFixed(2);
+const ecoNumF = v => { const a = Math.abs(v), big = (d, w) => (v / d).toLocaleString('en-US', { maximumFractionDigits: 1 }) + ' ' + w; return a >= 1e13 ? big(1e12, 'ล้านล้าน') : a >= 1e10 ? big(1e9, 'พันล้าน') : a >= 1e7 ? big(1e6, 'ล้าน') : a >= 100 ? Math.round(v).toLocaleString('en-US') : a >= 1 ? v.toFixed(1) : v.toFixed(2); };
 function ecoGdpHTML() {
   const rows = ecoIncome(ecoGdp()); let h = `<div class="erow"><label>เงินกลางชื่อ <input type="text" data-f="cenname" maxlength="30" value="${esc(ECO.central.name)}" style="width:8em"></label><label>หนึ่งหน่วยมูลค่าฐาน = <input type="number" data-f="cenper" min="0.001" step="1" value="${ECO.central.per}"> ${esc(ECO.central.name)}</label><label>ประชากรหนึ่งหน่วยของแบบจำลอง = <input type="number" data-f="unit" min="100" step="100" value="${ECO.unit}"> คน</label></div><p class="note">สองตัวเลขนี้เป็นมาตราของทั้งแผนที่ หมู่บ้านคือ ${Math.round(EPOP[4] * ECO.unit).toLocaleString('en-US')} คน เมืองหลวงคือ ${Math.round(EPOP[0] * ECO.unit).toLocaleString('en-US')} คน จนกว่าจะกรอกประชากรของเมืองเอง ธัญพืชของคนหนึ่งคนตลอดปีมีราคาฐาน ${ecoNumF(ECO.central.per / ECO.unit)} ${esc(ECO.central.name)} สินค้าหนึ่งหน่วยคือปริมาณที่คน ${ECO.unit.toLocaleString('en-US')} คนกินธัญพืชในหนึ่งปี แก้สองตัวเลขนี้แล้วผลการค้าไม่เปลี่ยน เปลี่ยนเฉพาะจำนวนคนกับจำนวนเงินที่แสดง</p>`;
   if (!rows.length) return h + `<p class="note">ยังไม่มีเมืองบนแผนที่ หรือยังคิดการค้าไม่เสร็จ</p>`;
