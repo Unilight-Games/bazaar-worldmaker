@@ -39,8 +39,8 @@
     async putDoc(id, k, body) { await open(); if (idb) await req(tx('docs', 'readwrite').objectStore('docs').put(body, id + '/' + k)); else mem.docs.set(id + '/' + k, body); },
     async remove(id) {
       await open();
-      if (idb) { const t = tx(['maps', 'docs'], 'readwrite'); t.objectStore('maps').delete(id); for (const k of DOCKEYS) { t.objectStore('docs').delete(id + '/' + k); t.objectStore('docs').delete(id + '@room/' + k); } t.objectStore('docs').delete(id + '/@bk'); await new Promise((res, rej) => { t.oncomplete = res; t.onerror = () => rej(t.error); }); }
-      else { mem.maps.delete(id); for (const k of DOCKEYS) { mem.docs.delete(id + '/' + k); mem.docs.delete(id + '@room/' + k); } mem.docs.delete(id + '/@bk'); }
+      if (idb) { const t = tx(['maps', 'docs'], 'readwrite'); t.objectStore('maps').delete(id); for (const k of DOCKEYS) { t.objectStore('docs').delete(id + '/' + k); t.objectStore('docs').delete(id + '@room/' + k); } t.objectStore('docs').delete(id + '/@bk'); t.objectStore('docs').delete(id + '/@base'); await new Promise((res, rej) => { t.oncomplete = res; t.onerror = () => rej(t.error); }); }
+      else { mem.maps.delete(id); for (const k of DOCKEYS) { mem.docs.delete(id + '/' + k); mem.docs.delete(id + '@room/' + k); } mem.docs.delete(id + '/@bk'); mem.docs.delete(id + '/@base'); }
     },
     // a second copy of a map's documents under another key: the map as it stood before a room opened
     async copyDocs(from, to) { for (const k of DOCKEYS) { const b = await store.getDoc(from, k); await store.putDoc(to, k, b == null ? null : b); } },
@@ -48,7 +48,16 @@
       const meta = await store.getMeta(id); if (!meta) return null;
       const docs = {}; for (const k of DOCKEYS) docs[k] = await store.getDoc(id, k);
       const { bans, owner, ...plain } = meta;       // who made it and who is shut out of it stay with the owner's library, not in a file that may be handed on
-      return { format: 'map-maker-engine', version: 1, meta: plain, docs };
+      // A map drawn on a ground this page does not carry keeps that ground beside it (see importMap), and a copy or a file of
+      // the map takes it along: without it the map cannot be opened anywhere the ground is missing.
+      const out = { format: 'map-maker-engine', version: 1, meta: plain, docs }, base = await store.getDoc(id, '@base');
+      if (store.okBase(base, meta.cols, meta.rows)) out.base = base;
+      return out;
+    },
+    // the ground of a map as a file may carry it: the drawn picture, the grid and the data, of the map's own size
+    okBase(b, cols, rows) {
+      return !!(b && typeof b === 'object' && b.G && typeof b.G === 'object' && b.D && typeof b.D === 'object' && typeof b.D.biome === 'string' && b.D.biome.length === cols * rows
+        && (b.img == null || (typeof b.img === 'string' && b.img.length < 6e6 && (b.img === '' || b.img.startsWith('data:image/')))));
     },
     async importMap(file, keepId) {
       if (!file || file.format !== 'map-maker-engine' || !file.meta || !file.docs) throw new Error('ไฟล์นี้ไม่ใช่ไฟล์แผนที่ของ Bazaar Worldmaker');
@@ -56,8 +65,13 @@
       if (!(cols >= 8 && cols <= 400 && rows >= 8 && rows <= 400)) throw new Error('ขนาดแผนที่ในไฟล์ไม่ถูกต้อง');
       const id = keepId && typeof m.id === 'string' ? m.id : MME.newId();
       const meta = { id, title: String(m.title || 'แผนที่ที่นำเข้า').slice(0, 80), base: m.base === 'gresland' ? 'gresland' : 'blank', cols, rows, kmPerHex: Number(m.kmPerHex) > 0 ? Number(m.kmPerHex) : 10, created: m.created || Date.now(), updated: Date.now(), backup: Date.now(), thumb: typeof m.thumb === 'string' && m.thumb.startsWith('data:image/') ? m.thumb : '' };
+      // store.keepBase: this page has no ground of its own for such a map (set by the shell). The file must bring one, or the
+      // map would sit in the library and never open.
+      const base = meta.base === 'gresland' && store.keepBase ? file.base : null;
+      if (meta.base === 'gresland' && store.keepBase && !store.okBase(base, cols, rows)) { const e = new Error('ไฟล์นี้เป็นแผนที่ที่วาดบนพื้นเกรสแลนด์ แต่ไม่มีพื้นแผนที่มาในไฟล์ หน้านี้จึงเปิดไม่ได้ ให้ส่งออกไฟล์ใหม่จากหน้าที่มีเกรสแลนด์ด้วยเวอร์ชัน 0.8.2 ขึ้นไป แล้วนำเข้าอีกครั้ง'); e.code = 'nobase'; throw e; }
       await store.putMeta(meta);
       for (const k of DOCKEYS) if (file.docs[k] && typeof file.docs[k] === 'object') await store.putDoc(id, k, file.docs[k]);
+      if (base) await store.putDoc(id, '@base', { img: base.img || '', G: base.G, D: base.D });
       return meta;
     }
   };

@@ -254,6 +254,13 @@
       const n = P.send({ t: 'doc', to, k, r: revs[k], body: db.known(k) }); given.set(key, { r: revs[k], t: now, n });
       if (given.size > 600) for (const [q, v] of given) if (now - v.t > 12000) given.delete(q);
     };
+    // The ground under the map (its drawn picture, grid and data) goes to a friend whose page does not carry it. It is long, so
+    // one copy per asker in twenty seconds; a page that has no ground to give says so, and the friend stops waiting.
+    const giveBase = to => {
+      const key = to + ' @base', g = given.get(key), now = Date.now(); if (g && now - g.t < 20000) return;
+      given.set(key, { r: -1, t: now, n: 2 });
+      Promise.resolve().then(() => (h.base ? h.base() : null)).catch(() => null).then(b => { if (!dead && members.has(to)) P.send({ t: 'doc', to, k: '@base', body: b || null }); });
+    };
     const P = pipe(tr, (m, from, by) => {
       if (dead) return;
       if (out(from, by, m && m.dv)) {
@@ -269,6 +276,7 @@
         for (const k of DOCKEYS) give(from, k);
       } else if (!members.has(from)) return;              // not let in yet: nothing else is heard
       else if (m.t === 'need' && DOCKEYS.includes(m.k)) give(from, m.k);
+      else if (m.t === 'need' && m.k === '@base') giveBase(from);
       else if (m.t === 'd' && DOCKEYS.includes(m.k) && m.d && typeof m.d === 'object') {
         // A friend numbers their changes. The owner takes them in that order, holds one that came early until the ones before it
         // arrive, and answers with the number it has reached; the friend sends again whatever has no answer. So no change is lost
@@ -333,13 +341,13 @@
     if (want.length !== 4) { tr.leave(); throw new Error('รหัสห้องต้องมีสิบตัว ตามที่เจ้าของแผนที่เห็นบนจอ'); }
     await waitId(tr);
     return new Promise((resolve, reject) => {
-      let dead = false, host = null, meta = null, db = null, lastBeat = Date.now(), lastDoc = Date.now(), started = false; const got = {}, docs = {}, odd = {}, members = new Set(), asked = {}, askT = {}, mine = [], seen = new Map(); let seq = 0;
+      let dead = false, host = null, meta = null, db = null, lastBeat = Date.now(), lastDoc = Date.now(), started = false; let wantBase = false, base = null; const got = {}, docs = {}, odd = {}, members = new Set(), asked = {}, askT = {}, mine = [], seen = new Map(); let seq = 0;
       const end = why => { if (dead) return; dead = true; clearInterval(iv); clearInterval(again); clearInterval(wait); clearInterval(resend); clearTimeout(gone); if (db) { db.detach(); db.destroy(); } P.close(); tr.leave(); for (const k of DOCKEYS) docs[k] = null; if (started) g.onEnd && g.onEnd(why); else reject(new Error(why)); };
       const P = pipe(tr, (m, from) => {
         if (dead) return;
         if (m.to && m.to !== tr.id) return;
         if (m.t === 'no' && !meta && m.to === tr.id && fingerprint(String(from)) === want) return end('เจ้าของแผนที่ไม่ให้เข้าห้องนี้');
-        if (m.t === 'welcome' && !meta) { if (fingerprint(String(from)) !== want) return; host = from; meta = m.meta || {}; lastBeat = Date.now(); lastDoc = lastBeat; if (Array.isArray(m.m)) for (const q of m.m) members.add(String(q)); return; }   // only the connection the code names is the owner
+        if (m.t === 'welcome' && !meta) { if (fingerprint(String(from)) !== want) return; host = from; meta = m.meta || {}; lastBeat = Date.now(); lastDoc = lastBeat; if (Array.isArray(m.m)) for (const q of m.m) members.add(String(q)); try { wantBase = !!(g.needBase && g.needBase(meta)); } catch (err) { wantBase = false; } if (wantBase) P.send({ t: 'need', k: '@base' }); return; }   // only the connection the code names is the owner
         if (m.t === 'd') {                                // a change by anyone in the room
           if (!started || !DOCKEYS.includes(m.k) || !m.d || typeof m.d !== 'object') return;
           if (from !== host && !members.has(from)) return;   // someone the owner has not let in, or has sent away
@@ -348,9 +356,15 @@
         }
         if (from !== host) return;                        // the rest only the owner may say
         if (m.t === 'ok') { if (m.to === tr.id && Number.isInteger(m.n)) while (mine.length && mine[0].n <= m.n) mine.shift(); return; }
+        if (m.t === 'doc' && m.k === '@base') {            // the ground this page lacks, from the owner
+          if (!wantBase || base || started || from !== host) return;
+          if (!m.body || typeof m.body !== 'object') return end('เจ้าของห้องส่งพื้นแผนที่ให้ไม่ได้ ให้เจ้าของเปิดหน้าเวอร์ชันล่าสุดแล้วเปิดห้องใหม่');
+          base = m.body; lastBeat = Date.now(); lastDoc = lastBeat; if (DOCKEYS.every(k => got[k])) start();
+          return;
+        }
         if (m.t === 'doc' && DOCKEYS.includes(m.k)) {
           lastBeat = Date.now(); lastDoc = lastBeat;
-          if (!started) { docs[m.k] = m.body == null ? null : m.body; got[m.k] = true; if (DOCKEYS.every(k => got[k])) start(); }
+          if (!started) { docs[m.k] = m.body == null ? null : m.body; got[m.k] = true; if (DOCKEYS.every(k => got[k]) && (!wantBase || base)) start(); }
           else {
             // After the map has opened, a copy is taken only when this page asked for it and it is no older than the owner's count at
             // the asking: on a slow line the copies asked for while joining keep arriving late, and one of them would undo work.
@@ -378,7 +392,7 @@
         started = true; clearInterval(wait);
         db = MME.MapDb(MME.memoryBack(docs));
         db.attach({ sendDelta(k, d) { const now = Date.now(), n = ++seq; mine.push({ k, d, n, t: now }); P.send({ t: 'd', k, d, n }); } });
-        resolve({ meta, db, room: { code: cleanCode(g.code).slice(0, 10), role: 'guest', transport: tr, cursor(x, y) { tr.presence({ x: Math.round(x), y: Math.round(y) }); }, status(md) { tr.presence({ md: String(md || '').slice(0, 12) }); }, close() { end('ออกจากห้องแล้ว'); } } });
+        resolve({ meta, db, base, room: { code: cleanCode(g.code).slice(0, 10), role: 'guest', transport: tr, cursor(x, y) { tr.presence({ x: Math.round(x), y: Math.round(y) }); }, status(md) { tr.presence({ md: String(md || '').slice(0, 12) }); }, close() { end('ออกจากห้องแล้ว'); } } });
       }
       let sawPeers = false, gone = 0, reKnock = 0;
       tr.onPeers(list => {
@@ -394,7 +408,7 @@
       setTimeout(hello, 400);
       const t0 = Date.now(), wait = setInterval(() => { if (started || dead) return clearInterval(wait); const quiet = Date.now() - Math.max(lastDoc, P.heard); if (quiet > 30000 || Date.now() - t0 > 240000) end(meta ? 'รับแผนที่จากเจ้าของห้องไม่ครบ ลองเข้าใหม่อีกครั้ง' : 'ไม่พบห้องนี้ หรือเจ้าของแผนที่ไม่ได้อยู่ในห้อง'); }, 2000);
       const early = setTimeout(() => { if (!meta) end('ไม่พบห้องนี้ หรือเจ้าของแผนที่ไม่ได้อยู่ในห้อง'); }, 17000);
-      let asks = 0; const again = setInterval(() => { if (dead || started) return clearInterval(again); if (!meta || Date.now() - Math.max(lastDoc, P.heard) < 3500 || ++asks > 40) return; /* the heartbeat does not count: only the map arriving does */ for (const k of DOCKEYS) if (!got[k]) P.send({ t: 'need', k }); }, 3000);
+      let asks = 0; const again = setInterval(() => { if (dead || started) return clearInterval(again); if (!meta || Date.now() - Math.max(lastDoc, P.heard) < 3500 || ++asks > 40) return; /* the heartbeat does not count: only the map arriving does */ for (const k of DOCKEYS) if (!got[k]) P.send({ t: 'need', k }); if (wantBase && !base) P.send({ t: 'need', k: '@base' }); }, 3000);
       // silence from the owner ends the room, and anything the owner sends counts as a sign of life: on a line that loses one message
       // in five, three heartbeats in a row go missing often enough that counting heartbeats alone would close rooms that are fine
       const resend = setInterval(() => {               // what the owner has not answered for goes again, oldest first, a few at a time

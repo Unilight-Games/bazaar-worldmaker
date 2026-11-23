@@ -2,7 +2,7 @@
 // the sheet for a new map, and the room around an open map.
 (function () {
   const MME = window.MME;
-  MME.VERSION = '0.8.1';
+  MME.VERSION = '0.8.2';
   MME.NAME = 'Bazaar Worldmaker';
   MME.GRESLAND_KM = 34;   // canon: the continent is about 12 million square kilometres, and the map draws it on 12,208 hexes
   const $ = id => document.getElementById(id);
@@ -87,7 +87,20 @@
     });
     return greslandBase.catch(err => { greslandBase = null; throw err; });
   }
-  const baseFor = meta => meta.base === 'gresland' ? loadGresland() : Promise.resolve(blankBase(meta));
+  // Where the ground of a map comes from. A page that carries Gresland reads its own copy. A page that does not (the one on
+  // GitHub, by the owner's ruling) takes the ground from beside the map, where importing a file put it, or from the owner of the
+  // room this page is a guest in.
+  const NOGRES = !!window.MME_NO_GRESLAND, lent = new Map();
+  store.keepBase = NOGRES;
+  const baseFor = async meta => {
+    if (meta.base !== 'gresland') return blankBase(meta);
+    if (!NOGRES) return loadGresland();
+    const b = lent.get(meta.id) || await store.getDoc(meta.id, '@base');
+    if (store.okBase(b, meta.cols, meta.rows)) return { img: b.img || '', G: b.G, D: b.D };
+    const e = new Error('nobase'); e.code = 'nobase'; throw e;
+  };
+  // a file that leaves this page carries the ground of a Gresland map, so it opens on a page without Gresland too
+  const withBase = async f => { if (f && f.meta && f.meta.base === 'gresland' && !f.base) { try { const b = await baseFor(f.meta); f.base = { img: b.img || '', G: b.G, D: b.D }; } catch (err) { /* the file goes without it */ } } return f; };
 
   // the Gresland map and the owner's edits on it enter the library once
   // where this page stands on the old Gresland page's own address, the owner's edits are still in that page's database: read whole
@@ -198,7 +211,7 @@
     const b = e.target.closest('[data-act]'); if (!b) return;
     const id = b.closest('.mapcard').dataset.id, act = b.dataset.act;
     if (act === 'open') openMap(id);
-    else if (act === 'export') { const f = await store.exportMap(id); if (f) { await saveFile(slug(f.meta.title) + '.mapmaker.json', JSON.stringify(f)); await markBackup([id]); renderLibrary(); } }
+    else if (act === 'export') { const f = await withBase(await store.exportMap(id)); if (f) { await saveFile(slug(f.meta.title) + '.mapmaker.json', JSON.stringify(f)); await markBackup([id]); renderLibrary(); } }
     else if (act === 'copy') {
       const f = await store.exportMap(id); if (!f) return;
       f.meta = { ...f.meta, title: (f.meta.title + ' (สำเนา)').slice(0, 80) }; delete f.meta.builtin;
@@ -211,7 +224,7 @@
   });
   async function markBackup(ids) { const t = Date.now(); for (const id of ids) { const m = await store.getMeta(id); if (m) { m.backup = t; await store.putMeta(m); if (cur && cur.meta.id === id) cur.meta.backup = t; } } }
   $('bakAll').onclick = async () => {
-    const list = await store.list(), maps = []; for (const m of list) { const f = await store.exportMap(m.id); if (f) maps.push(f); }
+    const list = await store.list(), maps = []; for (const m of list) { const f = await withBase(await store.exportMap(m.id)); if (f) maps.push(f); }
     if (!maps.length) return;
     await saveFile('map-maker-library-' + new Date().toISOString().slice(0, 10) + '.mapmaker.json', JSON.stringify({ format: 'map-maker-engine-library', version: 1, maps }));
     await markBackup(list.map(m => m.id)); renderLibrary();
@@ -221,10 +234,10 @@
     const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return;
     try {
       const data = JSON.parse(await f.text());
-      if (data && data.format === 'map-maker-engine-library' && Array.isArray(data.maps)) { let n = 0; for (const one of data.maps.slice(0, 200)) { try { if (one.meta) delete one.meta.builtin; await store.importMap(one, false); n++; } catch (err) { /* skip a broken one */ } } await renderLibrary(); backup.soon(); toast('นำเข้า ' + n + ' ผืนจากไฟล์สำรองคลัง'); return; }
+      if (data && data.format === 'map-maker-engine-library' && Array.isArray(data.maps)) { let n = 0, bare = 0; for (const one of data.maps.slice(0, 200)) { try { if (one.meta) delete one.meta.builtin; await store.importMap(one, false); n++; } catch (err) { if (err && err.code === 'nobase') bare++; /* a broken one is skipped */ } } await renderLibrary(); backup.soon(); toast('นำเข้า ' + n + ' ผืนจากไฟล์สำรองคลัง' + (bare ? ' ข้าม ' + bare + ' ผืนที่วาดบนพื้นเกรสแลนด์ เพราะไฟล์ไม่มีพื้นแผนที่มาด้วย ให้ส่งออกใหม่ด้วยเวอร์ชัน 0.8.2 ขึ้นไป' : ''), bare ? 9000 : undefined); return; }
       const meta = await store.importMap(data, false); await renderLibrary(); backup.soon(); toast('นำเข้า ' + meta.title + ' แล้ว');
     }
-    catch (err) { toast(err && /Bazaar|Map Maker|ขนาด/.test(err.message) ? err.message : 'อ่านไฟล์นี้ไม่ได้ ต้องเป็นไฟล์ .mapmaker.json ที่ส่งออกจากหน้านี้'); }
+    catch (err) { const own = err && (err.code === 'nobase' || /Bazaar|Map Maker|ขนาด/.test(err.message)); toast(own ? err.message : 'อ่านไฟล์นี้ไม่ได้ ต้องเป็นไฟล์ .mapmaker.json ที่ส่งออกจากหน้านี้', err && err.code === 'nobase' ? 12000 : undefined); }
   };
 
   // ---------- a new map ----------
@@ -299,7 +312,7 @@
   function showScreen(map) { $('menu').hidden = map; $('mapscreen').hidden = !map; window.scrollTo(0, 0); }
   async function mount(meta, db, guestRoom, practice) {
     const scr = $('mapscreen'); scr.innerHTML = '<div id="mapload">กำลังเปิดแผนที่</div>'; showScreen(true);
-    let base; try { base = await baseFor(meta); } catch (err) { showScreen(false); toast('โหลดพื้นแผนที่ไม่สำเร็จ ลองเปิดใหม่อีกครั้ง'); return false; }
+    let base; try { base = await baseFor(meta); } catch (err) { showScreen(false); toast(err && err.code === 'nobase' ? 'แผนที่ผืนนี้วาดบนพื้นเกรสแลนด์ ซึ่งหน้านี้ไม่มี ให้ส่งออกไฟล์ใหม่จากหน้าที่มีเกรสแลนด์ด้วยเวอร์ชัน 0.8.2 ขึ้นไป แล้วนำเข้าอีกครั้ง' : 'โหลดพื้นแผนที่ไม่สำเร็จ ลองเปิดใหม่อีกครั้ง', err && err.code === 'nobase' ? 9000 : undefined); return false; }
     scr.innerHTML = ''; scr.appendChild($('tpl-map').content.cloneNode(true)); scr.classList.toggle('blank', !!base.blank);
     const side = scr.querySelector('aside'), meth = scr.querySelector('section.method'); if (side && meth) side.appendChild(meth);   // the notes under the map live in the side panel
     applyFit(true);
@@ -395,7 +408,7 @@
     try { await c.rt.flush(); } catch (err) { /* nothing more to save */ }
     if (!c.guest && !c.practice) await touchMeta(true);
     if (c.room) c.room.close();
-    cur = null; c.rt.destroy(); c.db.destroy();
+    cur = null; c.rt.destroy(); c.db.destroy(); lent.delete(c.meta.id);
     $('mapscreen').innerHTML = ''; showScreen(false); document.title = MME.NAME; titleWas = null; await renderLibrary(); if (!c.guest && !c.practice) backup.soon();
     if (c.practice && MME.tutor) MME.tutor.closed();
     if (why) toast(why, 7000);
@@ -448,7 +461,7 @@
     $('setTitle').onchange = () => { m.title = ($('setTitle').value.trim() || m.title).slice(0, 80); $('setTitle').value = m.title; head(); touchMeta(true); };
     $('setKm').onchange = () => { m.kmPerHex = Math.max(0.1, Math.min(1000, +$('setKm').value || m.kmPerHex)); $('setKm').value = m.kmPerHex; head(); cur.rt.requestDraw(); cur.rt.recalc(); touchMeta(true); };
     if (practice) { $('setExport').textContent = 'เก็บแผนที่ฝึกนี้ลงคลัง'; }
-    $('setExport').onclick = practice ? keepPractice : async () => { await cur.rt.flush(); await touchMeta(true); const f = await store.exportMap(m.id); if (f) { await saveFile(slug(m.title) + '.mapmaker.json', JSON.stringify(f)); await markBackup([m.id]); } };
+    $('setExport').onclick = practice ? keepPractice : async () => { await cur.rt.flush(); await touchMeta(true); const f = await withBase(await store.exportMap(m.id)); if (f) { await saveFile(slug(m.title) + '.mapmaker.json', JSON.stringify(f)); await markBackup([m.id]); } };
     const rb = $('setRestore'); let arm = 0;
     const rbShow = () => { rb.hidden = guest || !m.roomBackup || !!(cur && cur.room); rb.textContent = 'คืนแผนที่กลับไปก่อนเปิดห้องครั้งล่าสุด'; };
     rbShow(); cur.rbShow = rbShow;
@@ -553,7 +566,7 @@
       const j = await joiner(); if (!j) throw new Error('none');
       await cur.rt.flush();
       await store.copyDocs(cur.meta.id, cur.meta.id + '@room'); cur.meta.roomBackup = Date.now(); await store.putMeta(cur.meta);   // the map as it stands, kept in case the room goes wrong
-      const c = cur, room = await MME.hostRoom({ join: j.join, code: MME.roomCode(), name, db: c.db, onPeople, bans: (c.meta.bans || []).map(b => b.k), onEvent: ev => { if (cur === c) roomSay(ev, ev.t === 'kick' || ev.t === 'ban'); }, meta: () => ({ title: c.meta.title, base: c.meta.base, cols: c.meta.cols, rows: c.meta.rows, kmPerHex: c.meta.kmPerHex, v: MME.VERSION }) });
+      const c = cur, room = await MME.hostRoom({ join: j.join, code: MME.roomCode(), name, db: c.db, onPeople, base: () => c.meta.base === 'gresland' ? baseFor(c.meta).then(b => ({ img: b.img || '', G: b.G, D: b.D })) : null, bans: (c.meta.bans || []).map(b => b.k), onEvent: ev => { if (cur === c) roomSay(ev, ev.t === 'kick' || ev.t === 'ban'); }, meta: () => ({ title: c.meta.title, base: c.meta.base, cols: c.meta.cols, rows: c.meta.rows, kmPerHex: c.meta.kmPerHex, v: MME.VERSION }) });
       if (cur !== c) { room.close(); return; }
       c.room = room; c.online = j.online; c.env.room = room; c.env.saveDelay = 260; c.roomShut = false; c.roomLog = []; roomUI([]); if (c.rbShow) c.rbShow();
     } catch (err) { console.error(err); toast(err && err.say ? err.message : fire ? 'เปิดห้องไม่ได้ ลองอีกครั้ง' : 'เปิดห้องไม่ได้ในมุมมองนี้ ลองเปิดหน้านี้จากลิงก์ของ Artifact โดยตรง', 7000); }
@@ -570,9 +583,10 @@
     $('joinBtn').disabled = true; $('joinBtn').textContent = 'กำลังเข้าห้อง';
     try {
       const j = await joiner(); if (!j) throw new Error('หน้านี้ต่อห้องไม่ได้ในมุมมองนี้');
-      const r = await MME.joinRoom({ join: j.join, code, name, device: myDevice(), onPeople, onEnd: why => closeMap(why) });
+      const r = await MME.joinRoom({ join: j.join, code, name, device: myDevice(), onPeople, onEnd: why => closeMap(why), needBase: m => NOGRES && m.base === 'gresland' });
       const meta = { id: 'room-' + code.slice(0, 6), title: String(r.meta.title || 'แผนที่ของเพื่อน').slice(0, 80), base: r.meta.base === 'gresland' ? 'gresland' : 'blank', cols: r.meta.cols | 0, rows: r.meta.rows | 0, kmPerHex: +r.meta.kmPerHex || 10 };
       if (!(meta.cols >= 8 && meta.cols <= 400 && meta.rows >= 8 && meta.rows <= 400)) { r.room.close(); throw new Error('แผนที่ของห้องนี้อ่านไม่ได้'); }
+      if (r.base) lent.set(meta.id, r.base);          // the ground the owner handed over, held only while this page is in the room
       const ok = await mount(meta, r.db, r.room); if (ok) { cur.online = j.online; roomUI([]); try { r.room.status($('mapbox').dataset.mode); } catch (err) { /* said at the next change of tool */ } } else r.room.close();
     } catch (err) { toast(err && err.message ? err.message : 'เข้าห้องไม่ได้', 6000); }
     $('joinBtn').disabled = false; $('joinBtn').textContent = 'เข้าห้อง';
