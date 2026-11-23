@@ -1,0 +1,41 @@
+{
+  "rules": {
+    "bw": {
+      "rooms": {
+        "$room": {
+          "p": {
+            ".read": "auth != null && auth.token.firebase.sign_in_provider === 'google.com' && $room.matches(/^mm-[a-z0-9]{6}$/)",
+            "$peer": {
+              ".write": "auth != null && auth.token.firebase.sign_in_provider === 'google.com' && $room.matches(/^mm-[a-z0-9]{6}$/) && $peer.beginsWith(auth.uid + '_')",
+              ".validate": "newData.hasChildren(['s', 't']) && newData.child('s').isString() && newData.child('s').val().length <= 4096 && newData.child('t').val() === now",
+              "$other": { ".validate": "$other === 's' || $other === 't'" }
+            }
+          },
+          "m": {
+            ".read": "auth != null && auth.token.firebase.sign_in_provider === 'google.com' && $room.matches(/^mm-[a-z0-9]{6}$/)",
+            "$peer": {
+              ".write": "auth != null && auth.token.firebase.sign_in_provider === 'google.com' && $room.matches(/^mm-[a-z0-9]{6}$/) && $peer.beginsWith(auth.uid + '_')",
+              ".indexOn": ["t"],
+              "$id": {
+                ".validate": "newData.hasChildren(['d', 't']) && newData.child('d').isString() && newData.child('d').val().length <= 80000 && newData.child('t').val() === now",
+                "$other": { ".validate": "$other === 'd' || $other === 't'" }
+              }
+            }
+          },
+          "in": {
+            "$peer": {
+              ".read": "auth != null && auth.token.firebase.sign_in_provider === 'google.com' && $peer.beginsWith(auth.uid + '_')",
+              ".write": "auth != null && auth.token.firebase.sign_in_provider === 'google.com' && $peer.beginsWith(auth.uid + '_') && !newData.exists()",
+              ".indexOn": ["t"],
+              "$id": {
+                ".write": "auth != null && auth.token.firebase.sign_in_provider === 'google.com' && $room.matches(/^mm-[a-z0-9]{6}$/) && ((!data.exists() && newData.child('u').val() === auth.uid) || (data.exists() && !newData.exists() && data.child('u').val() === auth.uid))",
+                ".validate": "newData.hasChildren(['u', 'f', 'd', 't']) && newData.child('f').isString() && newData.child('f').val().matches(/^[a-z0-9]{6,16}$/) && newData.child('d').isString() && newData.child('d').val().length <= 80000 && newData.child('t').val() === now",
+                "$other": { ".validate": "$other === 'u' || $other === 'f' || $other === 'd' || $other === 't'" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
