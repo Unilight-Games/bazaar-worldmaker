@@ -102,6 +102,7 @@ function marker(c, px, v, selected) {
     if (c === ctx) LBL.set(v.id, [x - lb.w / 2 - 3 * px, ly - lb.fs * 0.65, x + lb.w / 2 + 3 * px, ly + lb.fs * 0.65]);
   }
 }
+let drawOverGround = null;                          // what a later part draws straight onto the ground, under rivers of ink, roads, lines and names (the land the cities use)
 let drawUnderNames = null;                          // what a later part of the engine draws just under the names (the borders of states)
 function drawNames(c, px, withLabels, withCities) {
   if (withLabels) for (const v of visibleLabels()) {
@@ -129,6 +130,7 @@ function draw() {
   ctx.setTransform(dpr * view.s, 0, 0, dpr * view.s, dpr * view.x, dpr * view.y);
   if (img.complete && img.naturalWidth) ctx.drawImage(img, 0, 0, G.w, G.h);
   if (layerUsed) ctx.drawImage(layer, 0, 0, G.w, G.h);
+  if (drawOverGround) drawOverGround(ctx, G.w, G.h, true);
   const px = 1 / view.s, panning = act && act.k === 'pan';
   if (mode === 'climate') drawClimate(ctx, px);
   if ((mode === 'view' || mode === 'climate') && hot >= 0) { ctx.beginPath(); hexPath(ctx, hot, 1); ctx.lineWidth = 2.2 * px; ctx.strokeStyle = 'rgba(255,240,200,.95)'; ctx.stroke(); }

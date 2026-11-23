@@ -160,6 +160,8 @@ input[type=range] { accent-color: var(--brass); width: 100%; }
 #ecocard .etable.g5 .eth, #ecocard .etable.g5 .etr { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 0; }
 #ecocard .etable.g5 .eth > span:first-child, #ecocard .etable.g5 .etr > span:first-child { grid-column: 1 / -1; }
 #ecocard .etable.g5 .etr { padding: 3px 0; border-bottom: 1px solid var(--line); }
+#ecocard .etable.g5.g7 .eth, #ecocard .etable.g5.g7 .etr { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+#ecocard .etable.g5.g7 .eth span:not(:first-child) { font-size: .92em; }
 #ecocard .tr.w, #ecocard .note { color: var(--muted); font-size: .8rem; }
 .mapbox.ecopaint canvas { cursor: crosshair; }
 

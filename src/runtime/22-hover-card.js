@@ -50,6 +50,7 @@ function showTip(id, mx, my, e) {
   else if (td) h += bundleTipHTML(td) + hr;
   else if (rt) { const g = geoOf(rt); h += `<b>${esc(routeName(rt))}</b><div class="m">${esc(endName(rt.a))} ถึง ${esc(endName(rt.b))}${g && !g.fail ? ` · ยาว ${g.len} ช่อง` + (g.bridges.length ? ` · สะพาน ${g.bridges.length}` : '') + (g.tunnels ? ` · อุโมงค์ ${g.tunnels}` : '') : ''}</div>${hr}`; }
   h += `<b>${esc(b.name)}</b>`;
+  h += landTipHTML(id);
   if (editable && ED.cells[id] !== '.') h += `<div class="mine">ช่องนี้ระบายใหม่ เดิมเป็น${esc(biomeInfo(BI[id]).name)}</div>`;
   if (!isW(code) && shownAt(id)) {
     if (RV[id] === '1') h += `<div class="s">มีแม่น้ำไหลผ่าน</div>`;

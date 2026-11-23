@@ -1,0 +1,60 @@
+// v0.12.0: the cities' land as ground of its own under the lines, forest gardens and terraces, and slaves carried along the network.
+const { chromium } = require('playwright');
+(async () => {
+  const browser = await chromium.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox'] });
+  const ctx = await browser.newContext({ viewport: { width: 1536, height: 760 } });
+  const errs = []; let bad = 0;
+  const ok = (name, v, extra) => { if (!v) bad++; console.log((v ? 'ok   ' : 'FAIL ') + name + (extra != null ? ' | ' + extra : '')); };
+  const p = await ctx.newPage(); p.on('pageerror', e => errs.push('PAGEERR ' + e.message)); p.on('console', m => { if (m.type() === 'error' && !/fonts\.g|Failed to load resource/.test(m.text())) errs.push('CONSOLE ' + m.text()); });
+  await p.goto('http://localhost:8765/index.html'); await p.waitForSelector('.mapcard[data-id="gresland"]', { timeout: 60000 }); await p.click('.mapcard[data-id="gresland"] [data-act="open"]');
+  await p.waitForFunction(() => MME.shell.cur && MME.shell.cur.rt && MME.shell.cur.rt.state().editable && MME.shell.cur.rt.state().econ, null, { timeout: 90000 });
+  const settle = async () => { for (let n = 0, last = -1; n < 40; n++) { await p.waitForTimeout(2200); const v = await p.evaluate(() => { const e = MME.shell.cur.rt.test.econ(); return e ? e.ver : -1; }); if (v === last && v >= 0) return; last = v; } };
+  await settle();
+  // ---- slaves along the network ----
+  const S = await p.evaluate(() => { const x = MME.shell.cur.rt.test, L = x.labor(), W = x.slaveLoad(), cs = x.cities(), ix = new Map(cs.map((c, k) => [c.id, k])); return { tot: L.tot, flows: L.flows, links: W.links, haul: W.haul, n: cs.length, a: L.flows.map(f => ix.get(f.a)), b: L.flows.map(f => ix.get(f.b)) }; });
+  ok('every journey rides lines of the trade network, by boat, by caravan or by both', S.flows.length > 20 && S.flows.every(f => f.legs >= 1 && ['water', 'caravan', 'mixed'].includes(f.by)) && new Set(S.flows.map(f => f.by)).size >= 2, `${S.flows.length} journeys, longest ${Math.max(...S.flows.map(f => f.legs))} lines`);
+  ok('what the lines carry adds up to the people on the journeys that cross them', S.links.reduce((a, l) => a + l.fwd + l.back, 0) === S.flows.reduce((a, f) => a + f.n * f.legs, 0) && S.links.length > 10);
+  ok('carrying costs a share of the price that grows with the journey, and never more than the price', S.flows.every(f => f.h > 0 && f.h <= 1) && (() => { const s = [...S.flows].sort((a, b) => a.t - b.t); return s[0].h < s[s.length - 1].h; })() && S.haul > 0, `dearest ${(100 * Math.max(...S.flows.map(f => f.h))).toFixed(0)}% of the price`);
+  const set = async fn => { await p.evaluate(fn); await settle(); return p.evaluate(() => { const L = MME.shell.cur.rt.test.labor(); return L ? { moved: L.tot.moved, held: L.tot.held, n: L.flows.length, hmax: Math.max(0, ...L.flows.map(f => f.h)) } : null; }); };
+  const dear = await set(() => { const x = MME.shell.cur.rt.test, e = x.eco(); e.tune = Object.assign({}, e.tune, { slaveHaul: 3 }); x.ecoSet(e); });
+  const free = await set(() => { const x = MME.shell.cur.rt.test, e = x.eco(); e.tune = Object.assign({}, e.tune, { slaveHaul: 0 }); x.ecoSet(e); });
+  ok('dear carriage moves fewer people and free carriage more', dear.moved < S.tot.moved && free.moved > S.tot.moved && dear.hmax <= 1, `${dear.moved} < ${S.tot.moved} < ${free.moved}`);
+  await set(() => { const x = MME.shell.cur.rt.test, e = x.eco(); const t = Object.assign({}, e.tune); delete t.slaveHaul; e.tune = t; x.ecoSet(e); });
+  await p.click('#modes button[data-mode="trade"]'); await p.waitForSelector('#tradebody [data-a="slaveshow"]');
+  const before = await p.evaluate(() => { const c = document.getElementById('map'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] > 190 && d[i + 1] < 80 && d[i + 2] < 90) n++; return n; });
+  await p.click('#tradebody [data-a="slaveshow"]'); await p.waitForTimeout(700);
+  const after = await p.evaluate(() => { const c = document.getElementById('map'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] > 190 && d[i + 1] < 80 && d[i + 2] < 90) n++; return n; });
+  ok('the trade view draws the journeys along the lines when asked', after > before + 400 && /หัวลูกศรชี้ทางที่ไป/.test(await p.textContent('#tradebody')), `${before} -> ${after} red pixels`);
+  const cardOf = async sel => { await p.evaluate(sel); await p.waitForTimeout(500); return p.textContent('#tradebody'); };
+  const big = S.links.slice().sort((a, b) => (b.fwd + b.back) - (a.fwd + a.back))[0];
+  const lineCard = await p.evaluate(li => { const rt = MME.shell.cur.rt; return rt.test.linkCard ? rt.test.linkCard(li) : null; }, big.li);
+  ok('a line\'s card says how many people are carried along it', lineCard && /ทาสถูกขนผ่านเส้นนี้/.test(lineCard) && lineCard.includes((big.fwd + big.back).toLocaleString('en-US')), lineCard ? lineCard.slice(0, 0) : 'no card');
+  const cityCard = await p.evaluate(k => MME.shell.cur.rt.test.cityCard(k), S.b[0]);
+  ok('a city\'s card says the slaves it holds', /แรงงานทาส/.test(cityCard) && /ทาสในเมือง/.test(cityCard));
+  // ---- the land ----
+  await p.click('#modes button[data-mode="view"]');
+  await p.selectOption('#tierSel', 'mid'); await settle(); await p.waitForTimeout(500);
+  const L = await p.evaluate(() => { const x = MME.shell.cur.rt.test, L = x.land(), U = x.landUse(), sh = x.landSheet(); const pick = t => U.use.indexOf(t); const px = {}; for (const t of [1, 2, 3, 4, 6, 7]) { const i = pick(t); px[t] = i >= 0 ? x.landPx(i) : null; } const none = U.use.findIndex((t, i) => t === 0 && U.use.slice(Math.max(0, i - 200), i + 200).every(v => v === 0 || v === 5)); return { tot: L.tot, sh, px, nonePx: none >= 0 ? x.landPx(none) : null, kinds: L.rows.reduce((a, r) => (a[r.kind || 'plain'] = (a[r.kind || 'plain'] || 0) + 1, a), {}), rows: L.rows, own: U.own.filter(v => v >= 0).length, used: U.use.filter(t => t >= 1 && t !== 5).length }; });
+  ok('the cities\' land is painted as ground of its own, on a sheet the size of the map\'s own', L.sh.on && L.sh.any && L.sh.w > 1000 && [1, 2, 3, 4].every(t => L.px[t] && L.px[t][3] === 255), `painted in ${L.sh.ms} ms`);
+  ok('and leaves the rest of the map as it is', L.nonePx && L.nonePx[3] === 0);
+  ok('a city of the forest gardens under the trees instead of clearing them', L.tot.garden > 50 && L.kinds.forest > 0 && L.rows.filter(r => r.kind === 'forest').every(r => r.cleared === 0) && L.rows.some(r => r.kind === 'forest' && r.garden > 0) && L.px[7] && L.px[7][3] === 255, `${L.tot.garden} hexes of forest garden, ${L.kinds.forest} cities`);
+  ok('a city of the mountains terraces the slopes', L.tot.terrace > 5 && L.rows.filter(r => r.terrace > 0).every(r => r.kind === 'mount' || r.kind === 'both') && L.px[6] && L.px[6][3] === 255, `${L.tot.terrace} terraced hexes`);
+  ok('a plain city still ploughs open land and clears forest', L.tot.farm > 500 && L.tot.cleared > 50 && L.rows.filter(r => !r.kind).some(r => r.cleared > 0));
+  ok('every hex of it belongs to a city', L.own === L.used + L.tot.was && L.used === L.tot.farm + L.tot.cleared + L.tot.logged + L.tot.mine + L.tot.terrace + L.tot.garden);
+  // under the lines and names: the sheet goes down before roads, trade lines and names, so a hex of field on a trade line still shows the line
+  const order = await p.evaluate(() => { const src = MME.shell.cur.rt.test.drawOrder ? MME.shell.cur.rt.test.drawOrder() : null; return src; });
+  ok('the sheet lies under the roads, the trade lines, the borders and the names', order && order.ground < order.routes && order.ground < order.trade && order.ground < order.names, JSON.stringify(order));
+  const tipOf = async t => { const xy = await p.evaluate(t => { const x = MME.shell.cur.rt.test, U = x.landUse(); const cs = new Set(x.cities().map(c => c.h)); let i = -1; for (let k = 0; k < U.use.length; k++) if (U.use[k] === t && !cs.has(k)) { const q = x.hexXY(k); const b = document.getElementById('map').getBoundingClientRect(); if (q[0] > b.left + 60 && q[0] < b.right - 420 && q[1] > b.top + 90 && q[1] < b.bottom - 60) { i = k; break; } } return i >= 0 ? x.hexXY(i) : null; }, t); if (!xy) return ''; await p.mouse.move(xy[0], xy[1]); await p.waitForTimeout(350); return p.evaluate(() => MME.shell.cur.rt.test.tip().text); };
+  const t1 = await tipOf(1), t7 = await tipOf(7);
+  ok('the hover card names the land and the city it feeds', /ไร่นาของเมือง ของ/.test(t1) && /สวนป่า ของ/.test(t7), (t1 + ' / ' + t7).replace(/\s+/g, ' ').slice(0, 90));
+  await p.click('#modes button[data-mode="terrain"]'); await p.waitForTimeout(400);
+  const inTerrain = await p.evaluate(() => MME.shell.cur.rt.test.landSheet().on);
+  await p.click('#modes button[data-mode="view"]'); await p.waitForTimeout(300);
+  await p.click('#landBtn'); const off = await p.evaluate(() => MME.shell.cur.rt.test.landSheet().on); await p.click('#landBtn'); const on = await p.evaluate(() => MME.shell.cur.rt.test.landSheet().on);
+  ok('while the ground is being painted the ground shows as it is, and the switch still hides the sheet', inTerrain === false && off === false && on === true);
+  await p.click('#modes button[data-mode="econ"]'); await p.click('#ecoTab button[data-t="gdp"]'); await p.waitForSelector('#ecobody details[data-fold="gld"]');
+  const txt = await p.textContent('#ecobody');
+  ok('the GDP tab counts forest gardens and terraces, and marks the cities of forest and mountain', /สวนป่าของเมืองป่า/.test(txt) && /นาขั้นบันไดของเมืองภูเขา/.test(txt) && /เมืองป่า/.test(txt) && /เมืองภูเขา/.test(txt) && await p.evaluate(() => document.querySelectorAll('#ecobody details[data-fold="gld"] .eth span').length === 7));
+  console.log('errors', errs.length + bad, errs.slice(0, 4).join(' | '));
+  await browser.close();
+})().catch(e => { console.error('TEST FAILED', e.message.slice(0, 900)); process.exit(1); });

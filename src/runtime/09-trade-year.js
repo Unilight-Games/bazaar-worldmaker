@@ -212,7 +212,7 @@ function econCompute() {
   const top = Math.max(0, ...cities.map(c => c.through));
   for (const c of cities) { c.level = c.rank; c.sug = !(top > 0) ? 0 : c.through >= 0.5 * top ? 3 : c.through >= 0.2 * top ? 2 : c.through >= 0.05 * top ? 1 : 0; }
   const bundles = eBundles(links, cities);
-  ECON = { ver: (ECON ? ECON.ver : 0) + 1, plan, cities, prod, need, got, left, flows, links, bundles, NT, P0, P1, MK, rounds, ms: performance.now() - t0 };
+  ECON = { ver: (ECON ? ECON.ver : 0) + 1, plan, cities, prod, need, got, left, flows, links, bundles, NT, NWAY, P0, P1, MK, rounds, ms: performance.now() - t0 };
   return ECON;
 }
 const GBY = new Map(EGOODS.map(g => [g.id, g]));

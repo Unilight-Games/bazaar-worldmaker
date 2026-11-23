@@ -9,7 +9,7 @@ $('expPng').onclick = async () => {
   const named = showNames;
   flash(named ? 'กำลังเตรียมภาพพร้อมชื่อสถานที่' : 'กำลังเตรียมภาพแบบไม่มีชื่อสถานที่');
   const W = layer.width, H = layer.height, c = document.createElement('canvas'); c.width = W; c.height = H;
-  const x = c.getContext('2d'); x.drawImage(img, 0, 0, W, H); if (layerUsed) x.drawImage(layer, 0, 0, W, H);
+  const x = c.getContext('2d'); x.drawImage(img, 0, 0, W, H); if (layerUsed) x.drawImage(layer, 0, 0, W, H); if (drawOverGround) drawOverGround(x, W, H, false);
   x.setTransform(LS, 0, 0, LS, 0, 0); drawLoosePoints(x, 1 / LS); drawRoutes(x, 1 / LS, null); drawTrade(x, 1 / LS, false);
   if (named) { const keep = sel; sel = null; drawNames(x, 1 / LS, true, true); sel = keep; }
   const blob = await new Promise(res => c.toBlob(res, 'image/png'));
