@@ -8,7 +8,7 @@ src/runtime/, one per section, joined in the order of src/runtime/ORDER.txt. (Un
 the old Gresland page's script with string replacements; that builder is kept as tools/build-from-legacy.py for the record,
 and its last output is what src/runtime/ was cut from.)
 """
-import base64, json, os, shutil
+import re, base64, json, os, shutil
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 SRC, DIST, OFF = os.path.join(ROOT, 'src'), os.path.join(ROOT, 'dist'), os.path.join(ROOT, 'dist-offline')
@@ -99,7 +99,14 @@ open(os.path.join(WEB, 'engine', 'defaults.js'), 'w', encoding='utf-8').write(PL
 shutil.copytree(os.path.join(DIST, 'assets'), os.path.join(WEB, 'assets'))
 webhead = '<script>window.MME_BUILD = "web"; window.MME_NO_GRESLAND = true;</script>\n<script src="firebase-config.js"></script>\n'
 assert index.count('<script src="engine/gen.js"></script>') == 1
-open(os.path.join(WEB, 'index.html'), 'w', encoding='utf-8').write(index.replace('<script src="engine/gen.js"></script>', webhead + '<script src="engine/gen.js"></script>'))
+# a browser keeps a script for a while after the page changes; the version in the address makes a new release fetch all of them at once
+VER = re.search(r"MME\.VERSION = '([0-9.]+)'", rd(os.path.join(SRC, 'shell.js'))).group(1)
+webindex = index.replace('<script src="engine/gen.js"></script>', webhead + '<script src="engine/gen.js"></script>')
+for f in SCRIPTS:
+    assert webindex.count('<script src="engine/%s"></script>' % f) == 1, f
+    webindex = webindex.replace('<script src="engine/%s"></script>' % f, '<script src="engine/%s?v=%s"></script>' % (f, VER))
+webindex = webindex.replace('<script src="firebase-config.js"></script>', '<script src="firebase-config.js?v=%s"></script>' % VER)
+open(os.path.join(WEB, 'index.html'), 'w', encoding='utf-8').write(webindex)
 for f in ['firebase-config.js', 'database.rules.json']:
     shutil.copy(os.path.join(SRC, 'web', f), os.path.join(WEB, f))
 open(os.path.join(WEB, '.nojekyll'), 'w').write('')
