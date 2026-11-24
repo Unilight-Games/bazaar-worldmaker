@@ -7,7 +7,7 @@ let fails = 0; const ok = (c, m) => { console.log((c ? 'ok   ' : 'FAIL ') + m); 
   const p = await (await browser.newContext({ viewport: { width: 1366, height: 768 } })).newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message));
   await p.goto('http://localhost:8765/index.html'); await p.waitForSelector('.mapcard[data-id="gresland"]', { timeout: 60000 }); await p.click('.mapcard[data-id="gresland"] [data-act="open"]');
   await p.waitForFunction(() => MME.shell.cur && MME.shell.cur.rt && MME.shell.cur.rt.state().editable && MME.shell.cur.rt.state().econ, null, { timeout: 90000 }); await p.waitForTimeout(3000);
-  ok(/0\.15\.\d/.test(await p.evaluate(() => MME.VERSION)), 'version 0.15.1');
+  ok(/0\.1\d\.\d/.test(await p.evaluate(() => MME.VERSION)), 'version 0.15.1');
   const asideOn = () => p.evaluate(() => { const a = document.querySelector('#mapscreen aside'); return !!a && getComputedStyle(a).display !== 'none'; });
   const vis = sel => p.evaluate(s => { const e = document.querySelector(s); return !!e && !!e.offsetParent && getComputedStyle(e).display !== 'none'; }, sel);
   await p.click('#modes button[data-mode="econ"]'); await p.waitForTimeout(300);

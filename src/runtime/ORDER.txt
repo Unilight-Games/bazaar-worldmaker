@@ -35,4 +35,5 @@
 29f-labor.js
 29g-society.js
 29h-harvest.js
+29i-features.js
 30-api.js

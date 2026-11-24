@@ -54,7 +54,7 @@ function landPlan(cities) {
       for (const u of ring) {
         if (use[u]) continue; const b = eff(u);
         if (LAND_FARM.has(b)) { if (nF >= 0.5) { use[u] = 5; own[u] = k; nF--; tot.was++; } }                  // fields the map already shows
-        else if (LAND_OPEN.has(b)) { if (nF >= 0.5) { use[u] = 1; own[u] = k; nF--; r.farm++; } }
+        else if (LAND_OPEN.has(b) || featFarmAt(u)) { if (nF >= 0.5) { use[u] = 1; own[u] = k; nF--; r.farm++; } }   // an oasis or a volcanic soil takes fields wherever it lies (v0.16.0)
         else if (FOREST.has(b)) trees.push(u);
         else if (b === 'M') { if (nM > 0 && d > 0) { use[u] = 4; own[u] = k; nM--; r.mine++; } else if (hillP > 0 && landDice(u) < hillP) hills.push(u); }
       }

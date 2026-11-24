@@ -9,7 +9,7 @@ let fails = 0; const ok = (c, m) => { console.log((c ? 'ok   ' : 'FAIL ') + m); 
   await p.waitForFunction(() => MME.shell.cur && MME.shell.cur.rt && MME.shell.cur.rt.state().editable && MME.shell.cur.rt.state().econ, null, { timeout: 90000 });
   const settle = async () => { for (let n = 0, last = -1; n < 40; n++) { await p.waitForTimeout(1500); const v = await p.evaluate(() => { const e = MME.shell.cur.rt.test.econ(); return e ? e.ver : -1; }); if (v === last && v >= 0) return; last = v; } };
   await settle();
-  ok(/0\.1[45]\.\d/.test(await p.evaluate(() => MME.VERSION)), 'version 0.14.2');
+  ok(/0\.1\d\.\d/.test(await p.evaluate(() => MME.VERSION)), 'version 0.14.2');
   await p.selectOption('#tierSel', 'low'); await settle();
   await p.evaluate(() => { const x = MME.shell.cur.rt.test, e = x.eco(); e.pop = Object.assign({}, e.pop, { luxonia: 1024400 }); x.ecoSet(e); }); await settle();
   const a = await p.evaluate(() => { const x = MME.shell.cur.rt.test, b = x.cityBook('luxonia'), r = x.gdp().find(r => r.id === 'luxonia'); return { b, metB: r.metB, well: r.well, people: r.people }; });

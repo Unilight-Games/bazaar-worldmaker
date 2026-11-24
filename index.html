@@ -648,6 +648,12 @@ body:has(#mapscreen:not([hidden])) .uisize.fixed { display: none; }
 #mapscreen .ctl .setpick button { padding: 3px 8px; border: 0; border-radius: 4px; background: transparent; color: var(--text); font: inherit; cursor: pointer; }
 #mapscreen .ctl .setpick button:hover { background: rgba(217,180,90,.15); }
 #mapscreen .ctl .setpick button[aria-pressed="true"] { background: rgba(217,180,90,.28); color: var(--brass, #d9b45a); }
+/* v0.16.0: the features of the ground, a row of the painting tool */
+.fprow { align-items: flex-start; }
+.fpal { display: flex; flex-wrap: wrap; gap: 4px; }
+#featbody .fk summary { cursor: pointer; }
+#featbody .fk .erow input[type=number] { width: 5.5em; }
+#featbody .fk .erow input[type=text] { width: 11em; }
 </style>
 </head>
 <body>
@@ -788,6 +794,7 @@ body:has(#mapscreen:not([hidden])) .uisize.fixed { display: none; }
         </div>
         <div data-for="terrain" hidden>
           <div class="pal" id="pal"></div>
+          <div class="optrow fprow"><span class="lbl">ลักษณะพิเศษ</span><div class="pal fpal" id="featPal"></div></div>
           <div class="optrow"><span class="lbl">ขนาดแปรง</span>
             <div class="seg" id="bsize"><button type="button" data-n="1">1 ช่อง</button><button type="button" data-n="2">7 ช่อง</button><button type="button" data-n="3">19 ช่อง</button><button type="button" data-n="4">37 ช่อง</button></div>
             <span class="lbl" id="bname"></span></div>
@@ -923,6 +930,7 @@ body:has(#mapscreen:not([hidden])) .uisize.fixed { display: none; }
     </div>
     <div class="card" id="fixcard" hidden><h2>เมืองที่ควรย้าย</h2><div id="fixbody"></div></div>
     <div class="card" id="tradecard" hidden><h2>การค้า</h2><div id="tradebody"></div></div>
+    <div class="card" id="featcard" hidden><h2>ลักษณะพิเศษของพื้นที่</h2><div id="featbody"></div></div>
     <div class="card" id="ecocard" hidden><h2 id="ecoHead">เศรษฐกิจ</h2><div id="ecobody"></div></div>
     <div class="card" id="climcard" hidden><h2>ภูมิอากาศ</h2><div id="climbody"></div></div>
     <div class="card cf" id="infocard" hidden><h2>ข้อมูลที่เลือก</h2><div id="infobody"></div></div>
@@ -938,16 +946,16 @@ body:has(#mapscreen:not([hidden])) .uisize.fixed { display: none; }
 <section class="method"><div class="card" id="method"></div></section>
 </template>
 <script>window.MME_BUILD = "web"; window.MME_NO_GRESLAND = true;</script>
-<script src="firebase-config.js?v=0.15.2"></script>
-<script src="engine/gen.js?v=0.15.2"></script>
-<script src="engine/store.js?v=0.15.2"></script>
-<script src="engine/backup.js?v=0.15.2"></script>
-<script src="engine/net.js?v=0.15.2"></script>
-<script src="engine/fire.js?v=0.15.2"></script>
-<script src="engine/defaults.js?v=0.15.2"></script>
-<script src="engine/runtime.js?v=0.15.2"></script>
-<script src="engine/shell.js?v=0.15.2"></script>
-<script src="engine/tutor-lines.js?v=0.15.2"></script>
-<script src="engine/tutor.js?v=0.15.2"></script>
+<script src="firebase-config.js?v=0.16.0"></script>
+<script src="engine/gen.js?v=0.16.0"></script>
+<script src="engine/store.js?v=0.16.0"></script>
+<script src="engine/backup.js?v=0.16.0"></script>
+<script src="engine/net.js?v=0.16.0"></script>
+<script src="engine/fire.js?v=0.16.0"></script>
+<script src="engine/defaults.js?v=0.16.0"></script>
+<script src="engine/runtime.js?v=0.16.0"></script>
+<script src="engine/shell.js?v=0.16.0"></script>
+<script src="engine/tutor-lines.js?v=0.16.0"></script>
+<script src="engine/tutor.js?v=0.16.0"></script>
 </body>
 </html>
