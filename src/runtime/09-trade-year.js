@@ -59,7 +59,7 @@ function econCompute() {
       ships: c.port === 2 ? 1 : c.port === 1 ? 0.4 : 0,
       books: (z === 'T' ? 3 : 1) * [1, 0.5, 0.2, 0.1, 0][c.ki],
     };
-    for (const m of EMADEC) { const v = ind * EWORK[m].base * spec[m] * (cn[m] || 1) * orgProd(c, m) * socMake(c, m); if (v > 0.01) p[m] = v; }
+    for (const m of EMADEC) { const v = ind * EWORK[m].base * (spec[m] != null ? spec[m] : 1) * (cn[m] || 1) * orgProd(c, m) * socMake(c, m); if (v > 0.01) p[m] = v; }
     for (const m in p) for (const [cat, q] of Object.entries(EWORK[m].in)) need[k][cat] += p[m] * q;
     return p;
   });

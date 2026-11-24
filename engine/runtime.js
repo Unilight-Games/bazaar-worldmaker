@@ -1574,7 +1574,7 @@ function econCompute() {
       ships: c.port === 2 ? 1 : c.port === 1 ? 0.4 : 0,
       books: (z === 'T' ? 3 : 1) * [1, 0.5, 0.2, 0.1, 0][c.ki],
     };
-    for (const m of EMADEC) { const v = ind * EWORK[m].base * spec[m] * (cn[m] || 1) * orgProd(c, m) * socMake(c, m); if (v > 0.01) p[m] = v; }
+    for (const m of EMADEC) { const v = ind * EWORK[m].base * (spec[m] != null ? spec[m] : 1) * (cn[m] || 1) * orgProd(c, m) * socMake(c, m); if (v > 0.01) p[m] = v; }
     for (const m in p) for (const [cat, q] of Object.entries(EWORK[m].in)) need[k][cat] += p[m] * q;
     return p;
   });
@@ -4478,13 +4478,17 @@ const ecoRival = (a, b) => !!a && !!b && a !== b && a.sys !== 'anar' && b.sys !=
 const ecoRivalCell = (s, z) => { if (!s || s.sys === 'anar' || s.rel[z] !== 'rival') return false; const o = ECOX.byKey.get(z); return !o || o.sys !== 'anar'; };   // a state that names no coin of its own uses the central one
 
 function ecoApply() {                              // the tables the year's trade reads, from the base and the owner's changes
-  for (const c of [...ECATS]) if (ECAT[c].own) { delete ECAT[c]; delete ENEED[c]; ECATS.splice(ECATS.indexOf(c), 1); ERAW.splice(ERAW.indexOf(c), 1); }   // the owner's own classes, afresh
-  for (const u of ECO.ucats) { ECAT[u.id] = { name: u.name, col: u.col, v: u.v, bulk: u.bulk, own: true }; ENEED[u.id] = [u.need, u.need, u.need, u.need, u.need]; ECATS.push(u.id); ERAW.push(u.id); }
+  for (const c of [...ECATS]) if (ECAT[c].own) { delete ECAT[c]; delete ENEED[c]; ECATS.splice(ECATS.indexOf(c), 1); const r = ERAW.indexOf(c); if (r >= 0) ERAW.splice(r, 1); const m = EMADEC.indexOf(c); if (m >= 0) EMADEC.splice(m, 1); delete EWORK[c]; delete EMADE[c]; }   // the owner's own classes, afresh
+  for (const u of ECO.ucats) { ECAT[u.id] = { name: u.name, col: u.col, v: u.v, bulk: u.bulk, own: true }; ENEED[u.id] = [u.need, u.need, u.need, u.need, u.need]; ECATS.push(u.id); if (u.made) { ECAT[u.id].made = true; EMADEC.push(u.id); EMADE[u.id] = { def: u.name }; } else ERAW.push(u.id); }
+  for (const u of ECO.ucats) if (u.made) {          // a workshop of the owner's own (v0.16.2): its recipe, fed by raw classes only, as the base's are
+    const ins = {}; for (const [c, q] of Object.entries(u.in || {})) if (ECAT[c] && !ECAT[c].made && !ECAT[c].people && q > 0) ins[c] = q;
+    EWORK[u.id] = { base: u.base > 0 ? u.base : 0.1, in: Object.keys(ins).length ? ins : { timber: 0.6 } };
+  }
   if (tcat && !ECAT[tcat]) tcat = '';
   for (const c of ECATS) { if (ECAT[c].own) continue; const o = ECO.cats[c] || {}, z = ECAT0[c]; ECAT[c].name = o.name || z.name; ECAT[c].v = o.v > 0 ? o.v : z.v; ECAT[c].bulk = o.bulk > 0 ? o.bulk : z.bulk; }
   const rawCat = (c, d) => ECAT[c] && !ECAT[c].made ? c : d;
   for (const m of EMADEC) {                          // the workshops' recipes: the base's, or the owner's, fed by any raw class including the owner's own
-    const o = ECO.work[m], z = EWORK0[m], ins = {};
+    if (!EWORK0[m]) continue; const o = ECO.work[m], z = EWORK0[m], ins = {};
     if (o && o.in) for (const [c, q] of Object.entries(o.in)) if (ECAT[c] && !ECAT[c].made && q > 0) ins[c] = q;
     EWORK[m] = { base: o && o.base > 0 ? o.base : z.base, in: o && o.in && Object.keys(ins).length ? ins : z.in };
   }
@@ -4645,10 +4649,16 @@ function ecoLoad(b) {
   ECO.goods = {}; for (const [id, o] of Object.entries(b.goods || {}).slice(0, 400)) { if (!o || typeof o !== 'object') continue; const g = {}; if (o.name) g.name = ecoStr(o.name, 60); if (o.cat) g.cat = ecoStr(o.cat, 20); if (o.pct != null) g.pct = ecoNum(o.pct, 0, 5, 1); if (o.off) g.off = 1; if (o.far != null) g.far = o.far ? 1 : 0; const tm = ecoCleanTerms(o.terms); if (tm) g.terms = tm; ECO.goods[ecoStr(id, 40)] = g; }
   ECO.custom = []; for (const o of (Array.isArray(b.custom) ? b.custom : []).slice(0, 120)) { if (!o || typeof o.id !== 'string') continue; ECO.custom.push({ id: ecoStr(o.id, 40), name: ecoStr(o.name, 60) || 'สินค้าใหม่', cat: ecoStr(o.cat, 20), pct: ecoNum(o.pct, 0, 5, 1), off: o.off ? 1 : 0, far: o.far ? 1 : 0, terms: ecoCleanTerms(o.terms) || [] }); }
   ECO.cats = {}; for (const c of ECATS) { if (!ECAT0[c]) continue; const o = (b.cats || {})[c]; if (o && typeof o === 'object') { const z = {}; if (o.name) z.name = ecoStr(o.name, 60); if (o.v > 0) z.v = ecoNum(o.v, 0.05, 200, ECAT0[c].v); if (o.bulk > 0) z.bulk = ecoNum(o.bulk, 0.01, 10, ECAT0[c].bulk); ECO.cats[c] = z; } }
-  ECO.ucats = []; for (const u of (Array.isArray(b.ucats) ? b.ucats : []).slice(0, 24)) { if (!u || typeof u.id !== 'string' || !/^u[a-z0-9]{2,30}$/.test(u.id) || ECAT0[u.id] || ECO.ucats.some(x => x.id === u.id)) continue; ECO.ucats.push({ id: u.id, name: ecoStr(u.name, 60) || 'ประเภทใหม่', col: HEXC.test(u.col) ? u.col : '#b0b0b0', v: ecoNum(u.v, 0.05, 200, 3), bulk: ecoNum(u.bulk, 0.01, 10, 0.5), need: ecoNum(u.need, 0, 5, 0.05) }); }
+  ECO.ucats = []; for (const u of (Array.isArray(b.ucats) ? b.ucats : []).slice(0, 24)) {
+    if (!u || typeof u.id !== 'string' || !/^u[a-z0-9]{2,30}$/.test(u.id) || ECAT0[u.id] || ECO.ucats.some(x => x.id === u.id)) continue;
+    const z = { id: u.id, name: ecoStr(u.name, 60) || 'ประเภทใหม่', col: HEXC.test(u.col) ? u.col : '#b0b0b0', v: ecoNum(u.v, 0.05, 200, 3), bulk: ecoNum(u.bulk, 0.01, 10, 0.5), need: ecoNum(u.need, 0, 5, 0.05) };
+    if (u.basic) z.basic = 1;
+    if (u.made) { z.made = 1; z.base = ecoNum(u.base, 0.001, 5, 0.1); z.in = {}; if (u.in && typeof u.in === 'object') for (const [c, q] of Object.entries(u.in).slice(0, 8)) if (typeof c === 'string' && c.length <= 40 && q > 0) z.in[c] = ecoNum(q, 0.001, 20, 0.1); }
+    ECO.ucats.push(z);
+  }
   ECO.auto = b.auto == null ? BLANK : !!b.auto;
   ECO.tune = {}; for (const [k, v] of Object.entries(b.tune || {})) if (ETUNE[k] && Number.isFinite(+v)) { const z = ETUNE[k], x = clamp(+v, z[1], z[2]); if (x !== z[0]) ECO.tune[k] = x; }
-  ECO.work = {}; for (const m of EMADEC) { const o = (b.work || {})[m]; if (!o || typeof o !== 'object') continue; const w = {}; if (o.base > 0) w.base = ecoNum(o.base, 0.001, 5, EWORK0[m].base); if (o.in && typeof o.in === 'object') { w.in = {}; for (const [c, q] of Object.entries(o.in).slice(0, 8)) if (typeof c === 'string' && c.length <= 40 && q > 0) w.in[c] = ecoNum(q, 0.001, 20, 0.1); } if (w.base || w.in) ECO.work[m] = w; }
+  ECO.work = {}; for (const m of EMADEC) { if (!EWORK0[m]) continue; const o = (b.work || {})[m]; if (!o || typeof o !== 'object') continue; const w = {}; if (o.base > 0) w.base = ecoNum(o.base, 0.001, 5, EWORK0[m].base); if (o.in && typeof o.in === 'object') { w.in = {}; for (const [c, q] of Object.entries(o.in).slice(0, 8)) if (typeof c === 'string' && c.length <= 40 && q > 0) w.in[c] = ecoNum(q, 0.001, 20, 0.1); } if (w.base || w.in) ECO.work[m] = w; }
   ECO.pop = {}; for (const [id, n] of Object.entries(b.pop || {}).slice(0, 2000)) if (+n > 0 && Number.isFinite(+n)) ECO.pop[ecoStr(id, 40)] = Math.round(clamp(+n, 1, 5e7));   // a count past the form's ceiling is held to it (v0.14.2)
   ECO.danger = {}; for (const [id, n] of Object.entries(b.danger || {}).slice(0, 4000)) if (n > 0) ECO.danger[ecoStr(id, 120)] = Math.round(ecoNum(n, 0, 4, 0));
   ECO.states = []; for (const s of (Array.isArray(b.states) ? b.states : []).slice(0, 52)) { if (!s || typeof s.id !== 'string' || !SKEYS.includes(s.id) || s.id.length !== 1 || ECO.states.some(x => x.id === s.id)) continue; const rel = {}; for (const [k, r] of Object.entries(s.rel || {})) if (SKEYS.includes(k) && (r === 'ally' || r === 'rival')) rel[k] = r; ECO.states.push({ id: s.id, name: ecoStr(s.name, 60) || 'รัฐใหม่', color: HEXC.test(s.color) ? s.color : SCOLS[0], sys: ESYS[s.sys] ? s.sys : 'merc', cur: ecoStr(s.cur, 30), rate: ecoNum(s.rate, 0.01, 1000, 1), cap: ecoStr(s.cap, 60), slave: ESLAVE[s.slave] ? s.slave : 'abol', rel }); }
@@ -4769,8 +4779,9 @@ function ecoCatsHTML() {
     + `<h4>ประเภทที่เพิ่มเอง</h4>` + (ECO.ucats.length ? '' : `<p class="note">ยังไม่มี เพิ่มประเภทแล้วย้ายสินค้าเข้ามาได้จากแท็บสินค้า</p>`)
     + ECO.ucats.map(u => `<div class="eform" data-u="${u.id}"><div class="erow"><input type="color" data-f="ucol" value="${u.col}" aria-label="สีของประเภท"><input type="text" data-f="uname" maxlength="60" value="${esc(u.name)}" style="flex:1"></div>`
       + `<div class="erow"><label>ราคาฐาน <input type="number" data-f="uv" min="0.05" max="200" step="0.1" value="${u.v}"></label><label>เทอะทะ <input type="number" data-f="ubulk" min="0.01" max="10" step="0.05" value="${u.bulk}"></label><label>ต้องการต่อหัว <input type="number" data-f="uneed" min="0" max="5" step="0.01" value="${u.need}"></label></div>`
-      + `<div class="tr w">มีสินค้า ${EGOODS.filter(g => g.cat === u.id).length} ชนิด ความต้องการต่อหัวเทียบกับธัญพืชซึ่งเท่ากับ 1 ถ้าใส่ 0 จะไม่มีเมืองใดซื้อ</div><div class="btns"><button type="button" class="btn" data-a="udel">ลบประเภทนี้</button></div></div>`).join('')
-    + `<div class="btns"><button type="button" class="btn" data-a="unew"${ECO.ucats.length >= 24 ? ' disabled' : ''}>เพิ่มประเภท</button></div>`;
+      + `<div class="erow"><label title="ของพื้นฐาน: ขาดแล้วความเป็นอยู่ลดมาก และคนที่ไม่มั่งคั่งชอบของในรัฐ"><input type="checkbox" data-f="ubasic"${u.basic ? ' checked' : ''}> นับเป็นของพื้นฐาน</label></div>`
+      + `<div class="tr w">${u.made ? `สินค้าโรงงาน: ผลิตจากวัตถุดิบตามสูตรใน "สูตรของโรงงาน" ด้านล่าง ปีนี้ทั้งแผนที่ผลิตได้ ${fmtL(ECON ? ECON.cities.reduce((a, c, k) => a + ((ECON.MK[k][u.id] || [0])[0] || 0), 0) : 0)} หน่วย` : `วัตถุดิบ: มีสินค้า ${EGOODS.filter(g => g.cat === u.id).length} ชนิด ย้ายสินค้าเข้ามาได้จากแท็บสินค้า`} ความต้องการต่อหัวเทียบกับธัญพืชซึ่งเท่ากับ 1 ถ้าใส่ 0 จะไม่มีเมืองใดซื้อ</div><div class="btns"><button type="button" class="btn" data-a="udel">ลบประเภทนี้</button></div></div>`).join('')
+    + `<div class="btns"><button type="button" class="btn" data-a="unew"${ECO.ucats.length >= 24 ? ' disabled' : ''}>เพิ่มประเภทวัตถุดิบ</button><button type="button" class="btn" data-a="unewm"${ECO.ucats.length >= 24 ? ' disabled' : ''}>เพิ่มสินค้าโรงงานและสูตรใหม่</button></div>`;
 }
 // the workshops' recipes: what a head turns out at full supply, and what one load takes
 function ecoWorkHTML() {
@@ -4779,7 +4790,7 @@ function ecoWorkHTML() {
     const w = EWORK[m], ins = Object.entries(w.in), free = ERAW.filter(c => !(c in w.in));
     h += `<div class="eform" data-w="${m}"><div class="erow"><b><i class="sdot" style="background:${ECAT[m].col}"></i>${esc(ECAT[m].name)}</b><label>ผลิตต่อหัวเมื่อของครบ <input type="number" data-f="wbase" min="0.001" max="5" step="0.005" value="${w.base}"></label></div>`
       + ins.map(([c, q]) => `<div class="erow" data-i="${c}"><span style="flex:1"><i class="sdot" style="background:${ECAT[c].col}"></i>${esc(ECAT[c].name)}</span><label>ใช้ <input type="number" data-f="win" min="0.001" max="20" step="0.05" value="${q}"> ต่อหน่วย</label>${ins.length > 1 ? '<button type="button" class="btn warn" data-a="wdel">เอาออก</button>' : ''}</div>`).join('')
-      + `<div class="btns">${free.length && ins.length < 8 ? `<select data-f="wadd"><option value="">เพิ่มวัตถุดิบ</option>${free.map(c => `<option value="${c}">${esc(ECAT[c].name)}</option>`).join('')}</select>` : ''}${ECO.work[m] ? '<button type="button" class="btn" data-a="wreset">คืนสูตรตั้งต้น</button>' : ''}</div></div>`;
+      + `<div class="btns">${free.length && ins.length < 8 ? `<select data-f="wadd"><option value="">เพิ่มวัตถุดิบ</option>${free.map(c => `<option value="${c}">${esc(ECAT[c].name)}</option>`).join('')}</select>` : ''}${ECO.work[m] ? '<button type="button" class="btn" data-a="wreset">คืนสูตรตั้งต้น</button>' : ''}${ECAT[m].own ? '<span class="lbl">สินค้าโรงงานที่เพิ่มเอง แก้ชื่อ ราคา และความต้องการได้ที่ "ประเภทที่เพิ่มเอง" ด้านบน</span>' : ''}</div></div>`;
   }
   return h;
 }
@@ -4889,7 +4900,8 @@ $('ecobody').addEventListener('click', e => {
   else if (a === 'creset') { ECO.cats = {}; }
   else if (a === 'treset') { ECO.tune = {}; }
   else if (a === 'wreset') { delete ECO.work[b.closest('[data-w]').dataset.w]; }
-  else if (a === 'wdel') { const m = b.closest('[data-w]').dataset.w, c = b.closest('[data-i]').dataset.i, w = ECO.work[m] || (ECO.work[m] = {}); w.in = { ...EWORK[m].in }; delete w.in[c]; if (!Object.keys(w.in).length) return; }
+  else if (a === 'wdel') { const m = b.closest('[data-w]').dataset.w, c = b.closest('[data-i]').dataset.i, own = ECO.ucats.find(u => u.id === m && u.made), w = own || ECO.work[m] || (ECO.work[m] = {}); w.in = { ...EWORK[m].in }; delete w.in[c]; if (!Object.keys(w.in).length) return; }
+  else if (a === 'unewm') { if (ECO.ucats.length >= 24) return; ECO.ucats.push({ id: 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name: 'สินค้าโรงงานใหม่', col: SCOLS[(ECO.ucats.length + 5) % SCOLS.length], v: 5, bulk: 0.5, need: 0.05, made: 1, base: 0.1, in: { timber: 0.6 } }); }
   else if (a === 'unew') { if (ECO.ucats.length >= 24) return; ECO.ucats.push({ id: 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name: 'ประเภทใหม่', col: SCOLS[(ECO.ucats.length + 3) % SCOLS.length], v: 3, bulk: 0.5, need: 0.05 }); }
   else if (a === 'udel') { const id = b.closest('[data-u]').dataset.u; ECO.ucats = ECO.ucats.filter(u => u.id !== id); }
   else if (a === 'snew') { const id = [...SKEYS].find(k => !ECO.states.some(s => s.id === k)); if (!id) return; ECO.states.push({ id, name: 'รัฐที่ ' + (ECO.states.length + 1), color: SCOLS[ECO.states.length % SCOLS.length], sys: 'merc', cur: '', rate: 1, rel: {} }); ecoPaint = id; }
@@ -4910,14 +4922,14 @@ $('ecobody').addEventListener('change', e => {
   } else if (f === 'tune' && ETUNE[el.dataset.k]) {
     const k = el.dataset.k, z = ETUNE[k]; if (!Number.isFinite(num) || el.value === '') return; const x = clamp(num, z[1], z[2]); if (x === z[0]) delete ECO.tune[k]; else ECO.tune[k] = x;
   } else if (el.closest('[data-w]')) {
-    const m = el.closest('[data-w]').dataset.w, w = ECO.work[m] || (ECO.work[m] = {});
+    const m = el.closest('[data-w]').dataset.w, own = ECO.ucats.find(u => u.id === m && u.made), w = own ? own : ECO.work[m] || (ECO.work[m] = {});   // the owner's own workshop keeps its recipe with its class
     if (f === 'wbase' && num > 0) w.base = clamp(num, 0.001, 5);
     else if (f === 'win' && num > 0) { w.in = { ...EWORK[m].in }; w.in[el.closest('[data-i]').dataset.i] = clamp(num, 0.001, 20); }
     else if (f === 'wadd' && el.value && ECAT[el.value] && !ECAT[el.value].made) { w.in = { ...EWORK[m].in }; w.in[el.value] = 0.2; }
     else return;
   } else if (el.closest('[data-u]')) {
     const u = ECO.ucats.find(x => x.id === el.closest('[data-u]').dataset.u); if (!u) return;
-    if (f === 'uname') u.name = el.value.trim().slice(0, 60) || u.name; else if (f === 'ucol' && HEXC.test(el.value)) u.col = el.value; else if (f === 'uv' && num > 0) u.v = clamp(num, 0.05, 200); else if (f === 'ubulk' && num > 0) u.bulk = clamp(num, 0.01, 10); else if (f === 'uneed' && num >= 0) u.need = clamp(num, 0, 5);
+    if (f === 'ubasic') { if (el.checked) u.basic = 1; else delete u.basic; } else if (f === 'uname') u.name = el.value.trim().slice(0, 60) || u.name; else if (f === 'ucol' && HEXC.test(el.value)) u.col = el.value; else if (f === 'uv' && num > 0) u.v = clamp(num, 0.05, 200); else if (f === 'ubulk' && num > 0) u.bulk = clamp(num, 0.01, 10); else if (f === 'uneed' && num >= 0) u.need = clamp(num, 0, 5);
   } else if (el.closest('[data-c]')) {
     const c = el.closest('[data-c]').dataset.c, o = ECO.cats[c] || (ECO.cats[c] = {});
     if (f === 'cname') { const v = el.value.trim().slice(0, 60); if (v) o.name = v; } else if (f === 'cv' && num > 0) o.v = clamp(num, 0.05, 200); else if (f === 'cbulk' && num > 0) o.bulk = clamp(num, 0.01, 10);
@@ -6760,7 +6772,11 @@ const featFarmAt = u => { const k = featAt(u); return !!(k && k.farm); };
     return o;
   };
 }
-{ const ap = ecoApply; ecoApply = function () { ap(); FK = featKinds(); featRegister(); }; }
+{ const ap = ecoApply; ecoApply = function () {
+  ap(); FK = featKinds(); featRegister();
+  for (const c of [...SOC_BASIC]) if (/^u[a-z0-9]/.test(c)) SOC_BASIC.delete(c);   // a class of the owner's own may be counted among the basics (v0.16.2)
+  for (const u of ECO.ucats) if (u.basic && ECAT[u.id]) SOC_BASIC.add(u.id);
+}; }
 FK = featKinds(); featRegister();
 
 // ---- painting: from the painting of the ground, a row of its own ----

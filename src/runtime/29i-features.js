@@ -139,7 +139,11 @@ const featFarmAt = u => { const k = featAt(u); return !!(k && k.farm); };
     return o;
   };
 }
-{ const ap = ecoApply; ecoApply = function () { ap(); FK = featKinds(); featRegister(); }; }
+{ const ap = ecoApply; ecoApply = function () {
+  ap(); FK = featKinds(); featRegister();
+  for (const c of [...SOC_BASIC]) if (/^u[a-z0-9]/.test(c)) SOC_BASIC.delete(c);   // a class of the owner's own may be counted among the basics (v0.16.2)
+  for (const u of ECO.ucats) if (u.basic && ECAT[u.id]) SOC_BASIC.add(u.id);
+}; }
 FK = featKinds(); featRegister();
 
 // ---- painting: from the painting of the ground, a row of its own ----
