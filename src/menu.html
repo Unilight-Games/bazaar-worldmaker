@@ -17,9 +17,17 @@
         <h2>แก้แผนที่ร่วมกัน</h2>
         <p>เข้าห้องของเพื่อนด้วยรหัสที่เจ้าของแผนที่บอก ถ้าจะชวนเพื่อนมาแก้แผนที่ของคุณ เปิดแผนที่แล้วกดเปิดห้องแก้ร่วมกัน</p>
         <div class="acct" id="acct" hidden><img id="acctPic" alt="" hidden><span id="acctWho"></span><button type="button" class="btn" id="acctBtn"></button></div>
+        <div class="note2" id="acctId" hidden></div>
         <div class="joinrow"><label class="field" for="myName">ชื่อที่เพื่อนจะเห็น<input type="text" id="myName" maxlength="24" autocomplete="off" placeholder="เช่น นน"></label>
         <label class="field" for="joinCode">รหัสห้อง<input type="text" id="joinCode" class="code" maxlength="12" autocomplete="off" placeholder="K7Q2XD-9FAB"></label></div>
         <button type="button" class="btn brass" id="joinBtn">เข้าห้อง</button>
+      </div>
+      <div class="mcard hubnote" id="hubNote" hidden></div>
+      <div class="mcard hubcard" id="hubCard" hidden>
+        <div class="hubhead"><h2>แชทกลาง</h2><span id="hubOnline"></span><span style="flex:1"></span><button type="button" class="btn" id="hubAdminBtn" data-hub="open" hidden>หลังบ้าน</button></div>
+        <div class="hublist" id="hubList" aria-live="polite"></div>
+        <div class="hubin"><input type="text" id="hubMsg" maxlength="300" autocomplete="off" aria-label="ข้อความในแชทกลาง"><button type="button" class="btn brass" id="hubSend" data-hub="send">ส่ง</button></div>
+        <p class="note2" id="hubWhy"></p>
       </div>
       <div class="mcard tutor">
         <img src="assets/nem/smile.webp" alt="เนเมสไซอาร์ ศาสดาสีชาด" width="950" height="1100">
@@ -31,6 +39,7 @@
       <div class="lib" id="lib"></div>
       <p class="note2" id="storeNote"></p>
       <button type="button" class="btn" id="bakOn" hidden></button>
+      <p class="note2" id="hubCloud" hidden></p>
     </div>
   </div>
 </div>
@@ -85,6 +94,14 @@
     <p id="brOff" class="note2" hidden>ไฟล์นี้เป็นฉบับออฟไลน์ แผนที่เก็บอยู่ในเบราว์เซอร์ที่เปิดไฟล์นี้เท่านั้น ถ้าเปิดไฟล์เดียวกันด้วยเบราว์เซอร์อื่นจะไม่เห็นแผนที่ชุดเดิม ห้องแก้ร่วมกันใช้ได้เฉพาะระหว่างแท็บของเบราว์เซอร์เดียวกัน และก่อนลงมือทำงานจริงควรส่งออกไฟล์แผนที่ไว้สำรองเสมอ</p>
     <label class="brkeep"><input type="checkbox" id="brKeep"> ไม่ต้องแสดงอีกในเบราว์เซอร์นี้</label>
     <div class="foot"><button type="button" class="btn brass" id="brOk">เข้าใจแล้ว เริ่มใช้งาน</button></div>
+  </div>
+</div>
+<div class="veil" id="hubVeil" hidden>
+  <div class="sheet hubsheet" role="dialog" aria-labelledby="hubBoHead">
+    <h2 id="hubBoHead">หลังบ้านของผู้พัฒนา</h2>
+    <div class="seg" id="hubBoTabs"><button type="button" data-hub="view" data-v="on">ออนไลน์ตอนนี้</button><button type="button" data-hub="view" data-v="stat">สถิติการเข้าออก</button><button type="button" data-hub="view" data-v="maps">แผนที่ที่สำรอง</button><button type="button" data-hub="view" data-v="chat">แชท</button></div>
+    <div id="hubBo"></div>
+    <div class="foot"><button type="button" class="btn" data-hub="close">ปิด</button></div>
   </div>
 </div>
 <div id="mtoast" role="status" hidden></div>

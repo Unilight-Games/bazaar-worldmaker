@@ -5,7 +5,7 @@
 // The owner chose this road on 23 Nov 2026: a friend who came to the artifact by a public link could not reach its room, and
 // the only invitation that could would have let the friend edit the page itself.
 //
-// What is kept on the server, and for how long. Nothing of a map rests there. While a room is open its messages pass through
+// What is kept on the server, and for how long. While a room is open nothing of the map rests there: its messages pass through
 // three lists under bw/rooms/<room>/:
 //   p/<peer>         who is here and where their pointer is. Removed when that page leaves or its line drops.
 //   m/<peer>/<id>    what that page says to everyone. Each message is removed about twenty seconds after it is sent, and the
@@ -13,19 +13,22 @@
 //   in/<peer>/<id>   what is said to that page alone (the map, to someone coming in). Only that person's account can read it.
 // A peer is "<account id>_<a few letters for this tab>". The rules of the database let an account write only under its own id,
 // so the first half of a sender's name cannot be forged, which is what the code of a room and a ban both lean on.
+// Since v0.18.0 the page also keeps people online, a public chat, a log of comings and goings and copies of maps, under other
+// lists of bw/: see hub.js for what each is and who reads it.
 (function () {
   'use strict';
   const MME = window.MME = window.MME || {};
   const cfg = window.MME_FIREBASE, fake = window.MME_FIRE_FAKE || null;
   if (!fake && !(cfg && cfg.projectId && cfg.databaseURL)) { MME.fire = null; return; }
 
-  const subs = new Set(); let user = null, api = null, state = 'loading';
+  const subs = new Set(), hubSubs = new Set(), hubState = { anon: '' }; let user = null, api = null, state = 'loading';
+  const tellHub = () => { for (const f of hubSubs) { try { f(); } catch (err) { console.error(err); } } };
   const tell = () => { for (const f of subs) { try { f(user); } catch (err) { console.error(err); } } };
   const rnd = n => { let s = ''; while (s.length < n) s += Math.random().toString(36).slice(2); return s.slice(0, n); };
 
   const ready = (async () => {
     if (fake) {                                         // a test stands in for the server
-      api = fake; user = fake.user || null; state = 'ready';
+      api = fake; user = fake.user || null; state = 'ready'; if (typeof fake.onHub === 'function') fake.onHub(tellHub);
       if (typeof fake.onUser === 'function') fake.onUser(u => { user = u || null; tell(); });
       return true;
     }
@@ -49,7 +52,30 @@
       value: (path, fn, bad) => D.onValue(D.ref(db, path), s => fn(s.val()), bad),
       connected: fn => D.onValue(D.ref(db, '.info/connected'), s => fn(!!s.val()))
     };
-    await new Promise(res => A.onAuthStateChanged(auth, u => { state = 'ready'; put(u); res(); }));
+    // v0.18.0, the owner's ask: everyone who opens the page counts as someone online, so a visitor who has not signed in with
+    // Google is signed in without a name (Firebase's anonymous accounts; the project must have that provider turned on). The rooms
+    // still take a Google account only. If the provider is off, the page goes on without it and counts only the signed-in.
+    let anonTried = false;
+    const anon = () => { if (anonTried || cfg.anon === false) return; anonTried = true; A.signInAnonymously(auth).catch(err => { hubState.anon = 'off'; console.warn('anonymous sign-in', err && err.code); tellHub(); }).finally(() => { anonTried = false; }); };
+    api.hub = {
+      uid: () => auth.currentUser ? auth.currentUser.uid : null,
+      anon: () => !!(auth.currentUser && auth.currentUser.isAnonymous),
+      now: () => Date.now() + offset, stamp: () => D.serverTimestamp(),
+      key: path => D.push(D.ref(db, path)).key,
+      set: (path, val) => D.set(D.ref(db, path), val),
+      update: vals => D.update(D.ref(db), vals),
+      remove: path => D.remove(D.ref(db, path)),
+      gone: path => D.onDisconnect(D.ref(db, path)).remove(),
+      goneSet: (path, val) => D.onDisconnect(D.ref(db, path)).set(val),
+      cancel: path => D.onDisconnect(D.ref(db, path)).cancel(),
+      get: path => D.get(D.ref(db, path)).then(s => s.val()),
+      value: (path, fn, bad) => D.onValue(D.ref(db, path), s => fn(s.val()), bad),
+      since: (path, t, fn, bad) => D.onValue(D.query(D.ref(db, path), D.orderByChild('t'), D.startAt(t)), s => fn(s.val()), bad),
+      before: (path, t) => D.get(D.query(D.ref(db, path), D.orderByChild('t'), D.endAt(t))).then(s => s.val()),
+      inc: path => D.runTransaction(D.ref(db, path), v => (+v || 0) + 1),
+      connected: fn => D.onValue(D.ref(db, '.info/connected'), s => fn(!!s.val()))
+    };
+    await new Promise(res => A.onAuthStateChanged(auth, u => { state = 'ready'; put(u); if (!u) anon(); tellHub(); res(); }));
     return true;
   })().catch(err => { console.error(err); state = 'failed'; tell(); return false; });
 
@@ -104,6 +130,10 @@
   MME.fire = {
     ready, transport,
     get user() { return user; }, get state() { return state; },
+    // what the menu's people online, the public chat and the owner's back office reach the database with (see hub.js); null where
+    // the stand-in of a test has none of it
+    get hub() { return api && api.hub ? api.hub : null; }, hubState,
+    onHub(fn) { hubSubs.add(fn); return () => hubSubs.delete(fn); },
     onUser(fn) { subs.add(fn); return () => subs.delete(fn); },
     async signIn() { if (!(await ready)) throw new Error('unavailable'); await api.signIn(); return user; },
     async signOut() { if (await ready) await api.signOut(); }

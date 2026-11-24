@@ -25,7 +25,7 @@ assert sorted(order) == on_disk, 'src/runtime/ORDER.txt and the files of src/run
 runtime = ''.join(rd(os.path.join(SRC, 'runtime', f)) for f in order)
 
 # ---------------------------------------------------------------- files
-ENGINE = ['gen.js', 'store.js', 'backup.js', 'net.js', 'fire.js', 'defaults.js', 'shell.js', 'tutor-lines.js', 'tutor.js']
+ENGINE = ['gen.js', 'store.js', 'backup.js', 'net.js', 'fire.js', 'defaults.js', 'shell.js', 'hub.js', 'tutor-lines.js', 'tutor.js']
 wr('engine/runtime.js', runtime)
 for f in ENGINE:
     shutil.copy(os.path.join(SRC, f), os.path.join(DIST, 'engine', f))
@@ -47,7 +47,7 @@ BG = sorted(os.listdir(os.path.join(ROOT, 'assets', 'bg')))
 for f in BG:
     shutil.copy(os.path.join(ROOT, 'assets', 'bg', f), os.path.join(DIST, 'assets', 'bg', f))
 
-SCRIPTS = ['gen.js', 'store.js', 'backup.js', 'net.js', 'fire.js', 'defaults.js', 'runtime.js', 'shell.js', 'tutor-lines.js', 'tutor.js']
+SCRIPTS = ['gen.js', 'store.js', 'backup.js', 'net.js', 'fire.js', 'defaults.js', 'runtime.js', 'shell.js', 'hub.js', 'tutor-lines.js', 'tutor.js']
 index = """<!DOCTYPE html>
 <html lang="th">
 <head>

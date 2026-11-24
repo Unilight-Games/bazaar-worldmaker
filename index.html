@@ -654,6 +654,31 @@ body:has(#mapscreen:not([hidden])) .uisize.fixed { display: none; }
 #featbody .fk summary { cursor: pointer; }
 #featbody .fk .erow input[type=number] { width: 5.5em; }
 #featbody .fk .erow input[type=text] { width: 11em; }
+
+/* v0.18.0: people online, the public chat and the back office (hub.js) */
+.hubhead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.hubhead h2 { margin: 0; }
+#hubOnline { color: var(--muted, #b9b2a2); font-size: .92em; }
+#hubOnline b { color: #8fdc8a; }
+.hublist { height: 210px; overflow-y: auto; margin: 8px 0; padding: 6px 8px; background: rgba(0, 0, 0, .22); border: 1px solid var(--line, #3a3a3a); border-radius: 6px; font-size: .93em; }
+.hubm { padding: 3px 0; line-height: 1.45; }
+.hubm b { color: #e8c37a; margin-right: 6px; font-weight: 600; }
+.hubm.mine b { color: #9fd0f0; }
+.hubm time { color: var(--muted, #9a9384); font-size: .82em; margin-right: 6px; }
+.hubm span { word-break: break-word; }
+.hubm em { font-style: normal; margin-left: 6px; }
+.hubm em .lnk { font-size: .82em; margin-left: 4px; }
+.hubempty { color: var(--muted, #9a9384); margin: 6px 0; }
+.hubin { display: flex; gap: 6px; }
+.hubin input { flex: 1; min-width: 0; }
+.hubsheet { max-width: 920px; width: min(920px, 96vw); }
+#hubBoTabs { margin: 6px 0 10px; flex-wrap: wrap; }
+#hubBo { max-height: 62vh; overflow: auto; }
+.hubt > div { display: grid; gap: 8px; padding: 4px 0; border-bottom: 1px solid rgba(255, 255, 255, .06); align-items: baseline; }
+.hubt.hub4 > div { grid-template-columns: 2fr 1.4fr 1fr 1fr; }
+.hubt.hub5 > div { grid-template-columns: 2fr 1.3fr 1.3fr .8fr 1.1fr; }
+.hubt .hubh { color: var(--muted, #9a9384); font-size: .88em; }
+#acctId code, .hubt code { font-size: .85em; user-select: all; }
 </style>
 </head>
 <body>
@@ -676,9 +701,17 @@ body:has(#mapscreen:not([hidden])) .uisize.fixed { display: none; }
         <h2>แก้แผนที่ร่วมกัน</h2>
         <p>เข้าห้องของเพื่อนด้วยรหัสที่เจ้าของแผนที่บอก ถ้าจะชวนเพื่อนมาแก้แผนที่ของคุณ เปิดแผนที่แล้วกดเปิดห้องแก้ร่วมกัน</p>
         <div class="acct" id="acct" hidden><img id="acctPic" alt="" hidden><span id="acctWho"></span><button type="button" class="btn" id="acctBtn"></button></div>
+        <div class="note2" id="acctId" hidden></div>
         <div class="joinrow"><label class="field" for="myName">ชื่อที่เพื่อนจะเห็น<input type="text" id="myName" maxlength="24" autocomplete="off" placeholder="เช่น นน"></label>
         <label class="field" for="joinCode">รหัสห้อง<input type="text" id="joinCode" class="code" maxlength="12" autocomplete="off" placeholder="K7Q2XD-9FAB"></label></div>
         <button type="button" class="btn brass" id="joinBtn">เข้าห้อง</button>
+      </div>
+      <div class="mcard hubnote" id="hubNote" hidden></div>
+      <div class="mcard hubcard" id="hubCard" hidden>
+        <div class="hubhead"><h2>แชทกลาง</h2><span id="hubOnline"></span><span style="flex:1"></span><button type="button" class="btn" id="hubAdminBtn" data-hub="open" hidden>หลังบ้าน</button></div>
+        <div class="hublist" id="hubList" aria-live="polite"></div>
+        <div class="hubin"><input type="text" id="hubMsg" maxlength="300" autocomplete="off" aria-label="ข้อความในแชทกลาง"><button type="button" class="btn brass" id="hubSend" data-hub="send">ส่ง</button></div>
+        <p class="note2" id="hubWhy"></p>
       </div>
       <div class="mcard tutor">
         <img src="assets/nem/smile.webp" alt="เนเมสไซอาร์ ศาสดาสีชาด" width="950" height="1100">
@@ -690,6 +723,7 @@ body:has(#mapscreen:not([hidden])) .uisize.fixed { display: none; }
       <div class="lib" id="lib"></div>
       <p class="note2" id="storeNote"></p>
       <button type="button" class="btn" id="bakOn" hidden></button>
+      <p class="note2" id="hubCloud" hidden></p>
     </div>
   </div>
 </div>
@@ -744,6 +778,14 @@ body:has(#mapscreen:not([hidden])) .uisize.fixed { display: none; }
     <p id="brOff" class="note2" hidden>ไฟล์นี้เป็นฉบับออฟไลน์ แผนที่เก็บอยู่ในเบราว์เซอร์ที่เปิดไฟล์นี้เท่านั้น ถ้าเปิดไฟล์เดียวกันด้วยเบราว์เซอร์อื่นจะไม่เห็นแผนที่ชุดเดิม ห้องแก้ร่วมกันใช้ได้เฉพาะระหว่างแท็บของเบราว์เซอร์เดียวกัน และก่อนลงมือทำงานจริงควรส่งออกไฟล์แผนที่ไว้สำรองเสมอ</p>
     <label class="brkeep"><input type="checkbox" id="brKeep"> ไม่ต้องแสดงอีกในเบราว์เซอร์นี้</label>
     <div class="foot"><button type="button" class="btn brass" id="brOk">เข้าใจแล้ว เริ่มใช้งาน</button></div>
+  </div>
+</div>
+<div class="veil" id="hubVeil" hidden>
+  <div class="sheet hubsheet" role="dialog" aria-labelledby="hubBoHead">
+    <h2 id="hubBoHead">หลังบ้านของผู้พัฒนา</h2>
+    <div class="seg" id="hubBoTabs"><button type="button" data-hub="view" data-v="on">ออนไลน์ตอนนี้</button><button type="button" data-hub="view" data-v="stat">สถิติการเข้าออก</button><button type="button" data-hub="view" data-v="maps">แผนที่ที่สำรอง</button><button type="button" data-hub="view" data-v="chat">แชท</button></div>
+    <div id="hubBo"></div>
+    <div class="foot"><button type="button" class="btn" data-hub="close">ปิด</button></div>
   </div>
 </div>
 <div id="mtoast" role="status" hidden></div>
@@ -947,16 +989,17 @@ body:has(#mapscreen:not([hidden])) .uisize.fixed { display: none; }
 <section class="method"><div class="card" id="method"></div></section>
 </template>
 <script>window.MME_BUILD = "web"; window.MME_NO_GRESLAND = true;</script>
-<script src="firebase-config.js?v=0.17.1"></script>
-<script src="engine/gen.js?v=0.17.1"></script>
-<script src="engine/store.js?v=0.17.1"></script>
-<script src="engine/backup.js?v=0.17.1"></script>
-<script src="engine/net.js?v=0.17.1"></script>
-<script src="engine/fire.js?v=0.17.1"></script>
-<script src="engine/defaults.js?v=0.17.1"></script>
-<script src="engine/runtime.js?v=0.17.1"></script>
-<script src="engine/shell.js?v=0.17.1"></script>
-<script src="engine/tutor-lines.js?v=0.17.1"></script>
-<script src="engine/tutor.js?v=0.17.1"></script>
+<script src="firebase-config.js?v=0.18.0"></script>
+<script src="engine/gen.js?v=0.18.0"></script>
+<script src="engine/store.js?v=0.18.0"></script>
+<script src="engine/backup.js?v=0.18.0"></script>
+<script src="engine/net.js?v=0.18.0"></script>
+<script src="engine/fire.js?v=0.18.0"></script>
+<script src="engine/defaults.js?v=0.18.0"></script>
+<script src="engine/runtime.js?v=0.18.0"></script>
+<script src="engine/shell.js?v=0.18.0"></script>
+<script src="engine/hub.js?v=0.18.0"></script>
+<script src="engine/tutor-lines.js?v=0.18.0"></script>
+<script src="engine/tutor.js?v=0.18.0"></script>
 </body>
 </html>

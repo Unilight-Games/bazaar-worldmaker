@@ -499,3 +499,28 @@ body:has(#mapscreen:not([hidden])) .uisize.fixed { display: none; }
 #featbody .fk summary { cursor: pointer; }
 #featbody .fk .erow input[type=number] { width: 5.5em; }
 #featbody .fk .erow input[type=text] { width: 11em; }
+
+/* v0.18.0: people online, the public chat and the back office (hub.js) */
+.hubhead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.hubhead h2 { margin: 0; }
+#hubOnline { color: var(--muted, #b9b2a2); font-size: .92em; }
+#hubOnline b { color: #8fdc8a; }
+.hublist { height: 210px; overflow-y: auto; margin: 8px 0; padding: 6px 8px; background: rgba(0, 0, 0, .22); border: 1px solid var(--line, #3a3a3a); border-radius: 6px; font-size: .93em; }
+.hubm { padding: 3px 0; line-height: 1.45; }
+.hubm b { color: #e8c37a; margin-right: 6px; font-weight: 600; }
+.hubm.mine b { color: #9fd0f0; }
+.hubm time { color: var(--muted, #9a9384); font-size: .82em; margin-right: 6px; }
+.hubm span { word-break: break-word; }
+.hubm em { font-style: normal; margin-left: 6px; }
+.hubm em .lnk { font-size: .82em; margin-left: 4px; }
+.hubempty { color: var(--muted, #9a9384); margin: 6px 0; }
+.hubin { display: flex; gap: 6px; }
+.hubin input { flex: 1; min-width: 0; }
+.hubsheet { max-width: 920px; width: min(920px, 96vw); }
+#hubBoTabs { margin: 6px 0 10px; flex-wrap: wrap; }
+#hubBo { max-height: 62vh; overflow: auto; }
+.hubt > div { display: grid; gap: 8px; padding: 4px 0; border-bottom: 1px solid rgba(255, 255, 255, .06); align-items: baseline; }
+.hubt.hub4 > div { grid-template-columns: 2fr 1.4fr 1fr 1fr; }
+.hubt.hub5 > div { grid-template-columns: 2fr 1.3fr 1.3fr .8fr 1.1fr; }
+.hubt .hubh { color: var(--muted, #9a9384); font-size: .88em; }
+#acctId code, .hubt code { font-size: .85em; user-select: all; }
