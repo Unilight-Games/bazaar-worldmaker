@@ -156,6 +156,7 @@ function renderTradeCard() {
     const ps = $('tdPar'); if (ps) ps.onchange = () => setParent(id, ps.value || null);
   }
 }
-function selectTrade(id) { tsel = id || null; tlsel = null; renderTradeCard(); requestDraw(); }
-function selectLink(id) { tlsel = id || null; tsel = null; renderTradeCard(); requestDraw(); }
+const tradeReveal = id => { if (id && window.MME && MME.shell && MME.shell.reveal) MME.shell.reveal('tradecard'); };   // a city's or a line's card is in the side panel (v0.15.1)
+function selectTrade(id) { tsel = id || null; tlsel = null; renderTradeCard(); requestDraw(); tradeReveal(id); }
+function selectLink(id) { tlsel = id || null; tsel = null; renderTradeCard(); requestDraw(); tradeReveal(id); }
 

@@ -178,7 +178,7 @@ input[type=range] { accent-color: var(--brass); width: 100%; }
 #mapscreen.fit .mapcol { height: 100%; display: flex; flex-direction: column; }
 #mapscreen.fit .toolbar { position: relative; flex: 0 0 auto; padding: 0 0 6px; z-index: 7; }
 #mapscreen.fit .mapbox { flex: 1 1 0; min-height: 0; }
-#mapscreen.fit .opts { position: absolute; left: 10px; top: calc(100% + 46px); margin: 0; max-width: min(820px, calc(100% - 362px)); max-height: 44vh; overflow: auto; background: rgba(27, 30, 37, .96); box-shadow: 0 8px 26px rgba(0, 0, 0, .5); scrollbar-width: thin; }
+#mapscreen.fit .opts { position: absolute; left: 10px; top: calc(100% + 8px + var(--ctlh, 38px)); margin: 0; max-width: min(820px, calc(100% - 362px)); max-height: 44vh; overflow: auto; background: rgba(27, 30, 37, .96); box-shadow: 0 8px 26px rgba(0, 0, 0, .5); scrollbar-width: thin; }
 #mapscreen.fit.noside .opts { max-width: min(820px, calc(100% - 20px)); }
 #mapscreen.fit.noopts .opts, #mapscreen.fit .mapcol:has(#mapbox[data-mode="view"]) .opts { display: none; }
 #mapscreen.fit .layers, #mapscreen.fit .nsize { z-index: 9; }
@@ -483,3 +483,13 @@ body:has(#mapscreen:not([hidden])) .uisize.fixed { display: none; }
 .lnk { all: unset; cursor: pointer; color: var(--brass); font-size: .78em; font-weight: 400; margin-left: 6px; }
 .lnk:hover, .lnk:focus-visible { text-decoration: underline; }
 #ecocard .etr .lnk { color: var(--text); font-size: inherit; margin-left: 0; }
+
+/* v0.15.1: the settings of four modes live in the side panel; when it is hidden, the options say so and bring it back */
+.sidehint { display: none; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; padding: 6px 10px; border: 1px solid var(--gold, #d9b45a); border-radius: 8px; font-size: 13px; }
+#mapscreen.fit.noside .sidehint { display: flex; }
+/* v0.15.1: the world's settings, on the map beside its people (the owner's): each opens its settings in the side panel */
+.setpick { order: 10; display: inline-flex; align-items: center; gap: 2px; font-size: .8rem; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 2px 2px 2px 8px; background: var(--panel, rgba(20,22,27,.9)); }
+.setpick > span { margin-right: 4px; }
+#mapscreen .ctl .setpick button { padding: 3px 8px; border: 0; border-radius: 4px; background: transparent; color: var(--text); font: inherit; cursor: pointer; }
+#mapscreen .ctl .setpick button:hover { background: rgba(217,180,90,.15); }
+#mapscreen .ctl .setpick button[aria-pressed="true"] { background: rgba(217,180,90,.28); color: var(--brass, #d9b45a); }

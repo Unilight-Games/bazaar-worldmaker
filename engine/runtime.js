@@ -2075,8 +2075,9 @@ function renderTradeCard() {
     const ps = $('tdPar'); if (ps) ps.onchange = () => setParent(id, ps.value || null);
   }
 }
-function selectTrade(id) { tsel = id || null; tlsel = null; renderTradeCard(); requestDraw(); }
-function selectLink(id) { tlsel = id || null; tsel = null; renderTradeCard(); requestDraw(); }
+const tradeReveal = id => { if (id && window.MME && MME.shell && MME.shell.reveal) MME.shell.reveal('tradecard'); };   // a city's or a line's card is in the side panel (v0.15.1)
+function selectTrade(id) { tsel = id || null; tlsel = null; renderTradeCard(); requestDraw(); tradeReveal(id); }
+function selectLink(id) { tlsel = id || null; tsel = null; renderTradeCard(); requestDraw(); tradeReveal(id); }
 
 // ---------- editing the network ----------
 function changeLink(id, patch) {                    // one step of undo: the line as the user had it (null: the page's own) and as it is now
@@ -4859,7 +4860,7 @@ function ecoGdpHTML() {
 }
 function ecoRender() {
   const card = $('ecocard'); card.hidden = mode !== 'econ'; if (card.hidden) return;
-  segPick('ecoTab', 't', ecoTab, t => { ecoTab = t; ecoRender(); requestDraw(); });
+  setpickSync(); segPick('ecoTab', 't', ecoTab, t => { ecoTab = t; ecoRender(); requestDraw(); if (window.MME && MME.shell && MME.shell.reveal) MME.shell.reveal('ecocard'); });   // a tab's settings are in the side panel: picking it brings the panel back (v0.15.1)
   $('ecoHead').textContent = { goods: 'สินค้าของแผนที่', cats: 'ประเภทสินค้า ระดับราคา และสูตรโรงงาน', states: 'รัฐและเขตแดน', gdp: 'GDP และค่าเงิน', tune: 'ตัวเลขของแบบจำลอง' }[ecoTab];
   $('ecoPaintRow').hidden = ecoTab !== 'states' || !ECO.states.length || !editable;
   if (!$('ecoPaintRow').hidden) {
@@ -5051,6 +5052,17 @@ const __setClLayer = setClLayer; setClLayer = function (k) { __setClLayer(k); cl
 const __rcEco = renderClimCard; renderClimCard = function () { __rcEco(); if (mode === 'climate') clToolUI(); else if (mode !== 'econ') box.classList.remove('ecopaint'); };
 SIDE.eco.last = SIDE.eco.ser(); sideButtons(); clInputs();
 
+
+// ---------- the world's settings on the map (v0.15.1) ----------
+// The owner could not find where states, goods, their classes and the coin were set: they live in the side panel, which can be
+// hidden, under a tab of the economy tool. He asked for them on the map's own bar, as the people of the map are. A button there
+// opens the economy tool at that tab and brings the side panel, with its card at the top.
+function setpickSync() { const g = document.querySelector('.setpick'); if (g) g.hidden = !editable; for (const b of document.querySelectorAll('.setpick [data-eco]')) b.setAttribute('aria-pressed', String(mode === 'econ' && ecoTab === b.dataset.eco)); }
+for (const b of document.querySelectorAll('.setpick [data-eco]')) b.addEventListener('click', () => {
+  ecoTab = b.dataset.eco; if (mode !== 'econ') setMode('econ'); else { ecoRender(); requestDraw(); }
+  setpickSync(); if (window.MME && MME.shell && MME.shell.reveal) MME.shell.reveal('ecocard', true);
+});
+new MutationObserver(setpickSync).observe($('mapbox'), { attributes: true, attributeFilter: ['data-mode'] });
 
 // ---- the seasons of the year, as the owner divides it (the request of 23 Nov 2026) ----
 // The climate mode gains a row to look at one season alone, and its card a list of the seasons: add one, take one away, give each

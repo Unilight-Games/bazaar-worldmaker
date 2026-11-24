@@ -2,7 +2,7 @@
 // the sheet for a new map, and the room around an open map.
 (function () {
   const MME = window.MME;
-  MME.VERSION = '0.15.0';
+  MME.VERSION = '0.15.1';
   MME.NAME = 'Bazaar Worldmaker';
   MME.GRESLAND_KM = 34;   // canon: the continent is about 12 million square kilometres, and the map draws it on 12,208 hexes
   const $ = id => document.getElementById(id);
@@ -356,6 +356,7 @@
     const op = $('opts'), moved = on && !teach && PAN.ox != null, fold = on && !teach && PAN.fold;
     if (op) { op.classList.toggle('folded', fold); op.classList.toggle('moved', moved); const f = $('optsFold'); if (f) { f.textContent = fold ? '▸' : '▾'; f.setAttribute('aria-expanded', String(!fold)); } }
     scr.classList.toggle('fit', on); scr.classList.toggle('noside', on && !PAN.side); scr.classList.toggle('noopts', on && !PAN.opts);
+    { const ctl = scr.querySelector('.ctl'); if (ctl && ctl.offsetHeight > 0) scr.style.setProperty('--ctlh', ctl.offsetHeight + 'px'); }   // the bar over the map may take two rows on a narrow window: the options start below it (v0.15.1)
     box.classList.toggle('free', on); box.dataset.padr = on && PAN.side ? '342' : '0';
     // where the window is wide for its height, the tool's options stand in the strip left of the map and cover none of it
     let dock = false;
@@ -460,6 +461,7 @@
       if (bar && chip) { bar.insertBefore(st, chip); bar.insertBefore(g, chip); } else tb.insertBefore(g, st);
       $('panSide').onclick = () => panels({ side: !PAN.side }); $('panOpts').onclick = () => panels({ opts: !PAN.opts });
       if (window.ResizeObserver) { const ro = new ResizeObserver(() => { const w = document.querySelector('#mapscreen .wrap'), t = $('toolbar'); if (w && t) w.style.setProperty('--tbh', t.querySelector('.tbrow').offsetHeight + 8 + 'px'); }); ro.observe($('toolbar')); }
+      if (window.ResizeObserver) { const ctl = document.querySelector('#mapscreen .ctl'), scr = $('mapscreen'); if (ctl) new ResizeObserver(() => { if (ctl.offsetHeight > 0) scr.style.setProperty('--ctlh', ctl.offsetHeight + 'px'); }).observe(ctl); }
     }
     applyFit(true); requestAnimationFrame(() => { if (cur) applyFit(false); });
     const m = cur.meta, guest = cur.guest, practice = cur.practice;
@@ -633,5 +635,15 @@
     await Promise.race([whoP, waitMs(HOSTED ? 3000 : 0)]); late = true;
     try { await seedGresland(); } catch (err) { console.error(err); } await renderLibrary();
   })();
-  MME.shell = { openMap, closeMap, openPractice, panels, refit: () => applyFit(false), get cur() { return cur; }, renderLibrary };
+  function reveal(id, top) {                               // bring a card of the side panel into sight: the panel shown, the card unfolded, scrolled to (v0.15.1)
+    const c = $(id); if (!c || !cur || document.body.classList.contains('tutoring')) return;   // a lesson keeps the panels where it set them
+    if (!PAN.side) panels({ side: true });
+    if (SHUT[id]) { delete SHUT[id]; LS.set('mme-cards', JSON.stringify(SHUT)); c.classList.remove('shut'); const h = c.querySelector(':scope > h2'); if (h) h.setAttribute('aria-expanded', 'true'); }
+    requestAnimationFrame(() => {                     // scroll the panel alone: the page itself stays where it is
+      const a = c.closest('aside'); if (!a || c.hidden || !c.offsetParent) return; const ar = a.getBoundingClientRect(), cr = c.getBoundingClientRect(), d = cr.top - ar.top;
+      if (top || d < 0 || cr.bottom > ar.bottom) a.scrollTo({ top: a.scrollTop + (top || d < 0 ? d : Math.min(d, cr.bottom - ar.bottom)), behavior: 'smooth' });
+    });
+  }
+  document.addEventListener('click', e => { const b = e.target.closest ? e.target.closest('[data-reveal]') : null; if (b) reveal(b.dataset.reveal); });
+  MME.shell = { openMap, closeMap, openPractice, panels, reveal, refit: () => applyFit(false), get cur() { return cur; }, renderLibrary };
 })();
