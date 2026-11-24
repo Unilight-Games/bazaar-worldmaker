@@ -29,6 +29,8 @@ const FEAT_BASE = {
   p: { name: 'ฟยอร์ด', col: '#4a6a84', on: 'coast', y: { protein: 0.4, timber: 0.2 }, farm: 0, water: 0, well: 0, tour: 0.8, cross: -0.2, g: 'fjord' },
   q: { name: 'ภูเขาหินปูน', col: '#8a9a7a', on: 'land', y: { stone: 0.5, herbs: 0.1 }, farm: 0, water: 0, well: 0, tour: 0.8, cross: 0.4, g: 'karst' },
   r: { name: 'ที่ราบสูงยอดตัด', col: '#b0704c', on: 'land', y: { stone: 0.3, ore: 0.1 }, farm: 0, water: 0, well: 0, tour: 0.5, cross: 0.3, g: 'mesa' },
+  // asked for next (v0.16.1): islands strewn over open sea, where the ground of the map is sea; the ground "หมู่เกาะ" is shallow sea full of islets already
+  s: { name: 'หมู่เกาะกลางทะเล', col: '#78a86e', on: 'sea', y: { protein: 0.4, timber: 0.15, luxury: 0.05 }, farm: 0, water: 1, well: 0, tour: 0.4, cross: -0.1, g: 'isles' },
 };
 const FEAT_ON = { land: 'บนแผ่นดิน', coast: 'แผ่นดินริมทะเล', sea: 'ในทะเล', any: 'ที่ไหนก็ได้' };
 const FEAT_CODES = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -195,6 +197,7 @@ const FEATG = {
   fjord(c, x, y) { poly(c, [[x - 3.4, y - 2.6], [x - 0.8, y - 2.6], [x - 0.4, y + 2.6], [x - 3.4, y + 2.6]], 'rgb(120,126,120)', 'rgb(70,74,70)'); poly(c, [[x + 0.8, y - 2.6], [x + 3.4, y - 2.6], [x + 3.4, y + 2.6], [x + 0.4, y + 2.6]], 'rgb(120,126,120)', 'rgb(70,74,70)'); poly(c, [[x - 0.8, y - 2.6], [x + 0.8, y - 2.6], [x + 0.4, y + 2.6], [x - 0.4, y + 2.6]], 'rgb(50,86,118)'); },
   karst(c, x, y) { for (const [dx, hh] of [[-2.2, 3], [0, 4.2], [2.2, 2.6]]) { poly(c, [[x + dx - 1, y + 2], [x + dx - 0.8, y + 2 - hh], [x + dx + 0.8, y + 2 - hh], [x + dx + 1, y + 2]], 'rgb(140,152,124)', 'rgb(70,80,62)'); ell(c, x + dx, y + 2 - hh, 0.9, 0.5, 'rgb(96,132,80)'); } },
   mesa(c, x, y) { poly(c, [[x - 3.6, y + 2], [x - 2.2, y - 1.8], [x + 2.2, y - 1.8], [x + 3.6, y + 2]], 'rgb(178,104,70)', 'rgb(96,52,34)'); seg(c, x - 2.6, y - 0.4, x + 2.6, y - 0.4, 'rgb(140,76,50)', 0.4); seg(c, x - 3, y + 0.8, x + 3, y + 0.8, 'rgb(140,76,50)', 0.4); },
+  isles(c, x, y) { for (const [dx, dy, r] of [[-2.2, -0.8, 1.2], [0.6, 0.9, 1.5], [2.4, -1.2, 0.9]]) { ell(c, x + dx, y + dy, r, r * 0.7, 'rgb(212,196,150)'); ell(c, x + dx, y + dy - 0.15, r * 0.65, r * 0.45, 'rgb(98,146,84)'); } },
   cave(c, x, y) { poly(c, [[x - 3.4, y + 1.8], [x - 2.4, y - 1.6], [x, y - 2.6], [x + 2.4, y - 1.6], [x + 3.4, y + 1.8]], 'rgb(130,122,110)', 'rgb(70,64,58)'); ell(c, x, y + 0.9, 1.4, 1.5, 'rgb(34,30,36)'); },
 };
 function featDraw(c) {
@@ -265,3 +268,61 @@ featPalette(); featCard();
   return at >= 0 ? h.slice(0, at) + add + h.slice(at) : h + add;
 }; }
 { const tl = tradeLinkHTML; tradeLinkHTML = function (L) { let h = tl(L); if (L && Math.abs(L.featCross || 0) >= 0.005) h += `<div class="tr">ผ่านลักษณะพิเศษ <span class="w">ทาง${L.featCross > 0 ? 'แพงขึ้น' : 'ถูกลง'}ร้อยละ ${ecoPc(Math.abs(L.featCross))}</span></div>`; return L && L.featDry > 0 ? h + `<div class="tr">ผ่านจุดพักน้ำ <span class="w">ช่วงที่แห้งแล้ง (ร้อยละ ${ecoPc(L.featDry)} ของทาง) ถูกลงร้อยละ ${ecoPc(TU('featWater'))}${L.dauto && L.dauto.water ? ' และอันตรายลดหนึ่งขั้น' : ''}</span></div>` : h; }; }
+
+// ---- laid by rule (v0.16.1): the owner asked for a button that sets the features down from the ground as the map has it ----
+// Each kind has a rule read off the ground, the rivers, the mountains, the sea and the climate: where it may be, how likely it
+// is there, and how far apart two of a kind stand. Hexes that already carry a feature are left alone; the whole is one step of
+// undo. The rules and their chances are Claude's.
+function featAuto(amt, seed) {
+  const A = climEnsure(), g = i => eff(i), land = i => !isW(g(i)), sea = i => isSea(g(i));
+  const nbs = i => { const o = []; for (let j = 0; j < 6; j++) { const v = NB[i * 6 + j]; if (v >= 0) o.push(v); } return o; };
+  const bfs = src => { const d = new Uint16Array(N).fill(999), q = []; for (let i = 0; i < N; i++) if (src(i)) { d[i] = 0; q.push(i); } for (let h = 0; h < q.length; h++) { const u = q[h]; for (const v of nbs(u)) if (d[v] > d[u] + 1) { d[v] = d[u] + 1; q.push(v); } } return d; };
+  const dM = bfs(i => g(i) === 'M'), dL = bfs(land);
+  // How warm a hex is for this map, from 0 (its coldest land) to 1 (its warmest), and for the sea the nearest land's: the maps'
+  // climates are scaled each their own way (Gresland's winters read far colder than a new map's), so warmth is ranked within the map.
+  const tw = new Float32Array(N), seen = new Uint8Array(N), q = [], vals = [];
+  for (let i = 0; i < N; i++) if (land(i) && Number.isFinite(A.tw[i]) && Number.isFinite(A.ts[i])) vals.push([A.tw[i] + A.ts[i], i]);
+  vals.sort((a, b) => a[0] - b[0]); vals.forEach(([, i], k) => { tw[i] = vals.length > 1 ? k / (vals.length - 1) : 0.5; seen[i] = 1; q.push(i); });
+  for (let h = 0; h < q.length; h++) { const u = q[h]; for (const v of nbs(u)) if (!seen[v]) { seen[v] = 1; tw[v] = tw[u]; q.push(v); } }
+  const WARM = 'jvwrp', COLD = 'ftnk';
+  const river = i => (RV[i] === '1' && shownAt(i)) || URVH.has(i), DRY = 'dcyu', near = (i, f) => nbs(i).some(f), count = (i, f) => nbs(i).filter(f).length;
+  const RULE = {
+    a: [i => g(i) === 'd' && count(i, v => DRY.includes(g(v))) >= 4 && !river(i), 0.035, 5],
+    b: [i => 'jwmvp'.includes(g(i)) && near(i, sea) && tw[i] >= 0.6, 0.15, 2],
+    c: [i => land(i) && g(i) !== 'M' && dM[i] === 1 && !DRY.includes(g(i)), 0.025, 6],
+    d: [i => land(i) && g(i) !== 'M' && dM[i] === 1, 0.012, 8],
+    e: [i => DRY.includes(g(i)) && (near(i, v => g(v) === 'L') || count(i, v => DRY.includes(g(v))) === 6), 0.04, 7],
+    f: [i => 'mwt'.includes(g(i)) && tw[i] <= 0.45 && near(i, v => 'ftnkL'.includes(g(v))), 0.08, 4],
+    g: [i => 'ghes'.includes(g(i)) && (river(i) || near(i, v => g(v) === 'L')), 0.05, 4],
+    h: [i => g(i) === 'S' && near(i, land) && tw[i] >= 0.65 && near(i, v => WARM.includes(g(v)) || 'dsv'.includes(g(v))), 0.12, 3],
+    i: [i => land(i) && g(i) !== 'M' && dM[i] === 1, 0.01, 8],
+    j: [i => 'dcys'.includes(g(i)) && dM[i] <= 2 && g(i) !== 'M' && (river(i) ? true : hash(i, 61) < 0.15), 0.15, 4],
+    k: [i => g(i) === 'S' && dL[i] >= 3 && dL[i] <= 8 && tw[i] >= 0.75, 0.02, 8],
+    l: [i => g(i) === 'S' && (count(i, land) >= 3 || near(i, v => g(v) === 'i')), 0.06, 5],
+    m: [i => g(i) === 'S' && dL[i] >= 4, 0.004, 12],
+    n: [i => 'gposvem'.includes(g(i)) && river(i) && dM[i] >= 3, 0.06, 3],
+    o: [i => land(i) && river(i) && near(i, sea), 0.6, 3],
+    p: [i => land(i) && near(i, sea) && near(i, v => g(v) === 'M') && tw[i] <= 0.35 && (COLD.includes(g(i)) || near(i, v => COLD.includes(g(v)))), 0.4, 3],
+    q: [i => 'jofkae'.includes(g(i)) && dM[i] === 1 && tw[i] >= 0.4, 0.025, 6],
+    r: [i => 'dcys'.includes(g(i)) && dM[i] >= 1 && dM[i] <= 3 && !river(i), 0.025, 6],
+    s: [i => g(i) === 'S' && dL[i] >= 2 && dL[i] <= 4, 0.01, 7],
+  };
+  function hash(i, k) { let h = (i * 374761393 + k * 668265263 + seed * 1274126177) | 0; h = (h ^ (h >>> 13)) * 1274126177 | 0; h ^= h >>> 16; return (h >>> 0) / 4294967296; }
+  const ch = [], put = new Map(), byKind = {};
+  for (const [code, [ok, p, sp]] of Object.entries(RULE)) {
+    const k = FK[code]; if (!k) continue; const far = sp * 1.5 * R * sp * 1.5 * R; const mine = byKind[code] = [];
+    for (let i = 0; i < N; i++) if (ECO.feat[i] === code) mine.push(i);   // the ones already on the map keep their distance too
+    for (let i = 0; i < N; i++) {
+      if (ECO.feat[i] !== '.' || put.has(i) || !featOk(k, i) || !ok(i) || hash(i, code.charCodeAt(0)) >= p * amt) continue;
+      if (sp && mine.some(j => (CX[i] - CX[j]) ** 2 + (CY[i] - CY[j]) ** 2 < far)) continue;
+      put.set(i, code); mine.push(i); ch.push([i, '.', code]);
+    }
+  }
+  return ch;
+}
+{ const b = $('featAuto'); if (b) b.onclick = () => {
+  if (!editable) return; const amt = +($('featAutoAmt') ? $('featAutoAmt').value : 1) || 1, ch = featAuto(amt, (Math.random() * 1e9) | 0);
+  if (!ch.length) { const s = $('featAutoSay'); if (s) s.textContent = 'ไม่มีช่องที่เข้าเงื่อนไขของลักษณะพิเศษเหลืออยู่'; return; }
+  for (const [i, , c] of ch) ECO.feat[i] = c; pushOp({ k: 'ft', ch }); featChanged(false);
+  const n = {}; for (const [, , c] of ch) n[c] = (n[c] || 0) + 1; const s = $('featAutoSay'); if (s) s.textContent = 'วางแล้ว ' + Object.entries(n).map(([c, k]) => `${FK[c].name} ${k}`).join(' · ');
+}; }
