@@ -35,7 +35,7 @@
   const dayKey = t => new Date(t + TZ).toISOString().slice(0, 10);
   const hm = t => { const d = new Date(t + TZ); return String(d.getUTCHours()).padStart(2, '0') + ':' + String(d.getUTCMinutes()).padStart(2, '0'); };
   const ago = ms => { const m = Math.max(0, Math.round(ms / 60000)); return m < 1 ? 'เพิ่งเข้ามา' : m < 60 ? m + ' นาที' : Math.floor(m / 60) + ' ชม. ' + (m % 60) + ' นาที'; };
-  const kb = n => n >= 1048576 ? (n / 1048576).toFixed(1).replace(/\.0$/, '') + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+  const kb = n => !n ? '0 KB' : n >= 1048576 ? (n / 1048576).toFixed(1).replace(/\.0$/, '') + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
   const MB = 1048576, QUOTA = +window.MME_CLOUD_QUOTA || 100 * MB, FREE_DB = 1024 * MB;    // the owner's line per account; the free plan's whole database
   const num = n => Number(n || 0).toLocaleString('en-US');
   const AT = { menu: 'หน้าเมนู', map: 'กำลังแก้แผนที่', room: 'อยู่ในห้องแก้ร่วมกัน', tutor: 'เรียนกับเนเมสไซอาร์' };
