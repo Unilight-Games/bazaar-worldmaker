@@ -150,7 +150,7 @@ function tradeStateHTML(s) {
   const sign = v => (v >= 0 ? '+' : '−') + ecoNumF(Math.abs(v));
   let h = `<h3><i class="sdot" style="background:${s.color}"></i>${esc(s.name)}</h3><div class="tr w">${ESYS[s.sys][0]} · ${n} เมือง${tcat ? ' · เฉพาะ' + esc(ECAT[tcat].name) : ''}</div>`
     + `<div class="tr">ส่งออก <b>${ecoNumF(out)}</b> นำเข้า <b>${ecoNumF(inn)}</b> ${coin}</div>`
-    + `<div class="tr">${net >= 0 ? 'เกินดุล' : 'ขาดดุล'} <b>${ecoNumF(Math.abs(net))}</b> ${coin}${loc}</div><div class="tr w">ค้ากันเองในรัฐ ${ecoNumF(home)} ${coin}</div>`;
+    + `<div class="tr">${net >= 0 ? 'เกินดุลสินค้า' : 'ขาดดุลสินค้า'} <b>${ecoNumF(Math.abs(net))}</b> ${coin}${loc}</div><div class="tr w">ค้ากันเองในรัฐ ${ecoNumF(home)} ${coin}</div>`;
   if (!n) return h + `<div class="tr w">ยังไม่มีเมืองในเขตของรัฐนี้ จึงยังไม่มีการค้าให้นับ</div>`;
   const table = (title, m, name) => !m.size ? '' : `<h4>${title}</h4><div class="etable g4"><div class="eth"><span></span><span>ส่งออก</span><span>นำเข้า</span><span>ดุล</span></div>` + [...m].sort((x, y) => (y[1][0] + y[1][1]) - (x[1][0] + x[1][1])).map(([k, v]) => `<div class="etr"><span>${name(k)}</span><span>${ecoNumF(v[0])}</span><span>${ecoNumF(v[1])}</span><span class="${v[0] - v[1] >= 0 ? 'pos' : 'neg'}">${sign(v[0] - v[1])}</span></div>`).join('') + `</div>`;
   h += table('คู่ค้า', byP, k => { const o = ECOX.byKey.get(k); return o ? `<i class="sdot" style="background:${o.color}"></i>${esc(o.name)}` : 'เมืองที่ไม่ขึ้นกับรัฐใด'; });

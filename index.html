@@ -607,6 +607,37 @@ body:has(#mapscreen:not([hidden])) .uisize.fixed { display: none; }
 #ecocard .polset { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 4px 0 6px; font-size: .84rem; }
 #ecocard .polset label { display: inline-flex; align-items: center; gap: 4px; cursor: help; }
 #ecocard .etable .etr em, #ecocard .etable .etr span em { font-style: normal; color: var(--brass); font-size: .88em; }
+
+/* ---- v0.14.0: classes ---- */
+#ecocard .etable.g5c .eth, #ecocard .etable.g5c .etr, #tradecard .etable.g5c .eth, #tradecard .etable.g5c .etr { grid-template-columns: minmax(0, 1.4fr) repeat(4, minmax(0, 1fr)); }
+#ecocard .etable.g5c span:not(:first-child), #tradecard .etable.g5c span:not(:first-child) { text-align: right; }
+#ecocard .etable.g5c .etr span:first-child, #tradecard .etable.g5c .etr span:first-child { cursor: help; }
+#ecocard .clsgrp { margin: 6px 0 10px; }
+#ecocard .clsgrp h4 { margin: 6px 0 4px; }
+#ecocard .clsgrp h4 small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+#ecocard .clsv .tr, #tradecard .clsv .tr { font-size: .8rem; margin: 3px 0; }
+#mapscreen .vfoot { font-size: .74rem; color: var(--muted); text-align: right; padding: 4px 4px 10px; font-variant-numeric: tabular-nums; }
+/* ---- v0.14.0: one card a state, one card a city ---- */
+#ecocard details.scard { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px 8px; margin-top: 8px; background: rgba(255, 255, 255, .015); }
+#ecocard details.scard > summary { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; list-style: none; }
+#ecocard details.scard > summary::-webkit-details-marker { display: none; }
+#ecocard details.scard > summary::before { content: '▸'; color: var(--muted); width: 1em; }
+#ecocard details.scard[open] > summary::before { content: '▾'; }
+.schips { display: flex; flex-wrap: wrap; gap: 4px; flex-basis: 100%; margin-top: 2px; }
+.chip0 { display: inline-flex; align-items: center; gap: 4px; font-size: .74rem; font-weight: 400; color: var(--text); background: rgba(255, 255, 255, .06); border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; font-variant-numeric: tabular-nums; }
+.chip0.pos { color: var(--good, #7fc97f); } .chip0.neg { color: var(--warn, #e9806e); } .chip0.ok { color: var(--brass); }
+.chip0.link { cursor: pointer; } .chip0.link:hover { border-color: var(--brass); }
+#ecocard .ssec { border-top: 1px dashed var(--line); padding-top: 6px; margin-top: 8px; }
+#ecocard .ssec h5 { margin: 0 0 4px; font-size: .82rem; color: var(--brass); font-weight: 700; }
+#ecocard .sbtns { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 6px 0 2px; }
+#ecocard .sbtns .btn.on { border-color: var(--brass); color: var(--brass); }
+#ecocard .srel { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 4px 10px; }
+#ecocard .srel label { display: flex; align-items: center; gap: 6px; font-size: .84rem; }
+#ecocard .srel label span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ecocard details.sinner { margin-top: 8px; }
+.lnk { all: unset; cursor: pointer; color: var(--brass); font-size: .78em; font-weight: 400; margin-left: 6px; }
+.lnk:hover, .lnk:focus-visible { text-decoration: underline; }
+#ecocard .etr .lnk { color: var(--text); font-size: inherit; margin-left: 0; }
 </style>
 </head>
 <body>
@@ -887,21 +918,22 @@ body:has(#mapscreen:not([hidden])) .uisize.fixed { display: none; }
       <p class="note" id="editnote">งานแก้บันทึกอัตโนมัติ เปิดหน้านี้ครั้งหน้าก็ยังอยู่ ภาพแผนที่ที่บันทึกมีชื่อสถานที่และเมืองเมื่อเปิดปุ่มชื่อสถานที่ไว้ ถ้าปิดไว้ ภาพจะมีแต่ภูมิประเทศ ถนนและการค้าลงภาพตามที่เปิดไว้ในปุ่มเส้นทาง ช่องที่ระบายใหม่วาดด้วยลายแบบเดียวกับแผนที่</p></div>
     <div class="card" id="legcard"><h2>ภูมิประเทศ</h2><div class="legend" id="legend"></div></div>
     <div class="card" id="ptscard"><h2>สถานที่น่าสนใจ</h2><div class="legend" id="points"></div></div>
+    <div class="vfoot" id="vfoot"></div>
   </aside>
 </div>
 <section class="method"><div class="card" id="method"></div></section>
 </template>
 <script>window.MME_BUILD = "web"; window.MME_NO_GRESLAND = true;</script>
-<script src="firebase-config.js?v=0.13.0"></script>
-<script src="engine/gen.js?v=0.13.0"></script>
-<script src="engine/store.js?v=0.13.0"></script>
-<script src="engine/backup.js?v=0.13.0"></script>
-<script src="engine/net.js?v=0.13.0"></script>
-<script src="engine/fire.js?v=0.13.0"></script>
-<script src="engine/defaults.js?v=0.13.0"></script>
-<script src="engine/runtime.js?v=0.13.0"></script>
-<script src="engine/shell.js?v=0.13.0"></script>
-<script src="engine/tutor-lines.js?v=0.13.0"></script>
-<script src="engine/tutor.js?v=0.13.0"></script>
+<script src="firebase-config.js?v=0.14.0"></script>
+<script src="engine/gen.js?v=0.14.0"></script>
+<script src="engine/store.js?v=0.14.0"></script>
+<script src="engine/backup.js?v=0.14.0"></script>
+<script src="engine/net.js?v=0.14.0"></script>
+<script src="engine/fire.js?v=0.14.0"></script>
+<script src="engine/defaults.js?v=0.14.0"></script>
+<script src="engine/runtime.js?v=0.14.0"></script>
+<script src="engine/shell.js?v=0.14.0"></script>
+<script src="engine/tutor-lines.js?v=0.14.0"></script>
+<script src="engine/tutor.js?v=0.14.0"></script>
 </body>
 </html>

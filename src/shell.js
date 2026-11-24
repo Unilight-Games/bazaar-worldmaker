@@ -2,7 +2,7 @@
 // the sheet for a new map, and the room around an open map.
 (function () {
   const MME = window.MME;
-  MME.VERSION = '0.13.0';
+  MME.VERSION = '0.14.0';
   MME.NAME = 'Bazaar Worldmaker';
   MME.GRESLAND_KM = 34;   // canon: the continent is about 12 million square kilometres, and the map draws it on 12,208 hexes
   const $ = id => document.getElementById(id);
@@ -318,11 +318,11 @@
   }
   document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-ui]'); if (b) setUi(b.dataset.ui, true); });
   setUi(LS.get('mme-ui') || 'm');
-  function showScreen(map) { $('menu').hidden = map; $('mapscreen').hidden = !map; window.scrollTo(0, 0); }
+  function showScreen(map) { $('menu').hidden = map; $('mapscreen').hidden = !map; $('vtag').hidden = map; window.scrollTo(0, 0); }   // on the map the version sits at the foot of the side panel, where it covers nothing (v0.14.0)
   async function mount(meta, db, guestRoom, practice) {
     const scr = $('mapscreen'); scr.innerHTML = '<div id="mapload">กำลังเปิดแผนที่</div>'; showScreen(true);
     let base; try { base = await baseFor(meta); } catch (err) { showScreen(false); toast(err && err.code === 'nobase' ? 'แผนที่ผืนนี้วาดบนพื้นเกรสแลนด์ ซึ่งหน้านี้ไม่มี ให้ส่งออกไฟล์ใหม่จากหน้าที่มีเกรสแลนด์ด้วยเวอร์ชัน 0.8.2 ขึ้นไป แล้วนำเข้าอีกครั้ง' : 'โหลดพื้นแผนที่ไม่สำเร็จ ลองเปิดใหม่อีกครั้ง', err && err.code === 'nobase' ? 9000 : undefined); return false; }
-    scr.innerHTML = ''; scr.appendChild($('tpl-map').content.cloneNode(true)); scr.classList.toggle('blank', !!base.blank); setUi(LS.get('mme-ui') || 'm');
+    scr.innerHTML = ''; scr.appendChild($('tpl-map').content.cloneNode(true)); if ($('vfoot')) $('vfoot').textContent = MME.NAME + ' v' + MME.VERSION; scr.classList.toggle('blank', !!base.blank); setUi(LS.get('mme-ui') || 'm');
     const side = scr.querySelector('aside'), meth = scr.querySelector('section.method'); if (side && meth) side.appendChild(meth);   // the notes under the map live in the side panel
     applyFit(true);
     if (base.blank) {                               // words that belong to Gresland alone

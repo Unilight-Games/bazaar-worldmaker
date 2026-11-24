@@ -64,7 +64,7 @@ function slaveApply(rows) {
   return rows;
 }
 const __incLabor = ecoIncome;
-ecoIncome = function (rows) { __incLabor(rows); socApply(rows); return slaveApply(rows); };
+ecoIncome = function (rows) { __incLabor(rows); socApply(rows); slaveApply(rows); classApply(rows); return rows; };
 
 function slaveHTML() {
   if (!ECON) return '';

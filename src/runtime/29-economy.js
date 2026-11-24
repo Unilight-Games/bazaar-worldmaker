@@ -9,7 +9,7 @@ const ECO = { goods: {}, custom: [], cats: {}, ucats: [], tune: {}, work: {}, po
 // load of staple food, is ECOIN coins for each of those people: a person's grain for a year costs 40 coins, and what a person
 // makes in a year comes to about 250, when a coin is roughly what unskilled work earns in most of a day. Both are my numbers.
 const EUNIT = 1000, ECOIN = 40;
-let POL = null, POLG = 0, POLC = 0;               // what each state is doing about its balance this year (worked out in the society part), and the two numbers it hands back to a trade
+let POL = null, FXS = null, POLG = 0, POLC = 0;               // what each state is doing about its balance this year (worked out in the society part), and the two numbers it hands back to a trade
 // How many people the whole map holds (v0.10.0, the owner's five levels and his words for them). With a level chosen, the people
 // of a head of the model follow from it: the level's number shared over every city by its weight. The numbers inside each band are mine.
 // The levels of people a map can hold (v0.11.1, the owner's three): a few million, a few hundred million, billions. Anything else
@@ -251,7 +251,8 @@ function ecoEarn(i, j, cat, pi, pj, v, t, bulk, phase, w) {
       if (!black && si && si.sys === 'merc' && MERCKEEP.has(cat)) cost += TU('keep') * v;                          // and raw stuff kept at home
     }
   }
-  if (POL && phase >= 0 && !(w && w.org)) { polEarn(ci, cj, cat, pi, pj, v, gain, cost); gain = POLG; cost = POLC; }   // what a state does about its balance: a wall, a bounty, a cheaper coin
+  if (phase >= 0 && !(w && w.org) && ci.sto !== cj.sto && SOC_BASIC.has(cat)) { const hp = TU('homePref'); if (hp > 0) cost += hp * (1 - (cj.rich0 == null ? 0.5 : cj.rich0)) * pj * v; }   // the not-so-rich buy their staples at home unless the foreign is clearly cheaper (v0.14.0)
+  if ((POL || FXS) && phase >= 0 && !(w && w.org)) { polEarn(ci, cj, cat, pi, pj, v, gain, cost); gain = POLG; cost = POLC; }   // what a state does about its balance: a wall, a bounty, a cheaper coin
   let m = gain * v - cost;
   if (m > 0 && ECOX.bargain) m *= 1 + TU('big') * Math.log2(Math.max(0.25, cj.pop) / 4);                    // a great market is served before a small one
   return m;

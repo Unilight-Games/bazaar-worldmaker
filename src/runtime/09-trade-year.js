@@ -36,6 +36,7 @@ function econCompute() {
     const H = Hs[k], cn = ECANON[c.id] || {};
     for (const g of EGOODS) { if (g.off) continue; let v = (g.f(H) + (g.far ? g.f(Ho[k]) : 0)) * (g.pct == null ? 1 : g.pct); if (!(v > 0.004)) continue; v *= (cn[g.cat] || 1) * orgProd(c, g.cat) * socRaw(c, g.cat); if (g.id === 'silver' && c.id === 'vidsaga') v *= 1.5; prod[k].set(g.id, v); }
   });
+  socRich(cities, prod);                            // how the city's money falls between its classes, and what its country brings up: what its people will want
   // what each city needs, before its workshops
   const need = cities.map(c => {
     const m = {}; for (const cat of ECATS) m[cat] = ENEED[cat][c.ki] * c.pop * socNeed(c, cat); if (!c.port) m.ships = 0;
@@ -214,7 +215,7 @@ function econCompute() {
   for (const f of flows) { const val = f.amt * ECAT[f.cat].v, seen = new Set([f.from]); let at = f.from; for (const [li] of f.way) { const L = links[li]; at = L.ia === at ? L.ib : L.ia; seen.add(at); } for (const k of seen) cities[k].through += val; }
   const top = Math.max(0, ...cities.map(c => c.through));
   for (const c of cities) { c.level = c.rank; c.sug = !(top > 0) ? 0 : c.through >= 0.5 * top ? 3 : c.through >= 0.2 * top ? 2 : c.through >= 0.05 * top ? 1 : 0; }
-  ECON = { ver: (ECON ? ECON.ver : 0) + 1, plan, cities, prod, need, got, left, flows, links, bundles: null, NT, NWAY, P0, P1, MK, rounds, land: LP, ms: 0 };
+  ECON = { ver: (ECON ? ECON.ver : 0) + 1, plan, cities, prod, need, got, left, flows, links, bundles: null, NT, NWAY, P0, P1, MK, rounds, land: LP, hin: own, hout: outer, ms: 0 };
   LP.ver = ECON.ver; landCompute();
   try { socYear(ECON); } catch (err) { console.error('society', err); }   // who ends up where and with what: people on the move, visitors, slaves as a class of goods, each state's books
   ECON.bundles = eBundles(links, cities); ECON.ms = performance.now() - t0;
