@@ -2,7 +2,7 @@
 // the sheet for a new map, and the room around an open map.
 (function () {
   const MME = window.MME;
-  MME.VERSION = '0.18.0';
+  MME.VERSION = '0.18.1';
   MME.NAME = 'Bazaar Worldmaker';
   MME.GRESLAND_KM = 34;   // canon: the continent is about 12 million square kilometres, and the map draws it on 12,208 hexes
   const $ = id => document.getElementById(id);
@@ -306,6 +306,30 @@
     if (u && u.name && !$('myName').value.trim() && !LS.get('mme-name')) { $('myName').value = u.name.slice(0, 24); LS.set('mme-name', $('myName').value); }
   }
   if (fire) { acctUI(); fire.ready.then(acctUI); }
+  // ---------- sharing the page (v0.18.1, the owner's ask) ----------
+  // Always the official page on GitHub, whichever copy is open: the Claude artifact is private to its owner and the one-file
+  // build is a file on someone's disk, so neither is a link a friend can open. The usage policy lets anyone share this link.
+  MME.SITE = 'https://unilight-games.github.io/bazaar-worldmaker/';
+  const SHARE_TEXT = 'Bazaar Worldmaker ตลาดขายโลก เครื่องมือสร้างแผนที่โลกแฟนตาซีบนช่องหกเหลี่ยม ใช้ฟรีในเบราว์เซอร์';
+  const SHARE_TO = {
+    facebook: u => 'https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(u),
+    line: u => 'https://social-plugins.line.me/lineit/share?url=' + encodeURIComponent(u),
+    x: u => 'https://twitter.com/intent/tweet?url=' + encodeURIComponent(u) + '&text=' + encodeURIComponent(SHARE_TEXT)
+  };
+  async function copyText(t) {
+    try { if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(t); return true; } } catch (err) { /* the older way below */ }
+    try { const el = $('shareUrl'); el.focus(); el.select(); return document.execCommand('copy'); } catch (err) { return false; }
+  }
+  $('shareBtn').onclick = () => {
+    $('shareUrl').value = MME.SITE; $('shareNative').hidden = !(navigator.share && typeof navigator.share === 'function');
+    $('shareVeil').hidden = false; setTimeout(() => $('shareUrl').select(), 30);
+  };
+  $('shareClose').onclick = () => { $('shareVeil').hidden = true; };
+  $('shareVeil').addEventListener('click', e => { if (e.target === $('shareVeil')) $('shareVeil').hidden = true; });
+  $('shareCopy').onclick = async () => { toast(await copyText(MME.SITE) ? 'คัดลอกลิงก์แล้ว ส่งให้เพื่อนได้เลย' : 'คัดลอกเองไม่ได้ ให้เลือกลิงก์ในช่องแล้วคัดลอก'); };
+  $('shareNative').onclick = async () => { try { await navigator.share({ title: 'Bazaar Worldmaker', text: SHARE_TEXT, url: MME.SITE }); } catch (err) { if (!(err && err.name === 'AbortError')) toast('แชร์ผ่านแอปไม่ได้ ใช้ปุ่มคัดลอกลิงก์แทน'); } };
+  for (const b of document.querySelectorAll('[data-share]')) b.onclick = () => { const w = window.open(SHARE_TO[b.dataset.share](MME.SITE), '_blank', 'width=620,height=560'); if (w) { try { w.opener = null; } catch (err) { /* another site's window */ } } else toast('หน้านี้เปิดหน้าต่างใหม่ไม่ได้ ใช้ปุ่มคัดลอกลิงก์แทน'); };
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('shareVeil').hidden) $('shareVeil').hidden = true; });
   $('myName').value = LS.get('mme-name') || '';
   $('myName').onchange = () => LS.set('mme-name', $('myName').value.trim().slice(0, 24));
 

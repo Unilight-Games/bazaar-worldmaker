@@ -3,6 +3,7 @@
   <div class="brand">
     <h1><small>Kirana Worldbuilding Tools</small>Bazaar Worldmaker<em>ตลาดขายโลก</em></h1>
     <p>สร้างแผนที่ช่องหกเหลี่ยม ระบายภูมิประเทศ วางแม่น้ำ เมือง ถนน และเส้นทางการค้า แล้วชวนเพื่อนเข้ามาแก้แผนที่ผืนเดียวกันพร้อมกัน</p>
+    <button type="button" class="btn sharebtn" id="shareBtn">แชร์ Bazaar Worldmaker</button>
   </div>
   <div class="menugrid">
     <div class="side">
@@ -102,6 +103,20 @@
     <div class="seg" id="hubBoTabs"><button type="button" data-hub="view" data-v="on">ออนไลน์ตอนนี้</button><button type="button" data-hub="view" data-v="stat">สถิติการเข้าออก</button><button type="button" data-hub="view" data-v="maps">แผนที่ที่สำรอง</button><button type="button" data-hub="view" data-v="chat">แชท</button></div>
     <div id="hubBo"></div>
     <div class="foot"><button type="button" class="btn" data-hub="close">ปิด</button></div>
+  </div>
+</div>
+<div class="veil" id="shareVeil" hidden>
+  <div class="sheet sharesheet" role="dialog" aria-labelledby="shareHead">
+    <h2 id="shareHead">แชร์ Bazaar Worldmaker</h2>
+    <p class="note2">ส่งลิงก์ของหน้าเว็บทางการให้เพื่อน เพื่อนเปิดใช้ในเบราว์เซอร์ได้ทันทีโดยไม่ต้องติดตั้งอะไร</p>
+    <div class="sharerow"><input type="text" id="shareUrl" readonly aria-label="ลิงก์ของ Bazaar Worldmaker"><button type="button" class="btn brass" id="shareCopy">คัดลอกลิงก์</button></div>
+    <div class="sharevia">
+      <button type="button" class="btn" id="shareNative" hidden>แชร์ผ่านแอปในเครื่อง</button>
+      <button type="button" class="btn" data-share="facebook">Facebook</button>
+      <button type="button" class="btn" data-share="line">LINE</button>
+      <button type="button" class="btn" data-share="x">X</button>
+    </div>
+    <div class="foot"><button type="button" class="btn" id="shareClose">ปิด</button></div>
   </div>
 </div>
 <div id="mtoast" role="status" hidden></div>

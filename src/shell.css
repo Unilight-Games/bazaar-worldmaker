@@ -524,3 +524,10 @@ body:has(#mapscreen:not([hidden])) .uisize.fixed { display: none; }
 .hubt.hub5 > div { grid-template-columns: 2fr 1.3fr 1.3fr .8fr 1.1fr; }
 .hubt .hubh { color: var(--muted, #9a9384); font-size: .88em; }
 #acctId code, .hubt code { font-size: .85em; user-select: all; }
+
+/* v0.18.1: sharing the page */
+.sharebtn { align-self: center; margin-left: auto; }
+.sharesheet { max-width: 520px; width: min(520px, 94vw); }
+.sharerow { display: flex; gap: 6px; margin: 10px 0; }
+.sharerow input { flex: 1; min-width: 0; font-size: .92em; }
+.sharevia { display: flex; flex-wrap: wrap; gap: 6px; }
