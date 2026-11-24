@@ -13,7 +13,9 @@
 //                          let any page clear what came before that midnight, so the chat empties itself each night.
 //   maps/<account>/<map>   a copy of each map as its file, sent when its owner leaves it, never while they work on it, and only
 //   mapix/<account>/<map>  after the page has told them so; they turn it off on the menu. Only an admin and the owner read them.
-//   admin/<account>        true for the owner's account, set by hand in the Firebase console. Nothing on the page writes it.
+//   admin/<account>        true for an admin's account, set by hand in the Firebase console. Nothing on the page writes it.
+//                          The rules also name the owner's admin account by its verified Google email (ADMIN_EMAIL in the
+//                          copy of the rules in this repo; the owner's own copy carries the address).
 // An admin gets no key to anyone's room: a room still opens only to its code, given by the person who owns the map.
 (function () {
   'use strict';
@@ -71,7 +73,11 @@
     since = Date.now(); where = whereNow();
     arrive();
     off(H.value('bw/on', v => { const list = Object.values(v || {}); online = { n: list.length, g: list.filter(x => x && x.g).length }; renderOnline(); }, () => {}));
-    off(H.value('bw/admin/' + uid, v => { admin = v === true; renderAdmin(); }, () => { admin = false; renderAdmin(); }));
+    // an admin is named in the database (admin/<account>) or by a verified Google email in the rules themselves (v0.18.2, the
+    // owner's choice): the page cannot read the rules, so it asks the database for a list only an admin may read
+    let named = false, byRule = false; const tell = () => { admin = named || byRule; renderAdmin(); }, u0 = uid;
+    off(H.value('bw/admin/' + uid, v => { named = v === true; tell(); }, () => { named = false; tell(); }));
+    if (google()) H.get('bw/who').then(() => { if (uid === u0) { byRule = true; tell(); } }, () => {});
     off(H.value('bw/chatban/' + uid, v => { banned = v === true; renderChat(); }, () => {}));
     listenChat();
     setTimeout(sync, 2500);

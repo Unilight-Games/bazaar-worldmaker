@@ -62,7 +62,7 @@
         }
       },
       "who": {
-        ".read": "auth != null && root.child('bw/admin/' + auth.uid).val() === true",
+        ".read": "auth != null && (root.child('bw/admin/' + auth.uid).val() === true || (auth.token.email_verified === true && auth.token.email === 'ADMIN_EMAIL'))",
         "$k": {
           ".write": "auth != null && $k.beginsWith(auth.uid + '_') && $k.matches(/^[A-Za-z0-9]{1,128}_[a-z0-9]{6,16}$/)",
           ".validate": "newData.hasChildren(['t', 's', 'at']) && newData.child('t').isNumber() && newData.child('s').isNumber() && newData.child('at').isString() && newData.child('at').val().length <= 12 && (!newData.child('n').exists() || (newData.child('n').isString() && newData.child('n').val().length <= 60)) && (!newData.child('g').exists() || newData.child('g').val() === (auth.token.firebase.sign_in_provider === 'google.com'))",
@@ -77,7 +77,7 @@
           "t"
         ],
         "$m": {
-          ".write": "(!data.exists() && newData.exists() && auth != null && auth.token.firebase.sign_in_provider === 'google.com' && !root.child('bw/chatban/' + auth.uid).exists() && newData.child('u').val() === auth.uid && newData.parent().parent().child('chatlast/' + auth.uid).val() === now) || (data.exists() && !newData.exists() && auth != null && (root.child('bw/admin/' + auth.uid).val() === true || data.child('u').val() === auth.uid || data.child('t').val() < (now - ((now + 25200000) % 86400000))))",
+          ".write": "(!data.exists() && newData.exists() && auth != null && auth.token.firebase.sign_in_provider === 'google.com' && !root.child('bw/chatban/' + auth.uid).exists() && newData.child('u').val() === auth.uid && newData.parent().parent().child('chatlast/' + auth.uid).val() === now) || (data.exists() && !newData.exists() && auth != null && (root.child('bw/admin/' + auth.uid).val() === true || (auth.token.email_verified === true && auth.token.email === 'ADMIN_EMAIL') || data.child('u').val() === auth.uid || data.child('t').val() < (now - ((now + 25200000) % 86400000))))",
           ".validate": "newData.hasChildren(['u', 'n', 'm', 't']) && newData.child('t').val() === now && newData.child('m').isString() && newData.child('m').val().length >= 1 && newData.child('m').val().length <= 300 && newData.child('n').isString() && newData.child('n').val().length <= 100 && (newData.child('n').val() === auth.token.name || (auth.token.name == null && newData.child('n').val() === 'ไม่ระบุชื่อ'))",
           "$o": {
             ".validate": "$o === 'u' || $o === 'n' || $o === 'm' || $o === 't'"
@@ -91,15 +91,15 @@
         }
       },
       "chatban": {
-        ".read": "auth != null && root.child('bw/admin/' + auth.uid).val() === true",
+        ".read": "auth != null && (root.child('bw/admin/' + auth.uid).val() === true || (auth.token.email_verified === true && auth.token.email === 'ADMIN_EMAIL'))",
         "$uid": {
           ".read": "auth != null && auth.uid === $uid",
-          ".write": "auth != null && root.child('bw/admin/' + auth.uid).val() === true",
+          ".write": "auth != null && (root.child('bw/admin/' + auth.uid).val() === true || (auth.token.email_verified === true && auth.token.email === 'ADMIN_EMAIL'))",
           ".validate": "newData.isBoolean()"
         }
       },
       "users": {
-        ".read": "auth != null && root.child('bw/admin/' + auth.uid).val() === true",
+        ".read": "auth != null && (root.child('bw/admin/' + auth.uid).val() === true || (auth.token.email_verified === true && auth.token.email === 'ADMIN_EMAIL'))",
         "$uid": {
           ".write": "auth != null && auth.uid === $uid",
           ".validate": "newData.hasChildren(['t']) && newData.child('t').isNumber() && (!newData.child('n').exists() || (newData.child('n').isString() && newData.child('n').val().length <= 60)) && (!newData.child('g').exists() || newData.child('g').val() === (auth.token.firebase.sign_in_provider === 'google.com'))",
@@ -109,8 +109,8 @@
         }
       },
       "log": {
-        ".read": "auth != null && root.child('bw/admin/' + auth.uid).val() === true",
-        ".write": "auth != null && root.child('bw/admin/' + auth.uid).val() === true",
+        ".read": "auth != null && (root.child('bw/admin/' + auth.uid).val() === true || (auth.token.email_verified === true && auth.token.email === 'ADMIN_EMAIL'))",
+        ".write": "auth != null && (root.child('bw/admin/' + auth.uid).val() === true || (auth.token.email_verified === true && auth.token.email === 'ADMIN_EMAIL'))",
         "$day": {
           "$e": {
             ".write": "auth != null && !data.exists() && newData.child('u').val() === auth.uid",
@@ -122,8 +122,8 @@
         }
       },
       "stat": {
-        ".read": "auth != null && root.child('bw/admin/' + auth.uid).val() === true",
-        ".write": "auth != null && root.child('bw/admin/' + auth.uid).val() === true",
+        ".read": "auth != null && (root.child('bw/admin/' + auth.uid).val() === true || (auth.token.email_verified === true && auth.token.email === 'ADMIN_EMAIL'))",
+        ".write": "auth != null && (root.child('bw/admin/' + auth.uid).val() === true || (auth.token.email_verified === true && auth.token.email === 'ADMIN_EMAIL'))",
         "$day": {
           ".validate": "$day.matches(/^20[0-9]{2}-[01][0-9]-[0-3][0-9]$/)",
           "in": {
@@ -148,20 +148,20 @@
         }
       },
       "maps": {
-        ".read": "auth != null && root.child('bw/admin/' + auth.uid).val() === true",
+        ".read": "auth != null && (root.child('bw/admin/' + auth.uid).val() === true || (auth.token.email_verified === true && auth.token.email === 'ADMIN_EMAIL'))",
         "$uid": {
           ".read": "auth != null && auth.uid === $uid",
-          ".write": "(auth != null && auth.uid === $uid) || (auth != null && root.child('bw/admin/' + auth.uid).val() === true && !newData.exists())",
+          ".write": "(auth != null && auth.uid === $uid) || (auth != null && (root.child('bw/admin/' + auth.uid).val() === true || (auth.token.email_verified === true && auth.token.email === 'ADMIN_EMAIL')) && !newData.exists())",
           "$map": {
             ".validate": "$map.matches(/^[A-Za-z0-9_-]{1,40}$/) && newData.hasChildren(['d', 'at']) && newData.child('d').isString() && newData.child('d').val().length <= 8000000 && newData.child('at').isNumber()"
           }
         }
       },
       "mapix": {
-        ".read": "auth != null && root.child('bw/admin/' + auth.uid).val() === true",
+        ".read": "auth != null && (root.child('bw/admin/' + auth.uid).val() === true || (auth.token.email_verified === true && auth.token.email === 'ADMIN_EMAIL'))",
         "$uid": {
           ".read": "auth != null && auth.uid === $uid",
-          ".write": "(auth != null && auth.uid === $uid) || (auth != null && root.child('bw/admin/' + auth.uid).val() === true && !newData.exists())",
+          ".write": "(auth != null && auth.uid === $uid) || (auth != null && (root.child('bw/admin/' + auth.uid).val() === true || (auth.token.email_verified === true && auth.token.email === 'ADMIN_EMAIL')) && !newData.exists())",
           "$map": {
             ".validate": "$map.matches(/^[A-Za-z0-9_-]{1,40}$/) && newData.hasChildren(['title', 'at', 'size']) && newData.child('title').isString() && newData.child('title').val().length <= 80 && newData.child('at').isNumber() && newData.child('size').isNumber()"
           }

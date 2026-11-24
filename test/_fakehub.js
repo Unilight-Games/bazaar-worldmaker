@@ -17,7 +17,7 @@ module.exports = function makeHubFake(opts) {
   bc.onmessage = e => { const op = e.data; if (op.op === 'hello') bc.postMessage({ op: 'sync', tree: JSON.parse(JSON.stringify(tree)) }); else if (op.op === 'sync') { const merge = (a, b) => { for (const [k, v] of Object.entries(b)) { if (v && typeof v === 'object' && a[k] && typeof a[k] === 'object') merge(a[k], v); else if (!(k in a)) a[k] = v; } }; merge(tree, op.tree); fireAll(); } else apply(op); };
   bc.postMessage({ op: 'hello' });
   addEventListener('pagehide', () => { for (const [p, v] of gone) bc.postMessage({ op: 'set', path: p, val: v }); });
-  const isAdmin = () => get('bw/admin/' + uidNow()) === true;
+  const isAdmin = () => get('bw/admin/' + uidNow()) === true || (!!user && !!opts.email && opts.email === opts.adminEmail);   // the rules name an admin by a verified email too
   const deny = what => { window.__hubDenied = (window.__hubDenied || []).concat([what]); const e = new Error('PERMISSION_DENIED ' + what); e.code = 'PERMISSION_DENIED'; return e; };
   const ADMIN_READ = /^bw\/(who|log|users|mapix|maps|chatban)$/;
   const mayRead = path => { if (ADMIN_READ.test(path) || /^bw\/(who|log|users)\//.test(path)) return isAdmin(); const m = /^bw\/(maps|mapix|admin|chatban)\/([^/]+)/.exec(path); if (m) return m[2] === uidNow() || (m[1] !== 'admin' && isAdmin()); return true; };
