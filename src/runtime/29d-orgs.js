@@ -138,9 +138,10 @@ function selectState(id) { tstate = id || null; tsel = null; tlsel = null; rende
 function tradeStateHTML(s) {
   const E = ECON, per = ECO.central.per, inS = E.cities.map(c => c.st === s.id), n = inS.filter(Boolean).length;
   const val = f => f.amt * ECAT[f.cat].v * (E.P1[f.to][f.cat] || 1) * per;
-  let out = 0, inn = 0, home = 0; const byP = new Map(), byC = new Map();
+  let out = 0, inn = 0, home = 0, slvOut = 0, slvIn = 0; const byP = new Map(), byC = new Map();
   for (const f of E.flows) {
     if (tcat && f.cat !== tcat) continue; const a = inS[f.from], b = inS[f.to]; if (!a && !b) continue; const v = val(f);
+    if (f.cat === 'labor' && !tcat) { if (a !== b) { if (a) slvOut += v; else slvIn += v; } continue; }   // people bought and sold stand on their own line
     if (a && b) { home += v; continue; }
     const other = E.cities[a ? f.to : f.from].st, P = byP.get(other) || byP.set(other, [0, 0]).get(other), C = byC.get(f.cat) || byC.set(f.cat, [0, 0]).get(f.cat);
     if (a) { out += v; P[0] += v; C[0] += v; } else { inn += v; P[1] += v; C[1] += v; }
@@ -154,6 +155,8 @@ function tradeStateHTML(s) {
   const table = (title, m, name) => !m.size ? '' : `<h4>${title}</h4><div class="etable g4"><div class="eth"><span></span><span>ส่งออก</span><span>นำเข้า</span><span>ดุล</span></div>` + [...m].sort((x, y) => (y[1][0] + y[1][1]) - (x[1][0] + x[1][1])).map(([k, v]) => `<div class="etr"><span>${name(k)}</span><span>${ecoNumF(v[0])}</span><span>${ecoNumF(v[1])}</span><span class="${v[0] - v[1] >= 0 ? 'pos' : 'neg'}">${sign(v[0] - v[1])}</span></div>`).join('') + `</div>`;
   h += table('คู่ค้า', byP, k => { const o = ECOX.byKey.get(k); return o ? `<i class="sdot" style="background:${o.color}"></i>${esc(o.name)}` : 'เมืองที่ไม่ขึ้นกับรัฐใด'; });
   h += table('ตามประเภทสินค้า', byC, c => `${chipT(c)}${esc(ECAT[c].name)}`);
+  if (slvOut + slvIn >= 1) h += `<div class="tr w">ซื้อขายทาสข้ามเขตรัฐ ขายออก ${ecoNumF(slvOut)} ซื้อเข้า ${ecoNumF(slvIn)} ${coin} ไม่นับในดุลข้างบน</div>`;
+  if (!tcat) h += socStateCardHTML(s);
   return h + `<div class="tr w">มูลค่านับตามราคาในเมืองที่ซื้อ หลังการค้าของปี คลิกที่ว่างนอกเขตเพื่อกลับไปดูทั้งเครือข่าย</div>`;
 }
 const __stSel = selectTrade, __stLink = selectLink;

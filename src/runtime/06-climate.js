@@ -356,7 +356,7 @@ function eHinterland(cities, far) {
   while (HN) {
     const u = hpop(); if (DONES[u] === s) continue; DONES[u] = s;
     if (isW(eff(u))) continue;                                     // water is claimed but not crossed
-    const k = own[u], reach = EREACH[cities[k].ki] * (far ? EFAR[cities[k].ki] : 1);
+    const k = own[u], reach = (cities[k].reach || EREACH[cities[k].ki]) * (far ? EFAR[cities[k].ki] : 1);
     for (let j = 0; j < 6; j++) {
       const v = NB[u * 6 + j]; if (v < 0 || DONES[v] === s) continue;
       const g = dist[u] + (eff(v) === 'M' ? 1.5 : 1); if (g > reach) continue;

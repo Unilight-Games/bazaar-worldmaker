@@ -33,4 +33,5 @@
 29d-orgs.js
 29e-land.js
 29f-labor.js
+29g-society.js
 30-api.js

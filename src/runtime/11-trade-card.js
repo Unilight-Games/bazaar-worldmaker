@@ -31,7 +31,7 @@ function tradeCityHTML(k) {
   if (cn) h += `<div class="tr">${esc(cn.why)}</div>`;
   if (c.zone === 'X') h += `<div class="tr w">${esc(ERULE.phantomstone.why)}</div>`;
   if (c.zone === 'S') h += `<div class="tr w">${esc(ERULE.adamant.why)} ${esc(ERULE.sephine.why)}</div>`;
-  h += `<h3>ผลผลิต</h3>` + (prod.length ? goodRows(prod.slice(0, 12)) + (prod.length > 12 ? `<div class="tr w">และอีก ${prod.length - 12} อย่าง</div>` : '') : '<div class="tr w">ไม่มี</div>');
+  h += '<!--prod-->' + prodHTML(k);
   h += priceHTML(k);
   h += `<h3>ส่งออก</h3>` + (out.length ? partnerRows(out, 'to') : '<div class="tr w">ไม่มี</div>');
   h += `<h3>นำเข้า</h3>` + (inn.length ? partnerRows(inn, 'from') : '<div class="tr w">ไม่มี</div>');
@@ -58,22 +58,31 @@ function rankHTML(k, nl) {                          // the city as a centre: its
   }
   return h;
 }
-function priceHTML(k) {                             // what each category costs in the city, before and after trade
-  const E = ECON, rows = [];
+// The city's own tables (v0.13.0, the owner asked to see all of it): everything it makes and every class it prices, each list
+// folded or open as the owner left it and in the order of the column last clicked.
+const TCV = (() => { const d = { pk: 'amt', pd: -1, ck: 'price', cd: -1, prod: 1, price: 1 }; try { return Object.assign(d, JSON.parse(localStorage.getItem('mme-tc') || '{}')); } catch (err) { return d; } })();
+const tcKeep = () => { try { localStorage.setItem('mme-tc', JSON.stringify(TCV)); } catch (err) { /* a browser that keeps nothing */ } };
+const tfold = (id, title, body) => `<details class="tfold" data-tfold="${id}"${TCV[id] === 0 ? '' : ' open'}><summary>${title}</summary>${body}</details>`;
+const thead = (kind, cols, sk, dir) => `<div class="eth sortable">${cols.map(([k, t]) => `<span data-ts="${kind}:${k}" title="กดเพื่อเรียงตามช่องนี้">${t}${k === sk ? (dir > 0 ? ' ▲' : ' ▼') : ''}</span>`).join('')}</div>`;
+const tsort = (rows, sk, dir) => rows.sort((a, b) => (sk === 'name' ? dir * a.name.localeCompare(b.name, 'th') : dir * (a[sk] - b[sk])) || a.name.localeCompare(b.name, 'th'));
+function prodHTML(k) {                              // everything the city makes, with its worth at the city's own price and what it could not sell
+  const E = ECON, per = ECO.central.per, cols = [['name', 'สินค้า'], ['amt', 'ผลิต'], ['val', 'มูลค่า'], ['left', 'ขายไม่หมด']];
+  const rows = [...E.prod[k]].filter(([id, v]) => (!tcat || catOf(id) === tcat) && v > 0.004).map(([id, v]) => { const cat = catOf(id); return { id, cat, name: goodName(id), amt: v, val: v * ECAT[cat].v * (E.P1[k][cat] || 1) * per, left: E.left[k].get(id) || 0 }; });
+  const sk = cols.some(c => c[0] === TCV.pk) ? TCV.pk : 'amt', dir = TCV.pd > 0 ? 1 : -1, tot = rows.reduce((a, r) => a + r.val, 0);
+  return tfold('prod', `ผลผลิต <small>${rows.length} อย่าง · ${ecoNumF(tot)} ${esc(ECO.central.name)}</small>`, !rows.length ? '<div class="tr w">ไม่มี</div>'
+    : `<div class="etable">${thead('p', cols, sk, dir)}` + tsort(rows, sk, dir).map(r => `<div class="etr"><span title="${esc(r.name)}">${chipT(r.cat)}${esc(r.name)}</span><span>${fmtL(r.amt)}</span><span>${ecoNumF(r.val)}</span><span>${r.left >= 0.05 ? fmtL(r.left) : ''}</span></div>`).join('') + `</div><div class="tr w">ผลิตและขายไม่หมดนับเป็นหน่วยสินค้าของแบบจำลอง มูลค่านับตามราคาในเมืองนี้หลังการค้า</div>`);
+}
+function priceHTML(k) {                             // every class the city makes, uses, buys or sells: its price after trade and its book
+  const E = ECON, cols = [['name', 'หมวด'], ['price', 'ราคา'], ['made', 'ผลิต'], ['need', 'ต้องการ'], ['inn', 'ซื้อเข้า'], ['out', 'ขายออก']], rows = [];
   for (const cat of ECATS) {
     if (tcat && cat !== tcat) continue;
-    const bk = E.MK[k][cat]; if (!bk || (bk[0] <= 0.01 && bk[1] <= 0.01)) continue;
-    const a = E.P0[k][cat], b = E.P1[k][cat];
-    if (!tcat && Math.abs(a - 1) < 0.1 && Math.abs(b - 1) < 0.1) continue;
-    rows.push([cat, a, b]);
+    const bk = E.MK[k][cat]; if (!bk || bk[0] + bk[1] + bk[2] + bk[3] <= 0.005) continue;
+    rows.push({ cat, name: ECAT[cat].name, p0: E.P0[k][cat], price: ECAT[cat].people ? 1 : E.P1[k][cat], made: bk[0], need: bk[1], inn: bk[2], out: bk[3] });
   }
-  rows.sort((x, y) => Math.abs(y[2] - 1) * ECAT[y[0]].v - Math.abs(x[2] - 1) * ECAT[x[0]].v);
-  let h = '<h3>ราคาในเมือง</h3>';
-  if (!rows.length) return h + `<div class="tr w">${tcat ? 'เมืองนี้ไม่ผลิตและไม่ใช้' + esc(ECAT[tcat].name) : 'ราคาทุกหมวดใกล้ราคากลาง'}</div>`;
-  h += '<div class="tr w">ร้อยละของราคากลาง ก่อนค้าขายและหลังค้าขาย</div>';
-  h += `<div class="tl">${rows.slice(0, 8).map(([cat, a, b]) => `${chipT(cat)}<span>${esc(ECAT[cat].name)} · ${priceWord(b)}</span><span class="n">${pctP(a)} → <b style="color:${priceCol(b)}">${pctP(b)}</b></span>`).join('')}</div>`;
-  if (tcat) { const bk = E.MK[k][tcat]; h += `<div class="tr w">ผลิต ${fmtL(bk[0])} ต้องการ ${fmtL(bk[1])} ซื้อเข้า ${fmtL(bk[2])} ขายออก ${fmtL(bk[3])} หน่วย</div>`; }
-  return h;
+  const sk = cols.some(c => c[0] === TCV.ck) ? TCV.ck : 'price', dir = TCV.cd > 0 ? 1 : -1;
+  return tfold('price', `ราคาและตลาดในเมือง <small>${rows.length} หมวด</small>`, !rows.length ? `<div class="tr w">${tcat ? 'เมืองนี้ไม่ผลิตและไม่ใช้' + esc(ECAT[tcat].name) : 'ไม่มี'}</div>`
+    : `<div class="etable g6">${thead('c', cols, sk, dir)}` + tsort(rows, sk, dir).map(r => `<div class="etr"><span title="${esc(r.name)}">${chipT(r.cat)}${esc(r.name)}</span><span title="${ECAT[r.cat].people ? 'ราคาทาสตั้งจากรายได้ต่อหัวเฉลี่ยของแผนที่' : 'ก่อนค้าขาย ' + pctP(r.p0) + ' · ' + priceWord(r.price)}">${ECAT[r.cat].people ? '' : `<b style="color:${priceCol(r.price)}">${pctP(r.price)}</b>`}</span><span>${r.made > 0.004 ? fmtL(r.made) : ''}</span><span>${r.need > 0.004 ? fmtL(r.need) : ''}</span><span>${r.inn > 0.004 ? fmtL(r.inn) : ''}</span><span>${r.out > 0.004 ? fmtL(r.out) : ''}</span></div>`).join('')
+    + `</div><div class="tr w">ราคาเป็นร้อยละของราคากลางหลังการค้าของปี ชี้ที่ราคาเพื่อดูราคาก่อนค้าขาย ช่องที่เหลือเป็นหน่วยสินค้าของแบบจำลอง</div>`);
 }
 function tradeLinkHTML(L) {
   const A = ECON.cities[L.ia], B = ECON.cities[L.ib], v = linkVol(L);

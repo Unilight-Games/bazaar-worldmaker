@@ -45,7 +45,7 @@ const { chromium } = require('playwright');
   ok('patronage holds fewer than a free trade and deals only inside the state', !!pp && pp.tot.held > 0 && pp.tot.held < ff.tot.held && crossOf(pp) === 0 && crossOf(ff) > 0, `free ${ff.tot.held} patronage ${pp.tot.held}`);
   ok('rivals do not deal in people', crossOf(rv) === 0);
   const econ = await p.evaluate(() => MME.shell.cur.rt.test.econ());
-  ok('the law of slaves does not change the year\'s trade in goods', (await p.evaluate(async () => { const x = MME.shell.cur.rt.test, v1 = x.econ().vol; const e = x.eco(); e.states.forEach(s => s.slave = 'abol'); x.ecoSet(e); await new Promise(r => setTimeout(r, 9000)); return Math.abs(x.econ().vol - v1) < 1e-6; })), econ.vol.toFixed(2));
+  ok('the law of slaves does not change the year\'s trade in goods', (await p.evaluate(async () => { const x = MME.shell.cur.rt.test, v1 = x.econ().goods; const e = x.eco(); e.states.forEach(s => s.slave = 'abol'); x.ecoSet(e); await new Promise(r => setTimeout(r, 9000)); return Math.abs(x.econ().goods - v1) < 1e-6; })), econ.goods.toFixed(2));
   // the pages
   await p.click('#modes button[data-mode="econ"]'); await p.click('#ecoTab button[data-t="states"]'); await p.waitForSelector('#ecobody select[data-f="sslave"]');
   await p.selectOption('#ecobody .eform[data-s="B"] select[data-f="sslave"]', 'free'); await settle();

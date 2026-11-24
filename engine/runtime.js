@@ -508,7 +508,7 @@ function routeGeom(r) {
   const bridges = [], tun = new Set();
   for (let i = 0; i < hexes.length - 1; i++) {
     const u = hexes[i], v = hexes[i + 1], k = nbIndex(u, v);
-    if (k >= 0 && EX[u * 6 + k] & 2) bridges.push({ x: (CX[u] + CX[v]) / 2, y: (CY[u] + CY[v]) / 2, a: Math.atan2(CY[v] - CY[u], CX[v] - CX[u]) });
+    if (k >= 0 && EX[u * 6 + k] & 2) bridges.push(bridgeAt(q, u, v, k));
   }
   if (mode === 'road') {                            // a tunnel: a run of mountain hexes the road passes through, not the one it starts or ends on
     let i = 0;
@@ -604,6 +604,22 @@ function strokeRoad(c, px, cls, g, glow) {
     c.strokeStyle = 'rgba(30,24,20,.95)'; c.lineWidth = Math.max(0.8, 1.3 * px); c.stroke(); c.restore();
   }
 }
+// Where a bridge stands (v0.13.0, the owner saw bridges off their roads): on the road as it is drawn, at the point where the
+// drawn line crosses the edge between the two hexes the river runs between, and turned the way the road runs there. The drawn
+// road is a smoothed line that cuts its corners, so the middle of the two hex centres is often beside it. Where the line does
+// not cross that edge at all, the bridge goes to the point of the road nearest the middle of the edge.
+function bridgeAt(q, u, v, k) {
+  const e = EDGE[k], e2 = (e + 1) % 6, ax = CX[u] + R * COS[e], ay = CY[u] + R * SIN[e], bx = CX[u] + R * COS[e2], by = CY[u] + R * SIN[e2];
+  const mx = (ax + bx) / 2, my = (ay + by) / 2, ex = (bx - ax) * 0.62, ey = (by - ay) * 0.62, x1 = mx - ex, y1 = my - ey, x2 = mx + ex, y2 = my + ey;   // the edge, a little longer at both ends
+  let best = null, bd = Infinity;
+  for (let i = 0; i + 1 < q.length; i++) {
+    const px = q[i][0], py = q[i][1], dx = q[i + 1][0] - px, dy = q[i + 1][1] - py, den = dx * (y2 - y1) - dy * (x2 - x1);
+    if (Math.abs(den) > 1e-9) { const t = ((x1 - px) * (y2 - y1) - (y1 - py) * (x2 - x1)) / den, s = ((x1 - px) * dy - (y1 - py) * dx) / den; if (t >= 0 && t <= 1 && s >= 0 && s <= 1) return { x: px + dx * t, y: py + dy * t, a: Math.atan2(dy, dx) }; }
+    const l2 = dx * dx + dy * dy, w = l2 > 0 ? clamp(((mx - px) * dx + (my - py) * dy) / l2, 0, 1) : 0, nx = px + dx * w, ny = py + dy * w, d = Math.hypot(nx - mx, ny - my);
+    if (d < bd) { bd = d; best = { x: nx, y: ny, a: Math.atan2(dy, dx) }; }
+  }
+  return best || { x: mx, y: my, a: Math.atan2(CY[v] - CY[u], CX[v] - CX[u]) };
+}
 function drawBridge(c, px, b, cls) {
   const st = RDC[cls] || RDC.cart, w = Math.max(st.w, st.px * px), L = Math.max(4.2, 7 * px), hw = w / 2 + Math.max(0.5, 0.9 * px), f = Math.max(0.6, 1.2 * px);
   c.save(); c.translate(b.x, b.y); c.rotate(b.a);
@@ -657,10 +673,11 @@ const ECAT = {   // name, colour, value of a load, bulk (what a load pays per un
   tech: { name: 'เครื่องกลและอุปกรณ์เวท', col: '#6ad0c8', v: 10, bulk: 0.4, made: true },
   ships: { name: 'เรือ', col: '#5a90b4', v: 8, bulk: 0.05, made: true },
   books: { name: 'ตำราและความรู้', col: '#dccca2', v: 6, bulk: 0.2, made: true },
+  labor: { name: 'แรงงาน (ทาส)', col: '#d0343c', v: 1, bulk: 0.5, people: true },   // people bought and sold (v0.13.0): no ground yields it and no workshop makes it; the year's slave trade fills its books
 };
 // on a map of our own world the class that is mana in Gresland is crude oil, priced with gems and gold as the owner ruled; coal burns with the other fuels
 if (BLANK) { ECAT.mana.name = 'น้ำมันดิบ'; ECAT.mana.v = ECAT.rare.v; ECAT.fuel.name = 'เชื้อเพลิง ถ่านหิน และยางไม้'; ECAT.tech.name = 'เครื่องจักรและเครื่องกล'; ECAT.rare.name = 'โลหะมีค่าและอัญมณี'; ECAT.herbs.name = 'สมุนไพร เครื่องเทศ และน้ำผึ้ง'; }
-const ECATS = Object.keys(ECAT), ERAW = ECATS.filter(c => !ECAT[c].made), EMADEC = ECATS.filter(c => ECAT[c].made);
+const ECATS = Object.keys(ECAT), ERAW = ECATS.filter(c => !ECAT[c].made && !ECAT[c].people), EMADEC = ECATS.filter(c => ECAT[c].made);
 const KIX = { capital: 0, city: 1, town: 2, fort: 3, village: 4 };
 const EPOP = [12, 7, 4, 3, 1.6];                   // heads of a capital, a city, a town, a fort, a village
 const EREACH = [7, 6, 5, 4, 4];                    // how far out each works the land, in hexes of open ground
@@ -670,7 +687,7 @@ const ENEED = {                                    // loads a head needs a year,
   timber: [0.3, 0.25, 0.2, 0.25, 0.15], fuel: [0.25, 0.2, 0.18, 0.2, 0.15], stone: [0.2, 0.15, 0.08, 0.2, 0.04], ore: [0, 0, 0, 0, 0],
   cloth: [0.18, 0.15, 0.12, 0.12, 0.08], mana: [0.16, 0.1, 0.04, 0.08, 0.01], rare: [0.05, 0.03, 0.01, 0.01, 0], luxury: [0.14, 0.08, 0.03, 0.02, 0.01],
   tools: [0.1, 0.1, 0.1, 0.08, 0.1], arms: [0.12, 0.08, 0.03, 0.35, 0.01], tech: [0.06, 0.04, 0.01, 0.04, 0], ships: [0.04, 0.03, 0.015, 0.01, 0.01],
-  books: [0.03, 0.02, 0.005, 0.004, 0],
+  books: [0.03, 0.02, 0.005, 0.004, 0], labor: [0, 0, 0, 0, 0],
 };
 // the workshops: loads a head turns out at full supply, and what one load takes
 const EWORK = {
@@ -1043,7 +1060,7 @@ function eHinterland(cities, far) {
   while (HN) {
     const u = hpop(); if (DONES[u] === s) continue; DONES[u] = s;
     if (isW(eff(u))) continue;                                     // water is claimed but not crossed
-    const k = own[u], reach = EREACH[cities[k].ki] * (far ? EFAR[cities[k].ki] : 1);
+    const k = own[u], reach = (cities[k].reach || EREACH[cities[k].ki]) * (far ? EFAR[cities[k].ki] : 1);
     for (let j = 0; j < 6; j++) {
       const v = NB[u * 6 + j]; if (v < 0 || DONES[v] === s) continue;
       const g = dist[u] + (eff(v) === 'M' ? 1.5 : 1); if (g > reach) continue;
@@ -1505,10 +1522,13 @@ function econCompute() {
     const h = landHex(hexAt(c.x, c.y)), ki0 = KIX[c.kind] != null ? KIX[c.kind] : 1, ki = ecoKi(c.id, c.kind);
     return { id: c.id, name: c.name || 'เมืองไม่มีชื่อ', kind: c.kind, ki, x: c.x, y: c.y, h, zone: h >= 0 ? ZO[h] : '.', pop: ecoPop(c.id, ki0), lk: KIK[ki], st: h >= 0 ? ECO.cells[h] : '.' };
   }).filter(c => c.h >= 0);
+  const LP = landPlan(cities);                       // the land each city takes for its people: how far its fields reach, and how short it falls
+  cities.forEach((c, k) => { c.land = LP.rows[k]; c.people = c.pop * ECO.unit; c.reach = Math.max(EREACH[c.ki], Math.min(LAND_REACH, c.land.ring + 1)); });
+  socPrep(cities);
   PORTZ.fill(0);
   for (const c of cities) { PORTZ[c.h] = 1; for (let k = 0; k < 6; k++) { const v = NB[c.h * 6 + k]; if (v >= 0 && !WATR[v]) PORTZ[v] = 1; } }
   eLanes(cities);
-  const { own, dist } = eHinterland(cities, false), Hs = eStats(cities, own, (i, k) => 1 - 0.5 * dist[i] / EREACH[cities[k].ki]);
+  const { own, dist } = eHinterland(cities, false), Hs = eStats(cities, own, (i, k) => 1 - 0.5 * dist[i] / cities[k].reach);
   const outer = eHinterland(cities, true).own;
   for (let i = 0; i < N; i++) if (own[i] >= 0) outer[i] = -1;
   const Ho = eStats(cities, outer, () => 0.5);
@@ -1526,11 +1546,11 @@ function econCompute() {
   const prod = cities.map(() => new Map());
   cities.forEach((c, k) => {
     const H = Hs[k], cn = ECANON[c.id] || {};
-    for (const g of EGOODS) { if (g.off) continue; let v = (g.f(H) + (g.far ? g.f(Ho[k]) : 0)) * (g.pct == null ? 1 : g.pct); if (!(v > 0.004)) continue; v *= (cn[g.cat] || 1) * orgProd(c, g.cat); if (g.id === 'silver' && c.id === 'vidsaga') v *= 1.5; prod[k].set(g.id, v); }
+    for (const g of EGOODS) { if (g.off) continue; let v = (g.f(H) + (g.far ? g.f(Ho[k]) : 0)) * (g.pct == null ? 1 : g.pct); if (!(v > 0.004)) continue; v *= (cn[g.cat] || 1) * orgProd(c, g.cat) * socRaw(c, g.cat); if (g.id === 'silver' && c.id === 'vidsaga') v *= 1.5; prod[k].set(g.id, v); }
   });
   // what each city needs, before its workshops
   const need = cities.map(c => {
-    const m = {}; for (const cat of ECATS) m[cat] = ENEED[cat][c.ki] * c.pop; if (!c.port) m.ships = 0;
+    const m = {}; for (const cat of ECATS) m[cat] = ENEED[cat][c.ki] * c.pop * socNeed(c, cat); if (!c.port) m.ships = 0;
     m.fuel *= c.cm.fuel; m.cloth *= c.cm.cloth; m.herbs *= c.cm.herbs; m.tools *= c.cm.tools;   // what the climate asks of the city
     return m;
   });
@@ -1545,7 +1565,7 @@ function econCompute() {
       ships: c.port === 2 ? 1 : c.port === 1 ? 0.4 : 0,
       books: (z === 'T' ? 3 : 1) * [1, 0.5, 0.2, 0.1, 0][c.ki],
     };
-    for (const m of EMADEC) { const v = ind * EWORK[m].base * spec[m] * (cn[m] || 1) * orgProd(c, m); if (v > 0.01) p[m] = v; }
+    for (const m of EMADEC) { const v = ind * EWORK[m].base * spec[m] * (cn[m] || 1) * orgProd(c, m) * socMake(c, m); if (v > 0.01) p[m] = v; }
     for (const m in p) for (const [cat, q] of Object.entries(EWORK[m].in)) need[k][cat] += p[m] * q;
     return p;
   });
@@ -1555,7 +1575,7 @@ function econCompute() {
   // to be sorted and sent on, and pays the quay both ways, as it does wherever it changes between boat and caravan.
   const wetEnd = (L, atA) => { const st = L.states; if (!st) return false; for (let q = 1; q <= 2 && q < st.length; q++) if (st[atA ? q : st.length - 1 - q] & 1) return true; return false; };
   const adj = cities.map(() => []);
-  links.forEach((L, li) => { if (L.fail) return; const wa = wetEnd(L, true), wb = wetEnd(L, false); const lc = ecoLinkCost(L, cities) * orgHaul(cities[L.ia], cities[L.ib]); adj[L.ia].push([L.ib, lc, li, wa, wb]); adj[L.ib].push([L.ia, lc, li, wb, wa]); });
+  links.forEach((L, li) => { if (L.fail) return; const wa = wetEnd(L, true), wb = wetEnd(L, false); const lc = ecoLinkCost(L, cities) * orgHaul(cities[L.ia], cities[L.ib]) * socHaul(L, cities); adj[L.ia].push([L.ib, lc, li, wa, wb]); adj[L.ib].push([L.ia, lc, li, wb, wa]); });
   const NT = [], NWAY = [];                         // NWAY[i][j]: the lines from i to j, each as [line, +1 from its first city or -1]
   for (let i = 0; i < n; i++) {                     // states: a city, reached by land (2k) or still afloat (2k + 1)
     const d = new Float64Array(2 * n).fill(Infinity), pv = new Int32Array(2 * n).fill(-1), pl = new Int32Array(2 * n).fill(-1), done = new Uint8Array(2 * n); d[2 * i] = 0;
@@ -1706,8 +1726,10 @@ function econCompute() {
   for (const f of flows) { const val = f.amt * ECAT[f.cat].v, seen = new Set([f.from]); let at = f.from; for (const [li] of f.way) { const L = links[li]; at = L.ia === at ? L.ib : L.ia; seen.add(at); } for (const k of seen) cities[k].through += val; }
   const top = Math.max(0, ...cities.map(c => c.through));
   for (const c of cities) { c.level = c.rank; c.sug = !(top > 0) ? 0 : c.through >= 0.5 * top ? 3 : c.through >= 0.2 * top ? 2 : c.through >= 0.05 * top ? 1 : 0; }
-  const bundles = eBundles(links, cities);
-  ECON = { ver: (ECON ? ECON.ver : 0) + 1, plan, cities, prod, need, got, left, flows, links, bundles, NT, NWAY, P0, P1, MK, rounds, ms: performance.now() - t0 };
+  ECON = { ver: (ECON ? ECON.ver : 0) + 1, plan, cities, prod, need, got, left, flows, links, bundles: null, NT, NWAY, P0, P1, MK, rounds, land: LP, ms: 0 };
+  LP.ver = ECON.ver; landCompute();
+  try { socYear(ECON); } catch (err) { console.error('society', err); }   // who ends up where and with what: people on the move, visitors, slaves as a class of goods, each state's books
+  ECON.bundles = eBundles(links, cities); ECON.ms = performance.now() - t0;
   return ECON;
 }
 const GBY = new Map(EGOODS.map(g => [g.id, g]));
@@ -1919,7 +1941,7 @@ function tradeCityHTML(k) {
   if (cn) h += `<div class="tr">${esc(cn.why)}</div>`;
   if (c.zone === 'X') h += `<div class="tr w">${esc(ERULE.phantomstone.why)}</div>`;
   if (c.zone === 'S') h += `<div class="tr w">${esc(ERULE.adamant.why)} ${esc(ERULE.sephine.why)}</div>`;
-  h += `<h3>ผลผลิต</h3>` + (prod.length ? goodRows(prod.slice(0, 12)) + (prod.length > 12 ? `<div class="tr w">และอีก ${prod.length - 12} อย่าง</div>` : '') : '<div class="tr w">ไม่มี</div>');
+  h += '<!--prod-->' + prodHTML(k);
   h += priceHTML(k);
   h += `<h3>ส่งออก</h3>` + (out.length ? partnerRows(out, 'to') : '<div class="tr w">ไม่มี</div>');
   h += `<h3>นำเข้า</h3>` + (inn.length ? partnerRows(inn, 'from') : '<div class="tr w">ไม่มี</div>');
@@ -1946,22 +1968,31 @@ function rankHTML(k, nl) {                          // the city as a centre: its
   }
   return h;
 }
-function priceHTML(k) {                             // what each category costs in the city, before and after trade
-  const E = ECON, rows = [];
+// The city's own tables (v0.13.0, the owner asked to see all of it): everything it makes and every class it prices, each list
+// folded or open as the owner left it and in the order of the column last clicked.
+const TCV = (() => { const d = { pk: 'amt', pd: -1, ck: 'price', cd: -1, prod: 1, price: 1 }; try { return Object.assign(d, JSON.parse(localStorage.getItem('mme-tc') || '{}')); } catch (err) { return d; } })();
+const tcKeep = () => { try { localStorage.setItem('mme-tc', JSON.stringify(TCV)); } catch (err) { /* a browser that keeps nothing */ } };
+const tfold = (id, title, body) => `<details class="tfold" data-tfold="${id}"${TCV[id] === 0 ? '' : ' open'}><summary>${title}</summary>${body}</details>`;
+const thead = (kind, cols, sk, dir) => `<div class="eth sortable">${cols.map(([k, t]) => `<span data-ts="${kind}:${k}" title="กดเพื่อเรียงตามช่องนี้">${t}${k === sk ? (dir > 0 ? ' ▲' : ' ▼') : ''}</span>`).join('')}</div>`;
+const tsort = (rows, sk, dir) => rows.sort((a, b) => (sk === 'name' ? dir * a.name.localeCompare(b.name, 'th') : dir * (a[sk] - b[sk])) || a.name.localeCompare(b.name, 'th'));
+function prodHTML(k) {                              // everything the city makes, with its worth at the city's own price and what it could not sell
+  const E = ECON, per = ECO.central.per, cols = [['name', 'สินค้า'], ['amt', 'ผลิต'], ['val', 'มูลค่า'], ['left', 'ขายไม่หมด']];
+  const rows = [...E.prod[k]].filter(([id, v]) => (!tcat || catOf(id) === tcat) && v > 0.004).map(([id, v]) => { const cat = catOf(id); return { id, cat, name: goodName(id), amt: v, val: v * ECAT[cat].v * (E.P1[k][cat] || 1) * per, left: E.left[k].get(id) || 0 }; });
+  const sk = cols.some(c => c[0] === TCV.pk) ? TCV.pk : 'amt', dir = TCV.pd > 0 ? 1 : -1, tot = rows.reduce((a, r) => a + r.val, 0);
+  return tfold('prod', `ผลผลิต <small>${rows.length} อย่าง · ${ecoNumF(tot)} ${esc(ECO.central.name)}</small>`, !rows.length ? '<div class="tr w">ไม่มี</div>'
+    : `<div class="etable">${thead('p', cols, sk, dir)}` + tsort(rows, sk, dir).map(r => `<div class="etr"><span title="${esc(r.name)}">${chipT(r.cat)}${esc(r.name)}</span><span>${fmtL(r.amt)}</span><span>${ecoNumF(r.val)}</span><span>${r.left >= 0.05 ? fmtL(r.left) : ''}</span></div>`).join('') + `</div><div class="tr w">ผลิตและขายไม่หมดนับเป็นหน่วยสินค้าของแบบจำลอง มูลค่านับตามราคาในเมืองนี้หลังการค้า</div>`);
+}
+function priceHTML(k) {                             // every class the city makes, uses, buys or sells: its price after trade and its book
+  const E = ECON, cols = [['name', 'หมวด'], ['price', 'ราคา'], ['made', 'ผลิต'], ['need', 'ต้องการ'], ['inn', 'ซื้อเข้า'], ['out', 'ขายออก']], rows = [];
   for (const cat of ECATS) {
     if (tcat && cat !== tcat) continue;
-    const bk = E.MK[k][cat]; if (!bk || (bk[0] <= 0.01 && bk[1] <= 0.01)) continue;
-    const a = E.P0[k][cat], b = E.P1[k][cat];
-    if (!tcat && Math.abs(a - 1) < 0.1 && Math.abs(b - 1) < 0.1) continue;
-    rows.push([cat, a, b]);
+    const bk = E.MK[k][cat]; if (!bk || bk[0] + bk[1] + bk[2] + bk[3] <= 0.005) continue;
+    rows.push({ cat, name: ECAT[cat].name, p0: E.P0[k][cat], price: ECAT[cat].people ? 1 : E.P1[k][cat], made: bk[0], need: bk[1], inn: bk[2], out: bk[3] });
   }
-  rows.sort((x, y) => Math.abs(y[2] - 1) * ECAT[y[0]].v - Math.abs(x[2] - 1) * ECAT[x[0]].v);
-  let h = '<h3>ราคาในเมือง</h3>';
-  if (!rows.length) return h + `<div class="tr w">${tcat ? 'เมืองนี้ไม่ผลิตและไม่ใช้' + esc(ECAT[tcat].name) : 'ราคาทุกหมวดใกล้ราคากลาง'}</div>`;
-  h += '<div class="tr w">ร้อยละของราคากลาง ก่อนค้าขายและหลังค้าขาย</div>';
-  h += `<div class="tl">${rows.slice(0, 8).map(([cat, a, b]) => `${chipT(cat)}<span>${esc(ECAT[cat].name)} · ${priceWord(b)}</span><span class="n">${pctP(a)} → <b style="color:${priceCol(b)}">${pctP(b)}</b></span>`).join('')}</div>`;
-  if (tcat) { const bk = E.MK[k][tcat]; h += `<div class="tr w">ผลิต ${fmtL(bk[0])} ต้องการ ${fmtL(bk[1])} ซื้อเข้า ${fmtL(bk[2])} ขายออก ${fmtL(bk[3])} หน่วย</div>`; }
-  return h;
+  const sk = cols.some(c => c[0] === TCV.ck) ? TCV.ck : 'price', dir = TCV.cd > 0 ? 1 : -1;
+  return tfold('price', `ราคาและตลาดในเมือง <small>${rows.length} หมวด</small>`, !rows.length ? `<div class="tr w">${tcat ? 'เมืองนี้ไม่ผลิตและไม่ใช้' + esc(ECAT[tcat].name) : 'ไม่มี'}</div>`
+    : `<div class="etable g6">${thead('c', cols, sk, dir)}` + tsort(rows, sk, dir).map(r => `<div class="etr"><span title="${esc(r.name)}">${chipT(r.cat)}${esc(r.name)}</span><span title="${ECAT[r.cat].people ? 'ราคาทาสตั้งจากรายได้ต่อหัวเฉลี่ยของแผนที่' : 'ก่อนค้าขาย ' + pctP(r.p0) + ' · ' + priceWord(r.price)}">${ECAT[r.cat].people ? '' : `<b style="color:${priceCol(r.price)}">${pctP(r.price)}</b>`}</span><span>${r.made > 0.004 ? fmtL(r.made) : ''}</span><span>${r.need > 0.004 ? fmtL(r.need) : ''}</span><span>${r.inn > 0.004 ? fmtL(r.inn) : ''}</span><span>${r.out > 0.004 ? fmtL(r.out) : ''}</span></div>`).join('')
+    + `</div><div class="tr w">ราคาเป็นร้อยละของราคากลางหลังการค้าของปี ชี้ที่ราคาเพื่อดูราคาก่อนค้าขาย ช่องที่เหลือเป็นหน่วยสินค้าของแบบจำลอง</div>`);
 }
 function tradeLinkHTML(L) {
   const A = ECON.cities[L.ia], B = ECON.cities[L.ib], v = linkVol(L);
@@ -4341,6 +4372,7 @@ const ECO = { goods: {}, custom: [], cats: {}, ucats: [], tune: {}, work: {}, po
 // load of staple food, is ECOIN coins for each of those people: a person's grain for a year costs 40 coins, and what a person
 // makes in a year comes to about 250, when a coin is roughly what unskilled work earns in most of a day. Both are my numbers.
 const EUNIT = 1000, ECOIN = 40;
+let POL = null, POLG = 0, POLC = 0;               // what each state is doing about its balance this year (worked out in the society part), and the two numbers it hands back to a trade
 // How many people the whole map holds (v0.10.0, the owner's five levels and his words for them). With a level chosen, the people
 // of a head of the model follow from it: the level's number shared over every city by its weight. The numbers inside each band are mine.
 // The levels of people a map can hold (v0.11.1, the owner's three): a few million, a few hundred million, billions. Anything else
@@ -4362,7 +4394,7 @@ function ecoScale() {
 // What a state's law says of slaves (v0.11.0, the owner's three). A city under no state, and a land without one, trade freely.
 const ESLAVE = {
   abol: ['เลิกทาสสมบูรณ์', 'ไม่มีใครถือทาสได้ คนของรัฐนี้ถูกขายไม่ได้ และเมืองของรัฐนี้ซื้อทาสไม่ได้'],
-  pat: ['ระบบอุปถัมภ์', 'ถือทาสได้ตามเงื่อนไข และทาสเป็นไทได้ง่าย เมืองจึงมีทาสน้อยกว่าและได้แรงงานจากทาสน้อยกว่า ซื้อขายกันได้เฉพาะภายในรัฐ'],
+  pat: ['ระบบอุปถัมภ์', 'ถือทาสได้ตามเงื่อนไข และทาสเป็นไทได้ง่าย เมืองจึงมีทาสน้อยกว่าและได้แรงงานจากทาสน้อยกว่า ซื้อทาสจากนอกรัฐเข้ามาได้ แต่ขายคนของรัฐออกนอกรัฐไม่ได้'],
   free: ['ค้าทาสเสรี', 'ซื้อขายทาสได้ทั้งในรัฐและข้ามรัฐ เว้นแต่กับคู่อริ'],
 };
 const OKIND = {
@@ -4582,6 +4614,7 @@ function ecoEarn(i, j, cat, pi, pj, v, t, bulk, phase, w) {
       if (!black && si && si.sys === 'merc' && MERCKEEP.has(cat)) cost += TU('keep') * v;                          // and raw stuff kept at home
     }
   }
+  if (POL && phase >= 0 && !(w && w.org)) { polEarn(ci, cj, cat, pi, pj, v, gain, cost); gain = POLG; cost = POLC; }   // what a state does about its balance: a wall, a bounty, a cheaper coin
   let m = gain * v - cost;
   if (m > 0 && ECOX.bargain) m *= 1 + TU('big') * Math.log2(Math.max(0.25, cj.pop) / 4);                    // a great market is served before a small one
   return m;
@@ -4622,7 +4655,7 @@ function ecoLoad(b) {
   ECO.cpp = clamp(ECO.central.per / ECO.unit, 1e-6, 1e9);
   ecoStamp++; ecoApply();
 }
-const ecoSerial = () => ({ v: 2, noSlave: ECO.noSlave, tier: ECO.tier, total: ECO.tier === 'own' ? ECO.total : 0, orgs: ECO.orgs, goods: ECO.goods, custom: ECO.custom, cats: ECO.cats, ucats: ECO.ucats, tune: ECO.tune, work: ECO.work, pop: ECO.pop, danger: ECO.danger, auto: ECO.auto, states: ECO.states, cells: ECO.cells.join(''), unit: ECO.unit, central: ECO.central });
+let ecoSerial = () => ({ v: 2, noSlave: ECO.noSlave, tier: ECO.tier, total: ECO.tier === 'own' ? ECO.total : 0, orgs: ECO.orgs, goods: ECO.goods, custom: ECO.custom, cats: ECO.cats, ucats: ECO.ucats, tune: ECO.tune, work: ECO.work, pop: ECO.pop, danger: ECO.danger, auto: ECO.auto, states: ECO.states, cells: ECO.cells.join(''), unit: ECO.unit, central: ECO.central });
 async function ecoSaveNow() { if (!ENV.db || !ecoLoaded || !ecoDirty || ecoSaving) return; ecoSaving = true; ecoDirty = false; try { await ENV.db.doc('map/economy').set(ecoSerial()); } catch (err) { ecoDirty = true; } ecoSaving = false; if (ecoDirty) ecoSaveNow(); }
 async function ecoFlush() { clearTimeout(ecoT); await ecoSaveNow(); }
 function ecoChanged(tables) {                      // the owner changed something: the tables, the year, the card, the save
@@ -4719,7 +4752,7 @@ function ecoGoodsHTML() {
 }
 function ecoCatsHTML() {
   return `<p class="note" style="margin-top:0">ราคาฐานคือราคาของหนึ่งหน่วยเมื่อของพอดีกับที่ต้องการ เมืองที่ขาดจ่ายได้ถึง 1.75 เท่า เมืองที่ล้นขายเหลือ 0.25 เท่า ความเทอะทะคือค่าขนต่อระยะทาง</p><div class="etable"><div class="eth"><span>ประเภท</span><span>ราคาฐาน</span><span>เทอะทะ</span></div>`
-    + ECATS.filter(c => !ECAT[c].own).map(c => `<div class="etr" data-c="${c}"><span><i style="background:${ECAT[c].col}"></i><input type="text" data-f="cname" maxlength="60" value="${esc(ECAT[c].name)}"></span><input type="number" data-f="cv" min="0.05" max="200" step="0.1" value="${ECAT[c].v}"><input type="number" data-f="cbulk" min="0.01" max="10" step="0.05" value="${ECAT[c].bulk}"></div>`).join('')
+    + ECATS.filter(c => !ECAT[c].own && !ECAT[c].people).map(c => `<div class="etr" data-c="${c}"><span><i style="background:${ECAT[c].col}"></i><input type="text" data-f="cname" maxlength="60" value="${esc(ECAT[c].name)}"></span><input type="number" data-f="cv" min="0.05" max="200" step="0.1" value="${ECAT[c].v}"><input type="number" data-f="cbulk" min="0.01" max="10" step="0.05" value="${ECAT[c].bulk}"></div>`).join('')
     + `</div><div class="btns"><button type="button" class="btn" data-a="creset">คืนค่าตั้งต้นทุกประเภท</button></div>`
     + `<h4>ประเภทที่เพิ่มเอง</h4>` + (ECO.ucats.length ? '' : `<p class="note">ยังไม่มี เพิ่มประเภทแล้วย้ายสินค้าเข้ามาได้จากแท็บสินค้า</p>`)
     + ECO.ucats.map(u => `<div class="eform" data-u="${u.id}"><div class="erow"><input type="color" data-f="ucol" value="${u.col}" aria-label="สีของประเภท"><input type="text" data-f="uname" maxlength="60" value="${esc(u.name)}" style="flex:1"></div>`
@@ -4755,18 +4788,18 @@ function ecoCapHTML(s) {                            // the city a socialist stat
   return ecoIn('เมืองศูนย์กลางของรัฐ', `<select data-f="scap"><option value="">ให้ระบบเลือก${now && !cs.some(c => c.id === s.cap) ? ' (ตอนนี้ ' + esc(now) + ')' : ''}</option>${cs.map(c => `<option value="${esc(c.id)}"${c.id === s.cap ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}</select>`);
 }
 function ecoStatesHTML() {
-  let h = `<div class="btns" style="margin:0 0 8px"><button type="button" class="btn" data-a="snew"${ECO.states.length >= 52 ? ' disabled' : ''}>เพิ่มรัฐ</button></div>`;
+  let h = `<div class="btns" style="margin:0 0 8px"><button type="button" class="btn" data-a="snew"${ECO.states.length >= 52 ? ' disabled' : ''}>เพิ่มรัฐ</button>${ECO.states.length > 1 ? `<button type="button" class="btn" data-a="stfold" data-v="0">พับทุกรัฐ</button><button type="button" class="btn" data-a="stfold" data-v="1">กางทุกรัฐ</button>` : ''}</div>`;
   if (!ECO.states.length) return h + `<p class="note">ยังไม่มีรัฐ เพิ่มรัฐแล้วเลือกชื่อรัฐในแถบเครื่องมือเพื่อระบายเขตลงบนแผนที่ ระบายลงทะเลได้เพื่อกำหนดน่านน้ำ เมืองขึ้นกับรัฐของช่องที่ตั้งอยู่</p>`;
   const cnt = {}; for (const z of ECO.cells) if (z !== '.') cnt[z] = (cnt[z] || 0) + 1;
   for (const s of ECO.states) {
     const others = s.sys === 'anar' ? [] : ECO.states.filter(o => o !== s && o.sys !== 'anar');
-    h += `<div class="eform" data-s="${s.id}"><div class="erow"><input type="color" data-f="scolor" value="${s.color}" aria-label="สีของรัฐ"><input type="text" data-f="sname" maxlength="60" value="${esc(s.name)}" style="flex:1"></div>`
+    h += `<details class="efold stfold" data-fold="st${s.id}"${GDPV['st' + s.id] === 0 ? '' : ' open'}><summary><i class="sdot" style="background:${s.color}"></i>${esc(s.name)} <small>${ESYS[s.sys][0]} · ${cnt[s.id] || 0} ช่อง</small></summary><div class="eform" data-s="${s.id}"><div class="erow"><input type="color" data-f="scolor" value="${s.color}" aria-label="สีของรัฐ"><input type="text" data-f="sname" maxlength="60" value="${esc(s.name)}" style="flex:1"></div>`
       + ecoIn('ระบอบเศรษฐกิจ', `<select data-f="ssys">${Object.entries(ESYS).map(([k, v]) => `<option value="${k}"${k === s.sys ? ' selected' : ''}>${v[0]}</option>`).join('')}</select>`) + `<div class="tr w">${ESYS[s.sys][1]}</div>`
       + (s.sys === 'anar' ? `<div class="tr w">แรงงานทาส: ดินแดนที่ไม่มีรัฐค้าทาสเสรีเสมอ</div>` : ecoIn('แรงงานทาส', `<select data-f="sslave">${Object.entries(ESLAVE).map(([k, v]) => `<option value="${k}"${k === (s.slave || 'abol') ? ' selected' : ''}>${v[0]}</option>`).join('')}</select>`) + `<div class="tr w">${ESLAVE[s.slave || 'abol'][1]}</div>`)
-      + (s.sys === 'soc' ? ecoCapHTML(s) : '')
+      + (s.sys === 'soc' ? ecoCapHTML(s) : '') + socStateForm(s)
       + `<div class="erow"><label>สกุลเงิน <input type="text" data-f="scur" maxlength="30" value="${esc(s.cur)}" placeholder="${esc(ECO.central.name)}" style="width:8em"></label><label>1 หน่วย = <input type="number" data-f="srate" min="0.01" max="1000" step="0.05" value="${s.rate}"> ${esc(ECO.central.name)}</label></div>`
       + (others.length ? `<div class="erow">${others.map(o => `<label><i class="sdot" style="background:${o.color}"></i>${esc(o.name)} <select data-f="srel" data-o="${o.id}"><option value="">เป็นกลาง</option><option value="ally"${(s.rel[o.id] || o.rel[s.id]) === 'ally' ? ' selected' : ''}>พันธมิตร</option><option value="rival"${(s.rel[o.id] || o.rel[s.id]) === 'rival' ? ' selected' : ''}>คู่อริ</option></select></label>`).join('')}</div>` : '')
-      + `<div class="tr w">${cnt[s.id] || 0} ช่อง</div><div class="btns"><button type="button" class="btn warn" data-a="sdel">ลบรัฐนี้</button></div></div>`;
+      + `<div class="tr w">${cnt[s.id] || 0} ช่อง</div><div class="btns"><button type="button" class="btn warn" data-a="sdel">ลบรัฐนี้</button></div></div></details>`;
   }
   return h;
 }
@@ -5298,9 +5331,10 @@ function selectState(id) { tstate = id || null; tsel = null; tlsel = null; rende
 function tradeStateHTML(s) {
   const E = ECON, per = ECO.central.per, inS = E.cities.map(c => c.st === s.id), n = inS.filter(Boolean).length;
   const val = f => f.amt * ECAT[f.cat].v * (E.P1[f.to][f.cat] || 1) * per;
-  let out = 0, inn = 0, home = 0; const byP = new Map(), byC = new Map();
+  let out = 0, inn = 0, home = 0, slvOut = 0, slvIn = 0; const byP = new Map(), byC = new Map();
   for (const f of E.flows) {
     if (tcat && f.cat !== tcat) continue; const a = inS[f.from], b = inS[f.to]; if (!a && !b) continue; const v = val(f);
+    if (f.cat === 'labor' && !tcat) { if (a !== b) { if (a) slvOut += v; else slvIn += v; } continue; }   // people bought and sold stand on their own line
     if (a && b) { home += v; continue; }
     const other = E.cities[a ? f.to : f.from].st, P = byP.get(other) || byP.set(other, [0, 0]).get(other), C = byC.get(f.cat) || byC.set(f.cat, [0, 0]).get(f.cat);
     if (a) { out += v; P[0] += v; C[0] += v; } else { inn += v; P[1] += v; C[1] += v; }
@@ -5314,6 +5348,8 @@ function tradeStateHTML(s) {
   const table = (title, m, name) => !m.size ? '' : `<h4>${title}</h4><div class="etable g4"><div class="eth"><span></span><span>ส่งออก</span><span>นำเข้า</span><span>ดุล</span></div>` + [...m].sort((x, y) => (y[1][0] + y[1][1]) - (x[1][0] + x[1][1])).map(([k, v]) => `<div class="etr"><span>${name(k)}</span><span>${ecoNumF(v[0])}</span><span>${ecoNumF(v[1])}</span><span class="${v[0] - v[1] >= 0 ? 'pos' : 'neg'}">${sign(v[0] - v[1])}</span></div>`).join('') + `</div>`;
   h += table('คู่ค้า', byP, k => { const o = ECOX.byKey.get(k); return o ? `<i class="sdot" style="background:${o.color}"></i>${esc(o.name)}` : 'เมืองที่ไม่ขึ้นกับรัฐใด'; });
   h += table('ตามประเภทสินค้า', byC, c => `${chipT(c)}${esc(ECAT[c].name)}`);
+  if (slvOut + slvIn >= 1) h += `<div class="tr w">ซื้อขายทาสข้ามเขตรัฐ ขายออก ${ecoNumF(slvOut)} ซื้อเข้า ${ecoNumF(slvIn)} ${coin} ไม่นับในดุลข้างบน</div>`;
+  if (!tcat) h += socStateCardHTML(s);
   return h + `<div class="tr w">มูลค่านับตามราคาในเมืองที่ซื้อ หลังการค้าของปี คลิกที่ว่างนอกเขตเพื่อกลับไปดูทั้งเครือข่าย</div>`;
 }
 const __stSel = selectTrade, __stLink = selectLink;
@@ -5354,43 +5390,53 @@ const LAND_GARDEN = 0.3, LAND_TERRACE = 0.25, LAND_WOODY = 0.5, LAND_HILLY = 0.3
 const LAND_TILL = 0.45, LAND_REACH = 16, LAND_MINE = 1e5, LAND_OPEN = new Set(['g', 's', 'v', 'h', 'e', 'm', 'c', 'y']), LAND_FARM = new Set(['p', 'r']);
 function ecoCrop(total) { return total < 5e8 ? 0.45 : total < 5e9 ? 0.3 : 0.15; }
 let LAND = null, landOn = (() => { try { return localStorage.getItem('mme-land') !== '0'; } catch (err) { return true; } })();
-function landCompute() {
-  const E = ECON; if (!E) { LAND = null; return; }
-  if (LAND && LAND.ver === E.ver && LAND.unit === ECO.unit) return;                     // the year is worked out again whenever the land or the cities change
+// The land is worked out with the year itself (v0.13.0): the year asks it how far each city's fields reach, to work the ground
+// that far, and how short of land each city is, to send it abroad for food. So the land on the map is always the land of the
+// cities as they stand, and a city that is moved takes its land with it in the same step.
+function landCompute() { LAND = ECON && ECON.land ? ECON.land : null; }
+const landDice = u => { const x = Math.sin(u * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };   // a hex's own lot, the same every year
+function landPlan(cities) {
+  const E = { cities };
   const km = ENV.meta && +ENV.meta.kmPerHex || 34, haHex = 0.866 * km * km * 100, total = E.cities.reduce((a, c) => a + c.pop, 0) * ECO.unit, crop = ecoCrop(total), wood = crop * 2 / 3;
-  const use = new Int8Array(N), own = new Int16Array(N).fill(-1), rows = E.cities.map(() => ({ farm: 0, cleared: 0, logged: 0, mine: 0, terrace: 0, garden: 0, need: 0, short: 0, kind: '' })), tot = { farm: 0, cleared: 0, logged: 0, mine: 0, terrace: 0, garden: 0, was: 0 };
+  const use = new Int8Array(N), own = new Int16Array(N).fill(-1), rows = E.cities.map(() => ({ farm: 0, cleared: 0, logged: 0, mine: 0, terrace: 0, garden: 0, need: 0, short: 0, want: 0, lack: 0, ring: 0, kind: '' })), tot = { farm: 0, cleared: 0, logged: 0, mine: 0, terrace: 0, garden: 0, was: 0 };
   let short = 0;
   for (const k of E.cities.map((c, i) => i).sort((a, b) => E.cities[b].pop - E.cities[a].pop)) {   // the largest city takes its land first
     const c = E.cities[k], r = rows[k], P = c.pop * ECO.unit; r.need = P * crop / 100;             // square kilometres of ploughland
     if (c.h < 0) continue;
     let nF = Math.round(P * crop / (haHex * LAND_TILL)), nW = Math.round(P * wood / (haHex * 0.8)), nM = P >= LAND_MINE ? Math.min(12, 1 + Math.floor((P - LAND_MINE) / 2.5e5)) : 0;
-    if (!nF && !nW && !nM) continue;
+    r.want = nF; if (!nF && !nW && !nM) continue;
     // what kind of country the city stands in, read off the land within two hexes of it
     let nl = 0, nf = 0, nm = 0; { let rg = [c.h]; const sn = new Set(rg); for (let d = 0; d <= 2; d++) { const nx = []; for (const u of rg) { const b = eff(u); if (!isW(b)) { nl++; if (FOREST.has(b)) nf++; else if (b === 'M') nm++; } for (let j = 0; j < 6; j++) { const v = NB[u * 6 + j]; if (v >= 0 && !sn.has(v)) { sn.add(v); nx.push(v); } } } rg = nx; } }
-    const woody = nl > 0 && nf / nl >= LAND_WOODY, hilly = nl > 0 && nm / nl >= LAND_HILLY, gG = LAND_GARDEN / LAND_TILL, gT = LAND_TERRACE / LAND_TILL;
+    // How much of a forest city it is decides what share of its forest it gardens, hex by hex, and likewise its slopes: a city
+    // moved a hex or two changes a few hexes of its land, where a plain yes or no changed all of it at once (the owner saw the
+    // fields vanish when a city was moved).
+    const wf = nl > 0 ? nf / nl : 0, wm = nl > 0 ? nm / nl : 0, woodP = clamp((wf - (LAND_WOODY - 0.2)) / 0.4, 0, 1), hillP = clamp((wm - (LAND_HILLY - 0.15)) / 0.3, 0, 1), gG = LAND_GARDEN / LAND_TILL, gT = LAND_TERRACE / LAND_TILL;
+    const woody = wf >= LAND_WOODY, hilly = wm >= LAND_HILLY;
     r.kind = woody && hilly ? 'both' : woody ? 'forest' : hilly ? 'mount' : '';
     let ring = [c.h]; const seen = new Set(ring);
     for (let d = 0; d <= LAND_REACH && (nF >= 0.5 || nW > 0 || nM > 0) && ring.length; d++) {
-      const trees = [], hills = [];
+      const trees = [], hills = [], d0 = r.farm + r.cleared + r.logged + r.mine + r.terrace + r.garden + tot.was;
       for (const u of ring) {
         if (use[u]) continue; const b = eff(u);
         if (LAND_FARM.has(b)) { if (nF >= 0.5) { use[u] = 5; own[u] = k; nF--; tot.was++; } }                  // fields the map already shows
         else if (LAND_OPEN.has(b)) { if (nF >= 0.5) { use[u] = 1; own[u] = k; nF--; r.farm++; } }
         else if (FOREST.has(b)) trees.push(u);
-        else if (b === 'M') { if (nM > 0 && d > 0) { use[u] = 4; own[u] = k; nM--; r.mine++; } else if (hilly) hills.push(u); }
+        else if (b === 'M') { if (nM > 0 && d > 0) { use[u] = 4; own[u] = k; nM--; r.mine++; } else if (hillP > 0 && landDice(u) < hillP) hills.push(u); }
       }
       for (const u of hills) if (nF >= 0.5 * gT) { use[u] = 6; own[u] = k; nF -= gT; r.terrace++; }                   // a city of the mountains terraces the slopes
       for (const u of trees) {
-        if (woody && nF >= 0.5 * gG) { use[u] = 7; own[u] = k; nF -= gG; r.garden++; }                               // a city of the forest gardens under the trees
-        else if (!woody && nF >= 0.5) { use[u] = 2; own[u] = k; nF--; r.cleared++; }
+        const gd = woodP > 0 && landDice(u) < woodP;
+        if (gd && nF >= 0.5 * gG) { use[u] = 7; own[u] = k; nF -= gG; r.garden++; }                                   // a city of the forest gardens under the trees
+        else if (!gd && nF >= 0.5) { use[u] = 2; own[u] = k; nF--; r.cleared++; }
         else if (nW > 0) { use[u] = 3; own[u] = k; nW--; r.logged++; }
       }
+      if (r.farm + r.cleared + r.logged + r.mine + r.terrace + r.garden + tot.was > d0) r.ring = d;
       const nx = []; for (const u of ring) for (let j = 0; j < 6; j++) { const v = NB[u * 6 + j]; if (v >= 0 && !seen.has(v)) { seen.add(v); nx.push(v); } } ring = nx;
     }
-    r.short = Math.max(0, Math.round(nF)); short += r.short; tot.farm += r.farm; tot.cleared += r.cleared; tot.logged += r.logged; tot.mine += r.mine; tot.terrace += r.terrace; tot.garden += r.garden;
+    r.short = Math.max(0, Math.round(nF)); r.lack = r.want > 0 ? clamp(Math.max(0, nF) / r.want, 0, 1) : 0; short += r.short; tot.farm += r.farm; tot.cleared += r.cleared; tot.logged += r.logged; tot.mine += r.mine; tot.terrace += r.terrace; tot.garden += r.garden;
   }
   let landN = 0; for (let i = 0; i < N; i++) { const b = eff(i); if (b !== 'S' && b !== 'L') landN++; }
-  LAND = { ver: E.ver, unit: ECO.unit, use, own, rows, tot, total, crop, haHex, short, landN, km2: landN * haHex / 100 };
+  return { ver: 0, unit: ECO.unit, use, own, rows, tot, total, crop, haHex, short, landN, km2: landN * haHex / 100 };
 }
 // ---------- the land as ground of its own (v0.12.0) ----------
 // The owner asked for fields, clearings and mines to look better and to lie low, as hexes of ground in their own right like the
@@ -5406,7 +5452,7 @@ const LAND_TREEY = new Set(['f', 'o', 'k', 'a', 'j', 'w', 'e', 'h', 'v']);
 const landMix = (a, b, t) => a.map((x, k) => x + (b[k] - x) * t);
 function landFill(i, t, b) {
   const base = RCOL[b] || RCOL.g;
-  return jit(t === 1 ? landMix([192, 180, 106], base, 0.3) : t === 2 ? landMix([174, 168, 100], base, 0.35) : t === 3 ? landMix(base, [160, 150, 106], 0.42) : t === 6 ? landMix(RCOL.M, [150, 150, 104], 0.4) : t === 7 ? landMix(base, [150, 162, 100], 0.34) : landMix(RCOL.M, [134, 118, 98], 0.45), i, 6);
+  return jit(t === 1 ? landMix([192, 180, 106], base, 0.3) : t === 2 ? landMix([174, 168, 100], base, 0.35) : t === 3 ? landMix(base, [160, 150, 106], 0.42) : t === 6 ? landMix(RCOL.M, [150, 150, 104], 0.4) : t === 7 ? landMix(base, [172, 180, 108], 0.6) : landMix(RCOL.M, [134, 118, 98], 0.45), i, 6);
 }
 function landTreesOf(i, b) {                         // the trees a hex of forest carries, where the map's own drawing puts them
   return b === 'f' || b === 'k' || b === 'w' ? spots(i, 4, 0.6, 0).map(p => ['con', p]) : b === 'o' ? spots(i, 3, 0.58, 0).map(p => ['broad', p]) : b === 'a' ? spots(i, 3, 0.55, 0).map(p => ['anc', p]) : b === 'j' ? spots(i, 4, 0.62, 17).map(p => ['jung', p]) : [];
@@ -5462,11 +5508,12 @@ function landTerrace(c, i) {                         // a slope cut into steps: 
   });
   peak(c, x, y - 4.9, 0.4, false);
 }
-function landGarden(c, i, b, trees, flat) {          // the forest stays standing: most of its trees, plots of garden in their shade, a house here and there
-  const was = landTreesOf(i, b), keep = Math.max(2, was.length - 1), r = rng(i * 37 + 5);
-  was.forEach(([kind, [x, y]], k) => { if (k < keep) trees.push([y, kind, x, y, b]); });
-  for (const [x, y] of spots(i, 2, 0.5, 37)) flat.push([y, 'plot', x, y, Math.floor(r() * LAND_STEP.length)]);
-  if (r() < 0.3) flat.push([CY[i] + 0.2 * R, 'house', CX[i] + (r() - 0.5) * 0.7 * R, CY[i] + 0.2 * R]);
+function landGarden(c, i, b, trees, flat) {          // the forest thinned to a grove: two of its trees, three plots of garden between them, a path, often a house
+  const was = landTreesOf(i, b), r = rng(i * 37 + 5);
+  was.forEach(([kind, [x, y]], k) => { if (k < 2) trees.push([y, kind, x, y, b]); });
+  for (const [x, y] of spots(i, 3, 0.56, 37)) flat.push([y, 'plot', x, y, Math.floor(r() * LAND_STEP.length)]);
+  flat.push([CY[i] - 0.5 * R, 'path', CX[i] - 0.55 * R, CY[i] + 0.1 * R, CX[i] + 0.5 * R, CY[i] - 0.15 * R]);
+  if (r() < 0.45) flat.push([CY[i] + 0.2 * R, 'house', CX[i] + (r() - 0.5) * 0.7 * R, CY[i] + 0.2 * R]);
 }
 let landMk = null, landCv = null, LLC = null, landKey = '', landAny = false, landMs = 0;
 function landPaint() {
@@ -5496,8 +5543,9 @@ function landPaint() {
   const shapes = (list, ptsOf, fill, line) => { if (!list.length) return; c.beginPath(); for (const f of list) { const q = ptsOf(f[2], f[3]); c.moveTo(q[0][0], q[0][1]); for (let k = 1; k < q.length; k++) c.lineTo(q[k][0], q[k][1]); c.closePath(); } c.fillStyle = fill; c.fill(); if (line) { c.strokeStyle = line; c.lineWidth = 1 / 3; c.stroke(); } };
   const sm = of('stump'); ells(sm, 0.25, 0.75, 0.5, 'rgb(104,80,54)'); ells(sm, 0, 0.62, 0.38, 'rgb(196,170,124)', 'rgb(104,80,54)');
   const lg = of('logs'); lines(lg.map(f => [f[2] - 1.5, f[3], f[2] + 1.5, f[3]]), 'rgb(120,92,60)', 0.7); lines(lg.map(f => [f[2] - 1.2, f[3] - 0.7, f[2] + 1.2, f[3] - 0.7]), 'rgb(142,112,74)', 0.7);
-  const pl = of('plot'); LAND_STEP.forEach((col, k) => shapes(pl.filter(f => f[4] === k), (x, y) => [[x - 2.1, y - 0.9], [x + 1.7, y - 1.2], [x + 2.1, y + 0.9], [x - 1.7, y + 1.2]], col, 'rgb(62,74,44)'));
-  lines(pl.map(f => [f[2] - 1.8, f[3] - 0.2, f[2] + 1.8, f[3] - 0.5]).concat(pl.map(f => [f[2] - 1.7, f[3] + 0.5, f[2] + 1.9, f[3] + 0.2])), 'rgba(84,96,46,.6)', 1 / 3);
+  lines(of('path').map(f => [f[2], f[3], f[4], f[5]]), 'rgba(196,176,128,.85)', 0.6);
+  const pl = of('plot'); LAND_STEP.forEach((col, k) => shapes(pl.filter(f => f[4] === k), (x, y) => [[x - 2.6, y - 1.1], [x + 2.2, y - 1.5], [x + 2.6, y + 1.1], [x - 2.2, y + 1.5]], col, 'rgb(62,74,44)'));
+  lines(pl.map(f => [f[2] - 2.3, f[3] - 0.3, f[2] + 2.3, f[3] - 0.7]).concat(pl.map(f => [f[2] - 2.2, f[3] + 0.6, f[2] + 2.4, f[3] + 0.2])), 'rgba(84,96,46,.6)', 1 / 3);
   const hs = of('house'); shapes(hs, (x, y) => [[x - 1, y - 0.5], [x + 1, y - 0.5], [x + 1, y + 0.7], [x - 1, y + 0.7]], 'rgb(228,214,184)', 'rgb(66,54,44)'); shapes(hs, (x, y) => [[x - 1.35, y - 0.45], [x, y - 1.7], [x + 1.35, y - 0.45]], 'rgb(162,88,62)', 'rgb(66,54,44)');
   trees.sort((a, b) => a[0] - b[0]);
   for (const t of trees) if (clearOfWater(t[1], t[2], t[3])) TREE[t[1]](c, t[2], t[3], t[4]);
@@ -5522,7 +5570,7 @@ function landSheet() {                               // the sheet as the year no
   if (!landOn || !ECON || mode === 'terrain' || mode === 'river') return null;   // while the ground or its rivers are being drawn, the ground shows as it is
   landCompute(); const L = LAND; if (!L || !(L.tot.farm + L.tot.cleared + L.tot.logged + L.tot.mine + L.tot.terrace + L.tot.garden)) return null;
   const key = L.ver + '|' + L.unit + '|' + painted.size + '|' + ED.rivers.length;
-  if (key !== landKey) { landKey = key; const t0 = performance.now(); try { landPaint(); } catch (err) { landAny = false; console.error('land sheet', err); } landMs = performance.now() - t0; }
+  if (key !== landKey) { landKey = key; const t0 = performance.now(); try { landPaint(); } catch (err) { console.error('land sheet', err); } landMs = performance.now() - t0; }   // a sheet that fails to paint leaves the last one lying
   return landAny ? landCv : null;
 }
 drawOverGround = function (c, w, h) { const cvs = landSheet(); if (cvs) c.drawImage(cvs, 0, 0, w, h); };
@@ -5634,11 +5682,11 @@ function slaveApply(rows) {
   let ppl = 0, inc = 0; for (const r of rows) { ppl += r.people; inc += r.inc; } const mean = ppl > 0 ? inc / ppl : 0; if (!(mean > 0)) return rows;
   const n = rows.length, law = rows.map(r => slaveLaw(r.c)), sup = new Float64Array(n), dem = new Float64Array(n), held = new Float64Array(n), out = new Float64Array(n), got = new Float64Array(n), flows = [];
   rows.forEach((r, k) => {
-    const y = r.inc / r.people, poor = clamp(clamp((0.8 * mean - y) / (0.8 * mean), 0, 1) + 0.08 * (r.short || 0) - orgWell(r.c), 0, 1), rich = clamp((y - mean) / mean, 0, 1.5);
+    const y = r.inc / r.people, poor = clamp(clamp((0.8 * mean - y) / (0.8 * mean), 0, 1) + 0.08 * (r.short || 0) + (r.c.reg === 'sweat' ? 0.04 : 0) + 0.004 * (r.wellPen || 0) - orgWell(r.c), 0, 1), rich = clamp((y - mean) / mean, 0, 1.5);
     if (law[k] !== 'abol') { sup[k] = r.people * TU('slaveOut') * poor * (law[k] === 'pat' ? 0.5 : 1); dem[k] = r.people * TU('slaveIn') * (1 / 3 + rich) * (law[k] === 'pat' ? 0.4 : 1) / (1 + r.people / TU('slaveCheap')); }   // a crowded city has cheap free hands, and wants few slaves
   });
   for (let k = 0; k < n; k++) { const own = Math.min(sup[k], dem[k]); held[k] += own; sup[k] -= own; dem[k] -= own; }   // a city's own poor first
-  const may = (a, b) => { const sa = rows[a].c.sto, sb = rows[b].c.sto, same = !!sa && sa === sb; if (law[a] === 'pat' || law[b] === 'pat') return same; return same || !ecoRival(sa, sb); };
+  const may = (a, b) => { const sa = rows[a].c.sto, sb = rows[b].c.sto, same = !!sa && sa === sb; if (law[a] === 'pat') return same; return same || !ecoRival(sa, sb); };   // a is the seller: under patronage people are not sold out of the state, but a city of such a state may buy from abroad (v0.13.0, the owner's)
   // The journey (v0.12.0, the owner's): people are marched and shipped along the lines of the trade network, as goods are. The
   // nearest seller is the one the network brings nearest. Carrying costs a share of the price that grows with the journey, so a
   // buyer gets fewer from far away, and a journey that would cost more than the slave is not made. Where no line joins two
@@ -5672,7 +5720,7 @@ function slaveApply(rows) {
   return rows;
 }
 const __incLabor = ecoIncome;
-ecoIncome = function (rows) { return slaveApply(__incLabor(rows)); };
+ecoIncome = function (rows) { __incLabor(rows); socApply(rows); return slaveApply(rows); };
 
 function slaveHTML() {
   if (!ECON) return '';
@@ -5770,8 +5818,377 @@ const __tcLabor = tradeCityHTML;
 tradeCityHTML = function (k) {
   let h = __tcLabor(k); if (!ECON || ECO.noSlave) return h;
   const seen = slaveNow(), sl = seen.rows[k]; if (!sl) return h;
-  return h + `<h4>แรงงานทาส</h4><div class="tr">ทาสในเมือง <b>${ecoNumF(sl.held)}</b> คน <span class="w">ซื้อเข้า ${ecoNumF(sl.bought)} · ถูกขายออก ${ecoNumF(sl.out)}${sl.law === 'pat' ? ' · ระบบอุปถัมภ์' : ''}</span></div>`;
+  return h + `<h4>แรงงานทาส</h4><div class="tr">ทาสในเมือง <b>${socN(sl.held)}</b> คน <span class="w">ซื้อเข้า ${socN(sl.bought)} · ถูกขายออก ${socN(sl.out)}${sl.law === 'pat' ? ' · ระบบอุปถัมภ์' : ''}</span></div>`;
 };
+// ---------- society (v0.13.0, the owner's twelve) ----------
+// What this part adds to the year, each from a line of the owner's:
+//   - People move. A city's people are those who were born to it and stay, those who came, and those who left, and beside them
+//     the visitors who pass through. How settled a city's people are, how readily they move and how much the place charms a
+//     visitor are three numbers each city is given by lot when it is made (the owner changes them, or draws again).
+//   - Movement follows well-being and income: people leave where life is poorer than their state's average and settle where it
+//     is better. A state chooses how its incomers spread: by the pull of each city, into a few great ones, evenly, or with the
+//     seasons, out of the hard winters and back.
+//   - Visitors go by four things the owner chose together: what there is to see near a city, how much trade passes through it,
+//     how rich and well it lives, and the houses of organisations in it. Rich cities send more of them, far cities draw fewer.
+//   - A city of many people has cheap hands: its workshops turn out more, and caravans to and from it cost less.
+//   - Each city's workshops run under one of four orders of work, the owner's choice of four.
+//   - A state that buys far more than it sells, measured against what it makes, lives worse for it. A greater state leans on
+//     the smaller ones beside it and pays them less. And a state in deficit does something about it, with the tools its
+//     system favours, the first of them first: a wall of duties, a bounty on exports, a cheaper coin, making at home what it
+//     buys abroad, a tighter belt, drawing visitors. Organisations are left to the owner, as a last resort the card points to.
+// Every number here is mine unless the owner gave it, and each sits in the numbers tab.
+Object.assign(ETUNE, {
+  labRef: [10000, 100, 1e7, 100, 'จำนวนคนของเมืองที่ค่าแรงเป็นค่ากลาง เมืองที่คนมากกว่านี้ค่าแรงถูกลง เมืองที่คนน้อยกว่านี้ค่าแรงแพงขึ้นเล็กน้อย', 'ประชากรและแรงงาน'],
+  labCheap: [0.3, 0, 0.8, 0.01, 'ค่าแรงถูกลงได้มากสุดเป็นส่วนเท่านี้ เมื่อเมืองมีคนเป็นพันเท่าของค่ากลาง', 'ประชากรและแรงงาน'],
+  labMake: [0.5, 0, 2, 0.05, 'โรงงานผลิตเพิ่มเป็นกี่เท่าของส่วนที่ค่าแรงถูกลง', 'ประชากรและแรงงาน'],
+  labHaul: [1, 0, 2, 0.05, 'ค่าคาราวานของเส้นที่ต่อกับเมืองถูกลงเป็นกี่เท่าของส่วนที่ค่าแรงถูกลง นับเฉพาะช่วงทางบก', 'ประชากรและแรงงาน'],
+  landFood: [1, 0, 1, 0.05, 'เมื่อที่ดินไม่พอ เมืองผลิตอาหารขาดไปเป็นส่วนเท่านี้ของส่วนที่ดินที่ขาด (1 คือขาดที่ดินเท่าไรก็ผลิตอาหารขาดเท่านั้น ส่วนที่ขาดต้องซื้อเข้า)', 'ประชากรและแรงงาน'],
+  regHomeOut: [0.85, 0.3, 1.5, 0.01, 'งานช่างตามบ้าน: ผลผลิตโรงงานเทียบกับโรงงานกะเดียว', 'ระเบียบงาน'],
+  regHomeVal: [0.08, 0, 1, 0.01, 'งานช่างตามบ้าน: มูลค่าสินค้าโรงงานที่เพิ่มขึ้น', 'ระเบียบงาน'],
+  regSweatOut: [1.25, 0.5, 2.5, 0.01, 'โรงงานเร่งผลิต: ผลผลิตโรงงานเทียบกับโรงงานกะเดียว', 'ระเบียบงาน'],
+  regSweatWell: [10, 0, 50, 1, 'โรงงานเร่งผลิต: ความเป็นอยู่ที่ลดลง (แต้มจาก 100)', 'ระเบียบงาน'],
+  regCareOut: [1.12, 0.5, 2.5, 0.01, 'โรงงานสองกะมีสวัสดิการ: ผลผลิตโรงงานเทียบกับโรงงานกะเดียว', 'ระเบียบงาน'],
+  regCareCost: [0.1, 0, 0.8, 0.01, 'โรงงานสองกะมีสวัสดิการ: ต้นทุนค่าแรงที่เพิ่ม เป็นส่วนของมูลค่าสินค้าโรงงานที่หักจากรายได้ของเมือง', 'ระเบียบงาน'],
+  regWell: [5, 0, 50, 1, 'งานช่างตามบ้านและโรงงานมีสวัสดิการ: ความเป็นอยู่ที่เพิ่มขึ้น (แต้มจาก 100)', 'ระเบียบงาน'],
+  migMove: [0.5, 0, 1, 0.05, 'ส่วนของคนที่พร้อมย้ายซึ่งย้ายออกจริงในเมืองที่แย่ที่สุดของรัฐ', 'ย้ายถิ่นและท่องเที่ยว'],
+  migWorld: [0.2, 0, 1, 0.05, 'ส่วนของคนย้ายออกที่ไปตั้งถิ่นนอกรัฐของตัวเอง', 'ย้ายถิ่นและท่องเที่ยว'],
+  seasSpan: [20, 2, 80, 1, 'ย้ายถิ่นตามฤดู: เมืองที่หน้าหนาวเย็นกว่าเมืองที่อุ่นที่สุดของรัฐเท่านี้องศา คนที่พร้อมย้ายครึ่งหนึ่งออกไปอยู่เมืองที่อุ่นกว่าครึ่งปี', 'ย้ายถิ่นและท่องเที่ยว'],
+  tourRate: [0.02, 0, 1, 0.005, 'จำนวนครั้งที่คนหนึ่งคนออกไปเที่ยวเมืองอื่นต่อปี ในเมืองที่รายได้และความเป็นอยู่เท่าค่าเฉลี่ย', 'ย้ายถิ่นและท่องเที่ยว'],
+  tourSpend: [0.03, 0, 1, 0.005, 'เงินที่นักท่องเที่ยวหนึ่งคนใช้ในเมืองที่ไปเที่ยว เป็นส่วนของรายได้ต่อหัวเฉลี่ยของแผนที่', 'ย้ายถิ่นและท่องเที่ยว'],
+  tourFar: [1, 0.1, 10, 0.1, 'ระยะที่แรงดึงดูดนักท่องเที่ยวลดลงราวสองในสาม เป็นกี่เท่าของการเดินทางยาวปานกลางของแผนที่', 'ย้ายถิ่นและท่องเที่ยว'],
+  defFree: [0.05, 0, 1, 0.01, 'ขาดดุลได้เท่านี้ของ GDP ของรัฐโดยความเป็นอยู่ไม่ลด', 'ดุลการค้าของรัฐ'],
+  defWell: [100, 0, 500, 5, 'ความเป็นอยู่ลดกี่แต้ม ต่อการขาดดุลเต็ม GDP ที่เกินจากส่วนที่ขาดได้', 'ดุลการค้าของรัฐ'],
+  defMax: [30, 0, 100, 1, 'ความเป็นอยู่ลดเพราะขาดดุลได้มากสุดกี่แต้ม', 'ดุลการค้าของรัฐ'],
+  pressStep: [0.08, 0, 0.5, 0.01, 'รัฐที่ใหญ่กว่าเท่าตัวกดราคาของรัฐติดกันลงได้เป็นส่วนเท่านี้', 'ดุลการค้าของรัฐ'],
+  pressMax: [0.2, 0, 0.6, 0.01, 'กดราคาได้มากสุดเป็นส่วนเท่านี้', 'ดุลการค้าของรัฐ'],
+  polStart: [0.05, 0, 1, 0.01, 'รัฐเริ่มใช้นโยบายแก้ขาดดุลเมื่อขาดดุลเกินเท่านี้ของ GDP', 'ดุลการค้าของรัฐ'],
+  polFull: [0.25, 0.01, 2, 0.01, 'รัฐใช้นโยบายทุกข้อเต็มกำลังเมื่อขาดดุลถึงเท่านี้ของ GDP', 'ดุลการค้าของรัฐ'],
+  polTariff: [0.3, 0, 2, 0.01, 'ภาษีขาเข้าเต็มกำลัง เป็นส่วนของมูลค่าของที่ซื้อเข้า (ไม่เก็บจากอาหาร เกลือ และเชื้อเพลิง)', 'ดุลการค้าของรัฐ'],
+  polSub: [0.3, 0, 2, 0.01, 'เงินอุดหนุนส่งออกเต็มกำลัง เป็นส่วนของมูลค่าของที่ขายออก', 'ดุลการค้าของรัฐ'],
+  polDev: [0.15, 0, 1, 0.01, 'ลดค่าเงินเต็มกำลัง เป็นส่วนที่ของนอกแพงขึ้นและของส่งออกได้ราคาดีขึ้น', 'ดุลการค้าของรัฐ'],
+  polSubst: [0.25, 0, 2, 0.01, 'ผลิตทดแทนการนำเข้าเต็มกำลัง ผลผลิตของสามหมวดที่ซื้อเข้ามากที่สุดเพิ่มเป็นส่วนเท่านี้', 'ดุลการค้าของรัฐ'],
+  polAust: [0.2, 0, 0.9, 0.01, 'รัดเข็มขัดเต็มกำลัง ความต้องการของฟุ่มเฟือยลดเป็นส่วนเท่านี้', 'ดุลการค้าของรัฐ'],
+  polTour: [0.5, 0, 3, 0.05, 'ส่งเสริมการท่องเที่ยวเต็มกำลัง แรงดึงดูดนักท่องเที่ยวของเมืองในรัฐเพิ่มเป็นส่วนเท่านี้', 'ดุลการค้าของรัฐ'],
+});
+const EREG = {
+  home: ['งานช่างตามบ้าน', 'ผลผลิตโรงงานน้อยลง มูลค่าสินค้าโรงงานสูงขึ้น ความเป็นอยู่ดีขึ้น'],
+  shift: ['โรงงานกะเดียว', 'ค่ากลาง ไม่บวกไม่ลบ'],
+  sweat: ['โรงงานเร่งผลิต กะยาว', 'ผลผลิตโรงงานมากขึ้น ความเป็นอยู่แย่ลง คนย้ายออกมากขึ้น และความจนที่เพิ่มทำให้มีทาสมากขึ้น'],
+  care: ['โรงงานสองกะมีสวัสดิการ', 'ผลผลิตโรงงานมากขึ้น ต้นทุนค่าแรงสูงขึ้น ความเป็นอยู่ดีขึ้น และดึงคนย้ายเข้า'],
+};
+const ESPREAD = {
+  nat: ['ตามแรงดึงดูด', 'คนย้ายเข้าเมืองตามแรงดึงดูดและขนาดของแต่ละเมือง'],
+  clump: ['เป็นกลุ่มก้อน', 'คนย้ายเข้ากระจุกในเมืองใหญ่ที่น่าอยู่ที่สุดไม่กี่เมือง เมืองเล็กแทบไม่ได้คน'],
+  even: ['สม่ำเสมอ', 'คนย้ายเข้ากระจายทุกเมืองใกล้เคียงกันไม่ว่าเมืองเล็กหรือใหญ่ เมืองเล็กจึงโตเร็วกว่าเมื่อเทียบกับขนาด'],
+  season: ['ย้ายถิ่นตามฤดู', 'นอกจากย้ายตามแรงดึงดูด คนส่วนหนึ่งออกจากเมืองที่ฤดูหนาวรุนแรงไปอยู่เมืองที่อุ่นกว่าในรัฐเดียวกันครึ่งปีแล้วกลับ'],
+};
+const EPOL = {
+  tariff: ['ภาษีขาเข้า', 'ของจากนอกรัฐแพงขึ้นจึงซื้อเข้าน้อยลง ไม่เก็บจากอาหาร เกลือ และเชื้อเพลิง', 'ของในเมืองแพงขึ้น ความเป็นอยู่ลดเล็กน้อย'],
+  subsidy: ['อุดหนุนการส่งออก', 'รัฐช่วยค่าขนของที่ขายออกนอกรัฐ จึงขายได้ไกลและมากขึ้น', 'รัฐจ่ายเงินอุดหนุน รายได้ของเมืองลดเล็กน้อย'],
+  dev: ['ลดค่าเงิน', 'ของส่งออกได้ราคาดีขึ้นในสายตาผู้ขาย และของนอกแพงขึ้น', 'ของนำเข้าแพง ความเป็นอยู่ลด'],
+  subst: ['ผลิตทดแทนการนำเข้า', 'เร่งผลิตสามหมวดที่รัฐซื้อเข้ามากที่สุดขึ้นเองในรัฐ', 'รัฐอุดหนุนผู้ผลิต รายได้ของเมืองลดเล็กน้อย'],
+  aust: ['รัดเข็มขัด', 'ลดการใช้ของฟุ่มเฟือย (ของหายาก โลหะมีค่า ตำรา เครื่องกล สมุนไพร) จึงซื้อเข้าน้อยลง', 'ความเป็นอยู่ลด'],
+  tour: ['ส่งเสริมการท่องเที่ยว', 'ดึงนักท่องเที่ยวจากนอกรัฐ เงินที่เขาใช้นับเป็นรายรับของรัฐ', 'รัฐจ่ายค่าส่งเสริม รายได้ของเมืองลดเล็กน้อย'],
+};
+const EPOL_SYS = { trad: ['aust'], feud: ['tariff', 'aust'], merc: ['tariff', 'subst', 'subsidy'], cap: ['dev', 'subsidy', 'tour'], soc: ['subst', 'aust', 'tariff'], anar: [] };
+const EPOL_COST = { tariff: [3, 0], subsidy: [0, 0.02], dev: [4, 0], subst: [0, 0.02], aust: [6, 0], tour: [0, 0.01] };   // at full strength: points of well-being lost, share of the city's income spent
+const SOC_FOOD = new Set(['grain', 'protein']), SOC_LUX = new Set(['luxury', 'rare', 'books', 'tech', 'herbs']), SOC_STAPLE = new Set(['grain', 'protein', 'salt', 'fuel']);
+ECO.regime = {}; ECO.demo = {};
+let SOC = null;
+
+// ---- each city's lot ----
+function socHash(str, salt) { let h = (2166136261 ^ salt) >>> 0; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } h ^= h >>> 13; h = Math.imul(h, 0x5bd1e995); h ^= h >>> 15; return (h >>> 0) / 4294967296; }
+function socDemo(id) {                               // the lot a city drew when it was made, unless the owner has set or redrawn it
+  const o = ECO.demo[id] || {};
+  return { nat: o.nat != null ? o.nat : 0.6 + 0.35 * socHash(id, 1), mob: o.mob != null ? o.mob : 0.5 + socHash(id, 2), charm: o.charm != null ? o.charm : 0.5 + socHash(id, 3) };
+}
+const polList = s => { if (!s || s.sys === 'anar') return []; const on = (Array.isArray(s.pol) ? s.pol : EPOL_SYS[s.sys] || []).filter(k => EPOL[k]); return s.pol1 && on.includes(s.pol1) ? [s.pol1, ...on.filter(k => k !== s.pol1)] : on; };
+const polOn = (c, tool) => c.pol && c.pol.tools.has(tool) ? c.pol.k : 0;
+
+// ---- before the year's trade: what each city brings to it ----
+function socPrep(cities) {
+  const ref = TU('labRef'), cheap = TU('labCheap'), pts = new Map(), st = stPeak();
+  for (const p of visiblePoints()) if (p.h >= 0) pts.set(p.h, (pts.get(p.h) || 0) + 1);
+  for (const c of cities) {
+    const s = ECOX.byKey.get(c.st) || null;
+    c.reg = EREG[ECO.regime[c.id]] ? ECO.regime[c.id] : s && EREG[s.reg] ? s.reg : 'shift';
+    c.lab = clamp(cheap * Math.log10(Math.max(1, c.people) / ref) / 3, -0.1, cheap);              // how much cheaper a day's work is here than in a middling town
+    c.pol = POL && s ? POL.get(s.id) || null : null;
+    c.work = (c.reg === 'home' ? TU('regHomeOut') : c.reg === 'sweat' ? TU('regSweatOut') : c.reg === 'care' ? TU('regCareOut') : 1) * (1 + TU('labMake') * c.lab);
+    c.foodCut = 1 - TU('landFood') * (c.land ? c.land.lack : 0);                                   // a city short of land grows that much less of its food, and must buy the rest
+    let seen = 0, sea = 0, lake = 0, ring = [c.h]; const sn = new Set(ring);                       // what there is to see: marks on the map within three hexes, the great peak, a sea shore, a lake
+    for (let d = 0; d <= 3 && ring.length; d++) { const nx = []; for (const u of ring) { seen += pts.get(u) || 0; if (u === st) seen += 3; const b = eff(u); if (d <= 1 && isSea(b)) sea = 1; if (d <= 2 && b === 'L') lake = 1; for (let j = 0; j < 6; j++) { const v = NB[u * 6 + j]; if (v >= 0 && !sn.has(v)) { sn.add(v); nx.push(v); } } } ring = nx; }
+    c.att = clamp((seen + sea + lake) / 6, 0, 1);
+  }
+}
+function socRaw(c, cat) { return (SOC_FOOD.has(cat) ? c.foodCut : 1) * (c.pol && c.pol.top.has(cat) ? 1 + polOn(c, 'subst') * TU('polSubst') : 1); }
+function socMake(c, m) { return c.work * (c.pol && c.pol.top.has(m) ? 1 + polOn(c, 'subst') * TU('polSubst') : 1); }
+function socNeed(c, cat) { return SOC_LUX.has(cat) ? 1 - polOn(c, 'aust') * TU('polAust') : 1; }
+function socHaul(L, cities) {                        // caravans to and from a city of many hands cost less: the stretch by land, by the two ends
+  const a = cities[L.ia], b = cities[L.ib], len = (L.dry || 0) + (L.wet || 0), dry = len > 0 ? L.dry / len : 0;
+  return clamp(1 - TU('labHaul') * dry * (Math.max(0, a.lab) + Math.max(0, b.lab)) / 2, 0.4, 1);
+}
+function polEarn(ci, cj, cat, pi, pj, v, gain, cost) {   // a trade across a border, as the two states' tools leave it
+  POLG = gain; POLC = cost; const si = ci.sto, sj = cj.sto; if (si === sj) return;
+  if ((si && si.sys === 'anar') || (sj && sj.sys === 'anar')) return;                              // no wall and no bounty reaches the black market
+  const a = ci.pol, b = cj.pol;
+  if (b) { if (b.tools.has('tariff') && !SOC_STAPLE.has(cat)) POLC += b.k * TU('polTariff') * pj * v; if (b.tools.has('dev')) POLC += b.k * TU('polDev') * pj * v; }
+  if (a) { if (a.tools.has('subsidy')) POLC = Math.max(0.3 * cost, POLC - a.k * TU('polSub') * pi * v); if (a.tools.has('dev')) POLG += a.k * TU('polDev') * pj; }
+}
+
+// ---- after the year's trade ----
+function socMet(E, k) {                              // how far the city's needs were met, by value, the staples counted twice
+  let a = 0, b = 0;
+  for (const cat of ECATS) { const nd = E.need[k][cat]; if (!(nd > 0) || !ECAT[cat] || ECAT[cat].people) continue; const w = nd * ECAT[cat].v * (SOC_STAPLE.has(cat) ? 2 : 1); a += w * Math.min(1, (E.got[k][cat] || 0) / nd); b += w; }
+  return b > 0 ? a / b : 1;
+}
+let socNearKey = '', socNearSet = null;
+function socNear() {                                 // which states touch
+  const key = ecoStamp + '|' + ECO.states.length; if (key === socNearKey && socNearSet) return socNearSet;
+  const S = new Set(); for (let i = 0; i < N; i++) { const a = ECO.cells[i]; if (a === '.') continue; for (let j = 0; j < 6; j++) { const v = NB[i * 6 + j]; if (v < 0) continue; const b = ECO.cells[v]; if (b !== '.' && b !== a) S.add(a < b ? a + b : b + a); } }
+  socNearKey = key; return socNearSet = S;
+}
+const socTouch = (a, b) => socNear().has(a < b ? a + b : b + a);
+function socTRef(E) { let s = 0, m = 0; const n = E.cities.length; for (let a = 0; a < n; a++) for (let b = a + 1; b < n; b++) { const t = E.NT[a][b]; if (isFinite(t) && t > 0) { s += t; m++; } } return m ? s / m : 1; }
+function socApply(rows) {
+  const E = ECON, n = rows.length; SOC = null; if (!E || !n) return rows;
+  let ppl = 0, inc = 0; for (const r of rows) { ppl += r.people; inc += r.inc; } const mean = ppl > 0 ? inc / ppl : 0, per = ECO.central.per;
+  const base = rows.map(r => r.people), books = new Map();
+  const book = s => { let b = books.get(s.id); if (!b) books.set(s.id, b = { s, out: 0, inn: 0, gdp: 0, people: 0, cities: 0, lost: 0, won: 0, tourIn: 0, tourOut: 0, byP: new Map(), byC: new Map(), sq: new Map(), def: 0, pen: 0, plan: null }); return b; };
+  rows.forEach((r, k) => { if (r.s) { const b = book(r.s); b.gdp += r.gdp; b.people += r.people; b.cities++; if (r.c.pol) b.plan = r.c.pol; } });
+  // the order of work, and the workshops' wage bill under the two-shift order
+  rows.forEach((r, k) => {
+    const c = r.c; let made = 0; for (const m of EMADEC) { const mk = E.MK[k][m]; if (mk) made += mk[0] * (E.P1[k][m] || 1) * ECAT[m].v; } made *= per; r.made = made;
+    if (c.reg === 'home') { r.inc += TU('regHomeVal') * made; r.gdp += TU('regHomeVal') * made; } else if (c.reg === 'care') r.inc -= TU('regCareCost') * made;
+    if (c.pol) { let cost = 0; for (const t of c.pol.tools) cost += EPOL_COST[t][1]; r.inc -= c.pol.k * cost * r.gdp; }
+  });
+  // each state's books in goods, at the buyer's price; and what a greater neighbour squeezed out of a smaller one
+  for (const f of E.flows) {
+    if (f.cat === 'labor') continue; const ra = rows[f.from], rb = rows[f.to], A = ra.s, B = rb.s; if (A === B) continue;
+    let v = f.amt * ECAT[f.cat].v * (E.P1[f.to][f.cat] || 1) * per;
+    if (A && B && A.sys !== 'anar' && B.sys !== 'anar' && (A.rel[B.id] || B.rel[A.id]) !== 'ally' && socTouch(A.id, B.id)) {
+      const ga = book(A).gdp, gb = book(B).gdp;
+      if (gb > ga && ga > 0) { const x = clamp(TU('pressStep') * Math.log2(gb / ga), 0, TU('pressMax')) * v; ra.inc -= x; rb.inc += x; v -= x; const ba = book(A), bb = book(B); ba.lost += x; bb.won += x; ba.sq.set(B.id, (ba.sq.get(B.id) || 0) + x); }
+    }
+    const put = (b, other, side) => { const P = b.byP.get(other) || b.byP.set(other, [0, 0]).get(other), C = b.byC.get(f.cat) || b.byC.set(f.cat, [0, 0]).get(f.cat); P[side] += v; C[side] += v; };
+    if (A) { const b = book(A); b.out += v; put(b, B ? B.id : '.', 0); }
+    if (B) { const b = book(B); b.inn += v; put(b, A ? A.id : '.', 1); }
+  }
+  // well-being before the state's balance weighs on it
+  rows.forEach((r, k) => {
+    const c = r.c, why = []; r.met = socMet(E, k); r.rich = mean > 0 ? r.inc / r.people / mean : 1;
+    let w = 100 * r.met; why.push(['ความต้องการที่ยังไม่ได้รับ', w - 100]);
+    const add = (t, v) => { if (Math.abs(v) >= 0.5) { w += v; why.push([t, v]); } };
+    add('รายได้ต่อหัวเทียบค่าเฉลี่ย', 8 * clamp(Math.log2(Math.max(0.01, r.rich)), -1, 1));
+    add('องค์กรในเมือง', Math.min(15, 100 * orgWell(c)));
+    add(EREG[c.reg][0], c.reg === 'sweat' ? -TU('regSweatWell') : c.reg === 'home' || c.reg === 'care' ? TU('regWell') : 0);
+    if (c.pol) for (const t of c.pol.tools) add(EPOL[t][0], -c.pol.k * EPOL_COST[t][0]);
+    r.well0 = clamp(w, 0, 100); r.wellWhy = why;
+  });
+  // visitors
+  const top = Math.max(1e-9, ...E.cities.map(c => c.through || 0)), tRef = socTRef(E), far = Math.max(1e-6, TU('tourFar') * tRef), spend = TU('tourSpend') * mean, rate = TU('tourRate');
+  const score = rows.map(r => {
+    const c = r.c, d = socDemo(c.id); let og = 0; for (const o of c.org || []) og += o.kind === 'faith' ? 1 : o.kind === 'guild' || o.kind === 'assoc' ? 0.5 : 0.3;
+    r.tourWhy = { att: c.att || 0, hub: Math.sqrt((c.through || 0) / top), rich: clamp(r.rich / 2, 0, 1) * r.well0 / 100, org: clamp(og / 2, 0, 1), charm: d.charm };
+    return d.charm * (0.35 * r.tourWhy.att + 0.25 * r.tourWhy.hub + 0.2 * r.tourWhy.rich + 0.2 * r.tourWhy.org + 0.01) * (1 + polOn(c, 'tour') * TU('polTour')) * Math.sqrt(r.people);
+  });
+  const tin = new Float64Array(n), tout = new Float64Array(n), W = new Float64Array(n);
+  if (rate > 0 && n > 1) for (let i = 0; i < n; i++) {
+    const r = rows[i], G = r.people * rate * clamp(r.rich, 0.2, 3) * r.well0 / 100; if (!(G >= 0.5)) continue;
+    let sum = 0; for (let j = 0; j < n; j++) { W[j] = 0; if (j === i) continue; const t = E.NT[i][j]; if (!isFinite(t) || ecoRival(r.s, rows[j].s)) continue; sum += W[j] = score[j] * Math.exp(-t / far); }
+    if (!(sum > 0)) continue; tout[i] = G;
+    for (let j = 0; j < n; j++) if (W[j] > 0) { const x = G * W[j] / sum; tin[j] += x; const A = r.s, B = rows[j].s; if (A !== B) { if (A) book(A).tourOut += x * spend; if (B) book(B).tourIn += x * spend; } }
+  }
+  rows.forEach((r, k) => { r.inc += (tin[k] - tout[k]) * spend; });
+  // a state deep in deficit lives worse
+  for (const b of books.values()) { const net = b.out + b.tourIn - b.inn - b.tourOut; b.net = net; b.def = b.gdp > 0 ? Math.max(0, -net) / b.gdp : 0; b.pen = clamp((b.def - TU('defFree')) * TU('defWell'), 0, TU('defMax')); }
+  rows.forEach(r => { const pen = r.s && books.get(r.s.id) ? books.get(r.s.id).pen : 0; r.wellPen = pen; if (pen >= 0.5) r.wellWhy.push(['รัฐขาดดุลการค้าหนัก', -pen]); r.well = clamp(r.well0 - pen, 0, 100); });
+  // people on the move
+  const A = rows.map(r => Math.max(0.02, (r.well / 100) * Math.sqrt(clamp(r.rich, 0.2, 3)) * (r.c.reg === 'sweat' ? 0.85 : r.c.reg === 'care' ? 1.15 : 1)));
+  const groups = new Map(); rows.forEach((r, k) => { const key = r.s || null; (groups.get(key) || groups.set(key, []).get(key)).push(k); });
+  const mIn = new Float64Array(n), mOut = new Float64Array(n), sIn = new Float64Array(n), sOut = new Float64Array(n), mobile = rows.map((r, k) => { const d = socDemo(r.c.id); return base[k] * Math.min(0.6, (1 - d.nat) * d.mob); });
+  const CLM = climEnsure(), tw = rows.map(r => CLM && CLM.tw ? CLM.tw[r.c.h] : 0), harsh = new Float64Array(n), move = TU('migMove'), abroad = TU('migWorld');
+  for (const [s, ks] of groups) {
+    let pw = 0, aw = 0; for (const k of ks) { pw += base[k]; aw += A[k] * base[k]; } const abar = pw > 0 ? aw / pw : 1;
+    let pool = 0; for (const k of ks) { const o = mobile[k] * move * clamp((abar - A[k]) / abar + 0.25, 0.05, 1) * (rows[k].c.reg === 'sweat' ? 1.3 : 1); mOut[k] = o; pool += o; }
+    const outs = []; let ws = 0; for (let j = 0; j < n; j++) { const o = rows[j].s || null; if (o === s || ecoRival(s, o)) continue; const w = A[j] * base[j]; outs.push([j, w]); ws += w; }
+    const away = ws > 0 ? pool * abroad : 0, home = pool - away, mode = s && ESPREAD[s.spread] ? s.spread : 'nat';
+    const wt = k => mode === 'clump' ? Math.pow(A[k] * base[k], 1.8) : mode === 'even' ? A[k] : A[k] * base[k];
+    let hs = 0; for (const k of ks) hs += wt(k); if (hs > 0) for (const k of ks) mIn[k] += home * wt(k) / hs;
+    for (const [j, w] of outs) mIn[j] += away * w / ws;
+    if (mode === 'season') {                           // out of the hard winters for half the year, to the milder cities of the same state
+      let warm = -Infinity; for (const k of ks) warm = Math.max(warm, tw[k]);
+      for (const k of ks) harsh[k] = clamp((warm - tw[k]) / TU('seasSpan'), 0, 1);   // how much colder a city's winter is than the mildest of its state's
+      let ms = 0; for (const k of ks) ms += base[k] * (1 - harsh[k]); if (!(ms > 0)) continue;
+      for (const k of ks) { const o = mobile[k] * 0.5 * harsh[k]; if (!(o > 0)) continue; sOut[k] = o; for (const j of ks) if (j !== k) sIn[j] += o * base[j] * (1 - harsh[j]) / Math.max(1e-9, ms - base[k] * (1 - harsh[k])); }
+    }
+  }
+  const T = { native: 0, moved: 0, season: 0, tour: 0 };
+  rows.forEach((r, k) => {
+    r.demo = { base: base[k], native: Math.max(0, base[k] - mOut[k]), in: mIn[k], out: mOut[k], seasIn: sIn[k], seasOut: sOut[k], tour: tin[k], tourOut: tout[k] };
+    r.people = Math.max(1, Math.round(base[k] - mOut[k] + mIn[k] + (sIn[k] - sOut[k]) / 2));
+    T.native += r.demo.native; T.moved += mOut[k]; T.season += sOut[k]; T.tour += tin[k];
+  });
+  SOC = { books, mean, spend, tot: T, rows };
+  return rows;
+}
+
+// ---- the year, closed: slaves as a class of goods on the lines they are carried by, and the state of each state ----
+function socYear(E) {
+  ECAT.labor.v = 1;
+  const rows = ecoIncome(ecoGdp()), S = SLAVE, unit = ECO.unit, per = ECO.central.per;
+  for (let k = 0; k < E.cities.length; k++) { E.MK[k].labor = [0, 0, 0, 0]; E.P0[k].labor = 1; E.P1[k].labor = 1; }
+  if (S && S.flows.length && unit > 0 && per > 0) {
+    ECAT.labor.v = Math.max(0.01, S.price * unit / per);                                          // a person's price, in the measure every other load is priced in
+    for (const f of S.flows) {
+      const amt = f.n / unit; if (!(amt > 0)) continue;
+      E.flows.push({ from: f.a, to: f.b, cat: 'labor', amt, goods: { slaves: amt }, cost: f.t, via: null, broker: -1, hub: false, org: null, way: f.way, by: f.by === 'none' ? 'caravan' : f.by, people: f.n });
+      E.MK[f.a].labor[3] += amt; E.MK[f.b].labor[2] += amt; E.MK[f.b].labor[1] += amt;
+      for (const [li, dir] of f.way) { const L = E.links[li]; L.vol += amt; if (dir > 0) L.fwd += amt; else L.back += amt; L.cats.set('labor', (L.cats.get('labor') || 0) + amt); L.goods.set('slaves', (L.goods.get('slaves') || 0) + amt); let cd = L.cdir.get('labor'); if (!cd) L.cdir.set('labor', cd = [0, 0]); cd[dir > 0 ? 0 : 1] += amt; }
+    }
+  }
+  const st = new Map(); if (SOC) for (const [id, b] of SOC.books) st.set(id, { def: b.def, net: b.net, gdp: b.gdp, byC: b.byC });
+  E.soc = { states: st, rows: rows.length };
+}
+// A state in deficit acts, and the year is worked out once more with what it does. The first working shows how deep each
+// state's deficit is and in which classes of goods; the deeper it is, the more of the state's tools come in, in its own order.
+function polPlan(E) {
+  if (!ECOX.on || !E || !E.soc) return null; const plan = new Map(), start = TU('polStart'), full = Math.max(start + 0.01, TU('polFull'));
+  for (const [id, b] of E.soc.states) {
+    const s = ECOX.byKey.get(id), list = polList(s); if (!s || !list.length || !(b.def > start)) continue;
+    const k = clamp((b.def - start) / (full - start), 0.2, 1), use = Math.max(1, Math.ceil(k * list.length));
+    const top = [...b.byC].map(([cat, v]) => [cat, v[1] - v[0]]).filter(x => x[1] > 0 && !ECAT[x[0]].people).sort((x, y) => y[1] - x[1]).slice(0, 3).map(x => x[0]);
+    plan.set(id, { k, tools: new Set(list.slice(0, use)), top: new Set(top), def1: b.def, net1: b.net });
+  }
+  return plan.size ? plan : null;
+}
+const __ecSoc = econCompute;
+econCompute = function () {
+  POL = null; let E = __ecSoc();
+  const plan = polPlan(E);
+  if (plan) { POL = plan; try { E = __ecSoc(); E.pol = plan; } finally { POL = null; } }
+  return E;
+};
+{ const ap = ecoApply; ecoApply = function () { ap(); GBY.set('slaves', { id: 'slaves', name: 'ทาส', cat: 'labor' }); }; GBY.set('slaves', { id: 'slaves', name: 'ทาส', cat: 'labor' }); }
+
+// ---- the document ----
+{
+  const ld = ecoLoad, sr = ecoSerial;
+  ecoLoad = function (b) {
+    ld(b); b = b || {};
+    ECO.regime = {}; for (const [id, k] of Object.entries(b.regime || {}).slice(0, 4000)) if (EREG[k] && k !== 'shift') ECO.regime[ecoStr(id, 120)] = k;
+    ECO.demo = {}; for (const [id, o] of Object.entries(b.demo || {}).slice(0, 4000)) { if (!o || typeof o !== 'object') continue; const d = {}; if (o.nat != null) d.nat = ecoNum(o.nat, 0.3, 0.99, 0.8); if (o.mob != null) d.mob = ecoNum(o.mob, 0, 3, 1); if (o.charm != null) d.charm = ecoNum(o.charm, 0, 5, 1); if (Object.keys(d).length) ECO.demo[ecoStr(id, 120)] = d; }
+    const by = new Map((Array.isArray(b.states) ? b.states : []).filter(s => s && typeof s.id === 'string').map(s => [s.id, s]));
+    for (const s of ECO.states) { const o = by.get(s.id) || {}; s.spread = ESPREAD[o.spread] ? o.spread : 'nat'; s.reg = EREG[o.reg] && o.reg !== 'shift' ? o.reg : ''; s.pol = Array.isArray(o.pol) ? o.pol.filter(k => EPOL[k]).slice(0, 8) : null; s.pol1 = EPOL[o.pol1] ? o.pol1 : ''; }
+  };
+  ecoSerial = function () {
+    const o = sr(); if (Object.keys(ECO.regime).length) o.regime = { ...ECO.regime }; if (Object.keys(ECO.demo).length) o.demo = JSON.parse(JSON.stringify(ECO.demo));
+    return o;
+  };
+}
+
+// ---- on the screen ----
+const socN = x => { const v = Math.round(x); return Math.abs(v) < 1e6 ? v.toLocaleString('en-US') : ecoNumF(v); }, socPts = v => (v >= 0 ? '+' : '−') + Math.abs(Math.round(v));
+const socOpt = (table, cur, first) => (first != null ? `<option value="">${first}</option>` : '') + Object.entries(table).map(([k, z]) => `<option value="${k}"${k === cur ? ' selected' : ''}>${z[0]}</option>`).join('');
+function socStateForm(s) {                           // a state's choices: how incomers spread, the order of work, and what it does about a deficit
+  if (s.sys === 'anar') return `<div class="tr w">ดินแดนที่ไม่มีรัฐไม่มีนโยบายดุลการค้า คนย้ายเข้าตามแรงดึงดูดของแต่ละเมือง</div>`;
+  const on = new Set(Array.isArray(s.pol) ? s.pol : EPOL_SYS[s.sys] || []), list = polList(s), b = SOC && SOC.books.get(s.id), dis = editable ? '' : ' disabled';
+  let h = ecoIn('การกระจายตัวของคนย้ายเข้า', `<select data-f="sspread"${dis}>${socOpt(ESPREAD, s.spread || 'nat')}</select>`) + `<div class="tr w">${ESPREAD[s.spread || 'nat'][1]}</div>`
+    + ecoIn('ระเบียบงานของโรงงานในรัฐ', `<select data-f="sreg"${dis}>${socOpt(EREG, s.reg || 'shift')}</select>`) + `<div class="tr w">${EREG[s.reg || 'shift'][1]} เมืองที่ตั้งระเบียบของตัวเองในการ์ดเมืองใช้ของตัวเอง</div>`
+    + `<div class="tr">สิ่งที่รัฐทำเมื่อขาดดุลการค้า <span class="w">ใช้ข้อแรกก่อน ยิ่งขาดดุลลึกยิ่งใช้หลายข้อ ชี้ที่ชื่อเพื่อดูผลดีและผลเสีย</span></div><div class="polset">`
+    + Object.entries(EPOL).map(([k, z]) => `<label title="${esc(z[1] + ' ข้อเสีย: ' + z[2])}"><input type="checkbox" data-f="spol" data-k="${k}"${on.has(k) ? ' checked' : ''}${dis}> ${z[0]}</label>`).join('') + `</div>`
+    + (list.length > 1 ? ecoIn('ใช้ข้อไหนก่อน', `<select data-f="spol1"${dis}>${list.map((k, i) => `<option value="${k}"${i === 0 ? ' selected' : ''}>${EPOL[k][0]}</option>`).join('')}</select>`) : '')
+    + (!list.length ? `<div class="tr w">รัฐนี้ไม่แทรกแซง ปล่อยให้ขาดดุลหรือเกินดุลตามการค้า</div>` : '');
+  if (b) h += `<div class="tr w">${socBalanceLine(b)}</div>`;
+  return h;
+}
+function socBalanceLine(b) {
+  const p = b.plan, pc = x => ecoPc(x) + '%';
+  let t = b.net >= 0 ? `ปีนี้เกินดุล ${socN(b.net)} ${esc(ECO.central.name)}` : `ปีนี้ขาดดุล ${socN(-b.net)} ${esc(ECO.central.name)} คิดเป็น ${pc(b.def)} ของ GDP`;
+  if (p) t += ` หลังใช้${[...p.tools].map(k => EPOL[k][0]).join(' ')}ที่กำลัง ${pc(p.k)} (ก่อนใช้ขาดดุล ${pc(p.def1)})`;
+  if (b.pen >= 0.5) t += ` ความเป็นอยู่ของทุกเมืองในรัฐลด ${Math.round(b.pen)} แต้ม`;
+  return t;
+}
+$('ecobody').addEventListener('change', e => {
+  const el = e.target, f = el && el.dataset ? el.dataset.f : ''; if (!editable || !f) return;
+  const box = el.closest('[data-s]'), s = box ? ECO.states.find(x => x.id === box.dataset.s) : null; if (!s) return;
+  if (f === 'sspread') s.spread = ESPREAD[el.value] ? el.value : 'nat';
+  else if (f === 'sreg') s.reg = EREG[el.value] && el.value !== 'shift' ? el.value : '';
+  else if (f === 'spol') { const on = new Set(Array.isArray(s.pol) ? s.pol : EPOL_SYS[s.sys] || []); if (el.checked) on.add(el.dataset.k); else on.delete(el.dataset.k); s.pol = Object.keys(EPOL).filter(k => on.has(k)); if (s.pol1 && !on.has(s.pol1)) s.pol1 = ''; }
+  else if (f === 'spol1') s.pol1 = EPOL[el.value] ? el.value : '';
+  else return;
+  ecoChanged(false); ecoRender();
+});
+$('ecobody').addEventListener('click', e => {
+  const el = e.target.closest ? e.target.closest('[data-a]') : null; if (!el) return; const a = el.dataset.a;
+  if (a === 'stfold') { for (const s of ECO.states) GDPV['st' + s.id] = +el.dataset.v; gdpKeep(); ecoRender(); }
+  else if (a === 'psort') { const k = el.dataset.k; if (GDPV.pk === k) GDPV.pd = GDPV.pd > 0 ? -1 : 1; else { GDPV.pk = k; GDPV.pd = k === 'name' ? 1 : -1; } gdpKeep(); ecoRender(); }
+});
+// the GDP tab: who lives where, who visits, and how each state's books stand
+function socGdpHTML() {
+  if (!ECON) return ''; const rows = ecoIncome(ecoGdp()); if (!rows.length || !SOC) return '';
+  const fold = (id, title, body) => `<details class="efold" data-fold="${id}"${GDPV[id] ? ' open' : ''}><summary>${title}</summary>${body}</details>`, T = SOC.tot, coin = esc(ECO.central.name);
+  const SK = { name: ['เมือง', r => r.c.name], well: ['อยู่ดี', r => r.well], native: ['ดั้งเดิม', r => r.demo.native], in: ['ย้ายเข้า', r => r.demo.in + r.demo.seasIn], out: ['ย้ายออก', r => r.demo.out + r.demo.seasOut], tour: ['นักท่องเที่ยว', r => r.demo.tour] };
+  const sk = SK[GDPV.pk] ? GDPV.pk : 'tour', dir = GDPV.pd > 0 ? 1 : -1, arrow = k => k === sk ? (dir > 0 ? ' ▲' : ' ▼') : '';
+  const list = rows.slice().sort((a, b) => sk === 'name' ? dir * a.c.name.localeCompare(b.c.name, 'th') : dir * (SK[sk][1](a) - SK[sk][1](b)) || a.c.name.localeCompare(b.c.name, 'th'));
+  const wellAvg = rows.reduce((a, r) => a + r.well * r.people, 0) / Math.max(1, rows.reduce((a, r) => a + r.people, 0));
+  let h = fold('gpp', `ประชากร การย้ายถิ่น และนักท่องเที่ยว <small>${rows.length} แถว</small>`,
+    `<div class="tr">ผู้อยู่อาศัยดั้งเดิม <b>${socN(T.native)}</b> คน ย้ายถิ่นในปีนี้ <b>${socN(T.moved)}</b> คน${T.season >= 0.5 ? ` ย้ายตามฤดู <b>${socN(T.season)}</b> คน` : ''} นักท่องเที่ยว <b>${socN(T.tour)}</b> คนต่อปี ความเป็นอยู่เฉลี่ย <b>${Math.round(wellAvg)}</b> จาก 100</div>`
+    + `<div class="etable g5 g7"><div class="eth sortable">${Object.entries(SK).map(([k, v]) => `<span data-a="psort" data-k="${k}" title="กดเพื่อเรียงตามช่องนี้">${v[0]}${arrow(k)}</span>`).join('')}</div><div class="eth"><span></span><span>อยู่ดี</span><span>ดั้งเดิม</span><span>ย้ายเข้า</span><span>ย้ายออก</span><span>นักท่องเที่ยว</span><span>ค่าแรง</span></div>`
+    + list.map(r => `<div class="etr"><span>${r.s ? `<i class="sdot" style="background:${r.s.color}"></i>` : ''}${esc(r.c.name)}${r.c.reg !== 'shift' ? ` <em>${EREG[r.c.reg][0]}</em>` : ''}${r.c.land && r.c.land.lack >= 0.05 ? ` <em>ที่ดินขาด ${ecoPc(r.c.land.lack)}%</em>` : ''}</span><span>${Math.round(r.well)}</span><span>${socN(r.demo.native)}</span><span>${socN(r.demo.in + r.demo.seasIn)}</span><span>${socN(r.demo.out + r.demo.seasOut)}</span><span>${socN(r.demo.tour)}</span><span>${r.c.lab >= 0.005 ? 'ถูก ' + ecoPc(r.c.lab) + '%' : r.c.lab <= -0.005 ? 'แพง ' + ecoPc(-r.c.lab) + '%' : 'กลาง'}</span></div>`).join('') + `</div>`
+    + `<p class="note">ผู้อยู่อาศัยดั้งเดิมคือคนของเมืองที่ยังอยู่ คนย้ายออกจากเมืองที่ความเป็นอยู่และรายได้ต่ำกว่าค่าเฉลี่ยของรัฐไปเมืองที่ดีกว่า ร้อยละ ${ecoPc(TU('migWorld'))} ไปนอกรัฐ นักท่องเที่ยวไม่นับเป็นประชากร แต่ละคนใช้เงินราว ${ecoNumF(SOC.spend)} ${coin} ในเมืองที่ไป แรงดึงดูดนักท่องเที่ยวมาจากสี่อย่าง: สิ่งดึงดูดรอบเมืองในสามช่อง ความเป็นชุมทางการค้า ความมั่งคั่งกับความเป็นอยู่ และองค์กรในเมือง คูณด้วยเสน่ห์ของเมืองที่สุ่มไว้ ค่าแรงถูกหมายถึงโรงงานผลิตได้มากขึ้นและคาราวานรอบเมืองถูกลง ระเบียบงาน สัดส่วนคนดั้งเดิม และเสน่ห์ของเมือง ตั้งได้ในการ์ดของเมืองในโหมดการค้า</p>`);
+  if (SOC.books.size) {
+    const bs = [...SOC.books.values()].sort((a, b) => a.net - b.net);
+    h += fold('gbl', `ดุลการค้าของรัฐและนโยบาย <small>${bs.length} แถว</small>`, `<div class="etable g5"><div class="eth"><span>รัฐ</span><span>ส่งออก</span><span>นำเข้า</span><span>ดุล</span><span>ต่อ GDP</span></div>`
+      + bs.map(b => `<div class="etr"><span><i class="sdot" style="background:${b.s.color}"></i>${esc(b.s.name)}${b.plan ? ` <em>${[...b.plan.tools].map(k => EPOL[k][0]).join(' ')}</em>` : ''}${b.pen >= 0.5 ? ` <em>ความเป็นอยู่ลด ${Math.round(b.pen)}</em>` : ''}${b.lost >= 1 ? ` <em>ถูกกดราคา ${socN(b.lost)}</em>` : ''}${b.won >= 1 ? ` <em>กดราคาได้ ${socN(b.won)}</em>` : ''}</span><span>${socN(b.out + b.tourIn)}</span><span>${socN(b.inn + b.tourOut)}</span><span class="${b.net >= 0 ? 'pos' : 'neg'}">${(b.net >= 0 ? '+' : '−') + socN(Math.abs(b.net))}</span><span>${b.gdp > 0 ? (b.net >= 0 ? '+' : '−') + ecoPc(Math.abs(b.net) / b.gdp) + '%' : ''}</span></div>`).join('') + `</div>`
+      + `<p class="note">ดุลนับสินค้าที่ข้ามเขตรัฐตามราคาในเมืองที่ซื้อ รวมเงินที่นักท่องเที่ยวต่างรัฐใช้ ไม่นับการซื้อขายทาส รัฐที่ขาดดุลเกินร้อยละ ${ecoPc(TU('defFree'))} ของ GDP เสียความเป็นอยู่ และรัฐที่ขาดดุลเกินร้อยละ ${ecoPc(TU('polStart'))} เริ่มใช้นโยบายที่ติ๊กไว้ในแท็บรัฐและเขตแดน รัฐที่ใหญ่กว่า (วัดด้วย GDP) กดราคาของที่ซื้อจากรัฐติดกันที่เล็กกว่าและไม่ใช่พันธมิตร</p>`);
+  }
+  return h;
+}
+{ const g = ecoGdpHTML; ecoGdpHTML = function () { return g() + socGdpHTML(); }; }
+// a city's card in the trade view: its people, how well it lives and why, the order of its workshops, and the lot it drew
+function socCityHTML(k) {
+  const rows = ecoIncome(ecoGdp()), r = rows[k]; if (!r || !r.demo) return ''; const c = r.c, d = socDemo(c.id), D = r.demo, dis = editable ? '' : ' disabled', own = ECO.regime[c.id] || '';
+  let h = `<h3>ประชากรและความเป็นอยู่</h3><div class="tr">ผู้อยู่อาศัย <b>${socN(r.people)}</b> คน <span class="w">ดั้งเดิม ${socN(D.native)} · ย้ายเข้า ${socN(D.in)} · ย้ายออก ${socN(D.out)}${D.seasIn + D.seasOut >= 0.5 ? ` · ตามฤดู เข้า ${socN(D.seasIn)} ออก ${socN(D.seasOut)}` : ''}</span></div>`
+    + `<div class="tr">นักท่องเที่ยว <b>${socN(D.tour)}</b> คนต่อปี <span class="w">คนของเมืองออกไปเที่ยว ${socN(D.tourOut)} · สิ่งดึงดูด ${ecoPc(r.tourWhy.att)}% ชุมทาง ${ecoPc(r.tourWhy.hub)}% มั่งคั่ง ${ecoPc(r.tourWhy.rich)}% องค์กร ${ecoPc(r.tourWhy.org)}%</span></div>`
+    + `<div class="tr">ความเป็นอยู่ <b>${Math.round(r.well)}</b> จาก 100 <span class="w">${r.wellWhy.filter(x => Math.abs(x[1]) >= 0.5).map(x => `${x[0]} ${socPts(x[1])}`).join(' · ') || 'ความต้องการครบ'}</span></div>`
+    + `<div class="tr">ค่าแรง <b>${c.lab >= 0.005 ? 'ถูกกว่าค่ากลาง ' + ecoPc(c.lab) + '%' : c.lab <= -0.005 ? 'แพงกว่าค่ากลาง ' + ecoPc(-c.lab) + '%' : 'ค่ากลาง'}</b> <span class="w">โรงงานผลิต ×${c.work.toFixed(2)} · เก็บเกี่ยวรอบเมืองได้ไกล ${c.reach} ช่อง</span></div>`;
+  if (c.land && c.land.lack >= 0.01) h += `<div class="tr">ที่ดินไม่พอ <b>${ecoPc(c.land.lack)}%</b> <span class="w">เมืองจึงผลิตอาหารได้ ${ecoPc(c.foodCut)}% ของที่ผืนดินให้ ส่วนที่ขาดต้องซื้อเข้า</span></div>`;
+  h += `<div class="optrow"><span class="lbl">ระเบียบงานของโรงงาน</span><select data-sf="reg"${dis}>${socOpt(EREG, own, 'ตามรัฐ' + (c.sto && c.sto.reg ? ' (' + EREG[c.sto.reg][0] + ')' : ' (โรงงานกะเดียว)'))}</select></div><div class="tr w">${EREG[c.reg][1]}</div>`
+    + `<div class="optrow soclot"><label title="ส่วนของคนในเมืองที่ตั้งรกรากและไม่ย้าย">ดั้งเดิม <input type="number" data-sf="nat" min="30" max="99" step="1" value="${Math.round(d.nat * 100)}"${dis}>%</label><label title="คนที่ไม่ได้ตั้งรกรากพร้อมย้ายแค่ไหน 1 คือค่ากลาง">พร้อมย้าย <input type="number" data-sf="mob" min="0" max="3" step="0.1" value="${d.mob.toFixed(1)}"${dis}></label><label title="เสน่ห์ของเมืองต่อนักท่องเที่ยว 1 คือค่ากลาง">เสน่ห์ <input type="number" data-sf="charm" min="0" max="5" step="0.1" value="${d.charm.toFixed(1)}"${dis}></label><button type="button" class="btn" data-sf="dice"${dis}>สุ่มใหม่</button></div>`
+    + `<div class="tr w">สามค่านี้เมืองได้มาจากการสุ่มตอนสร้างเมือง${ECO.demo[c.id] ? ' และถูกตั้งเองแล้ว' : ''}</div>`;
+  return h;
+}
+{
+  const t = tradeCityHTML; tradeCityHTML = function (k) { const h = t(k), add = socCityHTML(k), at = h.indexOf('<!--prod-->'); return at >= 0 ? h.slice(0, at) + add + h.slice(at) : h + add; };
+  const set = el => {
+    if (!editable || !tsel) return false; const f = el.dataset.sf, id = tsel;
+    if (f === 'reg') { if (EREG[el.value]) ECO.regime[id] = el.value; else delete ECO.regime[id]; }
+    else if (f === 'dice') ECO.demo[id] = { nat: +(0.6 + 0.35 * Math.random()).toFixed(2), mob: +(0.5 + Math.random()).toFixed(1), charm: +(0.5 + Math.random()).toFixed(1) };
+    else if (f === 'nat' || f === 'mob' || f === 'charm') { const d = socDemo(id), v = +el.value; if (!Number.isFinite(v)) return false; d[f] = f === 'nat' ? clamp(v / 100, 0.3, 0.99) : clamp(v, 0, f === 'mob' ? 3 : 5); ECO.demo[id] = d; }
+    else return false;
+    ecoChanged(false); renderTradeCard(); return true;
+  };
+  $('tradebody').addEventListener('change', e => { const el = e.target; if (el && el.dataset && el.dataset.sf && el.dataset.sf !== 'dice') set(el); });
+  $('tradebody').addEventListener('click', e => { const el = e.target.closest ? e.target.closest('[data-sf="dice"]') : null; if (el) set(el); });
+}
+// a state's card in the trade view: the same books the model works from
+function socStateCardHTML(s) {
+  ecoIncome(ecoGdp()); const b = SOC && SOC.books.get(s.id); if (!b) return '';
+  const coin = esc(ECO.central.name), nm = id => { const o = ECOX.byKey.get(id); return o ? esc(o.name) : 'เมืองที่ไม่ขึ้นกับรัฐใด'; };
+  let h = `<h4>ดุลของรัฐในปีนี้</h4><div class="tr">${socBalanceLine(b)}</div>`;
+  if (b.tourIn + b.tourOut >= 1) h += `<div class="tr w">นักท่องเที่ยวต่างรัฐใช้เงินในรัฐ ${socN(b.tourIn)} ${coin} คนของรัฐออกไปใช้นอกรัฐ ${socN(b.tourOut)} ${coin}</div>`;
+  if (b.lost >= 1) h += `<div class="tr w">ถูกรัฐที่ใหญ่กว่ากดราคา เสีย ${socN(b.lost)} ${coin}: ${[...b.sq].map(([id, v]) => nm(id) + ' ' + socN(v)).join(' · ')}</div>`;
+  if (b.won >= 1) h += `<div class="tr w">กดราคารัฐติดกันที่เล็กกว่าได้ ${socN(b.won)} ${coin}</div>`;
+  if (b.plan) h += `<div class="tr w">กำลังใช้: ${[...b.plan.tools].map(k => `${EPOL[k][0]} (${EPOL[k][2]})`).join(' · ')}${b.plan.top.size ? ' หมวดที่ซื้อเข้ามากที่สุด: ' + [...b.plan.top].map(c => esc(ECAT[c].name)).join(' ') : ''}</div>`;
+  if (b.def > TU('polStart')) h += `<div class="tr w">ยังขาดดุลอยู่ ทางที่เหลือ: ติ๊กนโยบายเพิ่มในแท็บรัฐและเขตแดน ปรับอัตราแลกเงิน ผูกพันธมิตรกับรัฐที่กดราคา หรือเป็นทางสุดท้าย ตั้งองค์กรที่เพิ่มผลผลิตหรือลดค่าขนในเมืองของรัฐ</div>`;
+  return h;
+}
+$('tradebody').addEventListener('click', e => {      // the city's tables: a column clicked sets the order
+  const el = e.target.closest ? e.target.closest('[data-ts]') : null; if (!el) return; const [kind, k] = el.dataset.ts.split(':'), key = kind === 'p' ? 'pk' : 'ck', dk = kind === 'p' ? 'pd' : 'cd';
+  if (TCV[key] === k) TCV[dk] = TCV[dk] > 0 ? -1 : 1; else { TCV[key] = k; TCV[dk] = k === 'name' ? 1 : -1; } tcKeep(); renderTradeCard();
+});
+$('tradebody').addEventListener('toggle', e => { const d = e.target; if (d && d.dataset && d.dataset.tfold) { TCV[d.dataset.tfold] = d.open ? 1 : 0; tcKeep(); } }, true);
 return {
   destroy() { __dead = true; for (const f of __offs) f(); cancelAnimationFrame(rq); cancelAnimationFrame(fxRaf); cancelAnimationFrame(panRaf); },
   async flush() { for (const k of Object.keys(DOCS)) { clearTimeout(saveT[k]); if (dirty[k] && !saving[k]) await save(k); } await ecoFlush(); },
@@ -5787,7 +6204,7 @@ return {
   },
   recalc: () => scheduleEcon(150),
   refit,
-  test: { reach: () => REACH ? { n: REACH.n, cells: REACH.cells.length, all: REACH.all, tint: REACH.tint } : null, tip: () => ({ shown: tip.shown, fold: TIP.fold, x: TIP.x, y: TIP.y, text: tipBody.textContent }), avoid: v => { AVOID_ON = !!v; scheduleEcon(50); }, cities: () => ECON ? ECON.cities.map((c, k) => ({ id: c.id, name: c.name, kind: c.kind, h: c.h, st: c.st, rank: c.rank, pop: c.pop, through: c.through, seat: ECOX.seat[k], short: c.short ? Object.keys(c.short).length : 0 })) : [], econ: () => ECON ? { ms: Math.round(ECON.ms), ver: ECON.ver, rounds: ECON.rounds, flows: ECON.flows.length, vol: ECON.flows.reduce((x, f) => x + f.amt, 0), val: ECON.flows.reduce((x, f) => x + f.amt * ECAT[f.cat].v, 0), via: ECON.flows.filter(f => f.via).length, broker: ECON.flows.filter(f => f.broker >= 0).length, hub: ECON.flows.filter(f => f.hub).length, links: ECON.links.length, hostile: ECON.links.filter(L => L.hostile > 0).length, bad: ECON.flows.filter(f => !isFinite(f.amt) || !isFinite(f.cost)).length, cross: ECON.flows.filter(f => ECON.cities[f.from].st !== ECON.cities[f.to].st).length, rivals: ECON.flows.filter(f => { const a = ECON.cities[f.from].sto, b = ECON.cities[f.to].sto; return a && b && a !== b && (a.rel[b.id] === 'rival' || b.rel[a.id] === 'rival'); }).length } : null, gdp: () => ecoIncome(ecoGdp()).map(r => ({ name: r.c.name, st: r.s ? r.s.id : '.', gdp: r.gdp, inc: r.inc, people: r.people })), grid: () => ({ N, COLS, ROWS }), labor: () => { const rows = ecoIncome(ecoGdp()); return SLAVE ? { tot: SLAVE.tot, price: SLAVE.price, mean: SLAVE.mean, flows: SLAVE.flows.map(f => ({ a: ECON.cities[f.a].id, b: ECON.cities[f.b].id, n: f.n, t: f.t, h: f.h, by: f.by, legs: f.way.length, mids: f.mids.map(k => ECON.cities[k].id) })), rows: rows.map(r => ({ id: r.c.id, st: r.c.st, people: r.people, inc: r.inc, held: r.slave ? r.slave.held : 0, out: r.slave ? r.slave.out : 0, bought: r.slave ? r.slave.bought : 0 })) } : null; }, linkCard: li => { const d = document.createElement('div'); d.innerHTML = tradeLinkHTML(ECON.links[li]); return d.textContent; }, cityCard: k => { const d = document.createElement('div'); d.innerHTML = tradeCityHTML(k); return d.textContent; }, drawOrder: () => { const seq = {}; let n = 0; const g = drawOverGround, r = drawRoutes, t = drawTrade, m = drawNames; drawOverGround = function () { seq.ground = ++n; return g.apply(this, arguments); }; drawRoutes = function () { seq.routes = ++n; return r.apply(this, arguments); }; drawTrade = function () { seq.trade = ++n; return t.apply(this, arguments); }; drawNames = function () { seq.names = ++n; return m.apply(this, arguments); }; try { draw(); } finally { drawOverGround = g; drawRoutes = r; drawTrade = t; drawNames = m; } return seq; }, landSheet: () => { const cvs = landSheet(); return { on: !!cvs, any: landAny, key: landKey, w: cvs ? cvs.width : 0, ms: Math.round(landMs) }; }, landPx: i => { if (!landSheet()) return null; return Array.from(LLC.getImageData(Math.round(CX[i] * LS), Math.round(CY[i] * LS), 1, 1).data); }, landUse: () => { landCompute(); return LAND ? { use: Array.from(LAND.use), own: Array.from(LAND.own) } : null; }, slaveLoad: () => { if (!ECON) return null; const S = slaveNow().S; return S ? { links: [...S.load].map(([li, x]) => ({ li, fwd: x[0], back: x[1], a: ECON.links[li].ia, b: ECON.links[li].ib })), tRef: S.tRef, haul: S.tot.haul } : null; }, land: () => { landCompute(); return LAND ? { tot: LAND.tot, total: LAND.total, crop: LAND.crop, haHex: LAND.haHex, short: LAND.short, rows: LAND.rows.map((r, k) => ({ id: ECON.cities[k].id, people: Math.round(ECON.cities[k].pop * ECO.unit), ...r })) } : null; }, eco: () => JSON.parse(JSON.stringify(ecoSerial())), ecoSet: b => { ecoLoad(b); ecoChanged(true); ecoRender(); }, orgs: () => [...orgValues(ecoIncome(ecoGdp()))].map(([id, v]) => ({ id, ...v })), cityXY: id => { const c = visibleCities().find(x => x.id === id), r = cv.getBoundingClientRect(); return c ? [r.left + view.x + c.x * view.s, r.top + view.y + c.y * view.s] : null; }, hexXY: i => { const r = cv.getBoundingClientRect(); return [r.left + view.x + CX[i] * view.s, r.top + view.y + CY[i] * view.s]; }, flowsOf: () => ECON ? ECON.flows.map(f => ({ a: ECON.cities[f.from].id, b: ECON.cities[f.to].id, cat: f.cat, amt: f.amt, org: f.org || null, broker: f.broker })) : [], tune: () => ({ ...ECO.tune }), pt: (fx, fy) => { const r = cv.getBoundingClientRect(); return [r.left + view.x + fx * G.w * view.s, r.top + view.y + fy * G.h * view.s]; }, way: (a, b) => { const C = ECON.cities, i = C.findIndex(c => c.name === a), j = C.findIndex(c => c.name === b); if (i < 0 || j < 0 || !ECOX.on) return null; const w = ecoWay(i, j); return [a, ...(w.mids || []).map(k => C[k].name), b].join('>') + ' t=' + w.t.toFixed(1) + ' direct=' + ECOX.NT[i][j].toFixed(1); }, linkAt: k => { const L = ECON && ECON.links[k]; if (!L || !L.states) return null; const t = L.states[L.states.length >> 1], h = t >> 1, r = cv.getBoundingClientRect(); return [r.left + view.x + (t & 1 && NAVR[h] ? NPX[h] : CX[h]) * view.s, r.top + view.y + (t & 1 && NAVR[h] ? NPY[h] : CY[h]) * view.s, L.id, L.danger, L.dauto ? L.dauto.lv : -1]; } },
+  test: { reach: () => REACH ? { n: REACH.n, cells: REACH.cells.length, all: REACH.all, tint: REACH.tint } : null, tip: () => ({ shown: tip.shown, fold: TIP.fold, x: TIP.x, y: TIP.y, text: tipBody.textContent }), avoid: v => { AVOID_ON = !!v; scheduleEcon(50); }, cities: () => ECON ? ECON.cities.map((c, k) => ({ id: c.id, name: c.name, kind: c.kind, h: c.h, st: c.st, rank: c.rank, pop: c.pop, through: c.through, seat: ECOX.seat[k], short: c.short ? Object.keys(c.short).length : 0 })) : [], econ: () => ECON ? { ms: Math.round(ECON.ms), ver: ECON.ver, rounds: ECON.rounds, flows: ECON.flows.length, vol: ECON.flows.reduce((x, f) => x + f.amt, 0), goods: ECON.flows.reduce((x, f) => x + (f.cat === 'labor' ? 0 : f.amt), 0), gflows: ECON.flows.filter(f => f.cat !== 'labor').length, val: ECON.flows.reduce((x, f) => x + f.amt * ECAT[f.cat].v, 0), via: ECON.flows.filter(f => f.via).length, broker: ECON.flows.filter(f => f.broker >= 0).length, hub: ECON.flows.filter(f => f.hub).length, links: ECON.links.length, hostile: ECON.links.filter(L => L.hostile > 0).length, bad: ECON.flows.filter(f => !isFinite(f.amt) || !isFinite(f.cost)).length, cross: ECON.flows.filter(f => ECON.cities[f.from].st !== ECON.cities[f.to].st).length, rivals: ECON.flows.filter(f => { const a = ECON.cities[f.from].sto, b = ECON.cities[f.to].sto; return a && b && a !== b && (a.rel[b.id] === 'rival' || b.rel[a.id] === 'rival'); }).length } : null, gdp: () => ecoIncome(ecoGdp()).map(r => ({ id: r.c.id, name: r.c.name, st: r.s ? r.s.id : '.', gdp: r.gdp, inc: r.inc, people: r.people, well: r.well, well0: r.well0, met: r.met, rich: r.rich, reg: r.c.reg, lab: r.c.lab, reach: r.c.reach, lack: r.c.land ? r.c.land.lack : 0, att: r.c.att, work: r.c.work, made: r.made, tw: (() => { const A = climEnsure(); return A && A.tw ? A.tw[r.c.h] : null; })(), demo: r.demo, tourWhy: r.tourWhy, pol: r.c.pol ? { k: r.c.pol.k, tools: [...r.c.pol.tools], top: [...r.c.pol.top], def1: r.c.pol.def1 } : null })), soc: () => { ecoIncome(ecoGdp()); return SOC ? { mean: SOC.mean, tot: SOC.tot, books: [...SOC.books.values()].map(b => ({ id: b.s.id, out: b.out, inn: b.inn, gdp: b.gdp, def: b.def, pen: b.pen, net: b.net, lost: b.lost, won: b.won, tourIn: b.tourIn, tourOut: b.tourOut, plan: b.plan ? { k: b.plan.k, tools: [...b.plan.tools], top: [...b.plan.top], def1: b.plan.def1 } : null })) } : null; }, grid: () => ({ N, COLS, ROWS }), labor: () => { const rows = ecoIncome(ecoGdp()); return SLAVE ? { tot: SLAVE.tot, price: SLAVE.price, mean: SLAVE.mean, flows: SLAVE.flows.map(f => ({ a: ECON.cities[f.a].id, b: ECON.cities[f.b].id, n: f.n, t: f.t, h: f.h, by: f.by, legs: f.way.length, mids: f.mids.map(k => ECON.cities[k].id) })), rows: rows.map(r => ({ id: r.c.id, st: r.c.st, people: r.people, inc: r.inc, held: r.slave ? r.slave.held : 0, out: r.slave ? r.slave.out : 0, bought: r.slave ? r.slave.bought : 0 })) } : null; }, market: id => { if (!ECON) return null; const k = ECON.cities.findIndex(c => c.id === id); if (k < 0) return null; const o = {}; for (const cat of ECATS) { const b = ECON.MK[k][cat]; if (b) o[cat] = Array.from(b); } return { book: o, prod: ECON.prod[k].size, price: Object.assign({}, ECON.P1[k]) }; }, nt: (a, b) => { if (!ECON) return null; const i = ECON.cities.findIndex(c => c.id === a), j = ECON.cities.findIndex(c => c.id === b); return i < 0 || j < 0 ? null : ECON.NT[i][j]; }, lines: () => ECON ? ECON.links.filter(L => !L.fail).map(L => ({ a: ECON.cities[L.ia].id, b: ECON.cities[L.ib].id, wet: L.wet, dry: L.dry })) : [], bridges: () => { const r = cv.getBoundingClientRect(), out = []; for (const rt of visibleRoutes()) { if (rt.t !== 'road') continue; const g = geoOf(rt); if (!g || g.fail) continue; for (const b of g.bridges) { let d = Infinity; for (let i = 0; i + 1 < g.q.length; i++) { const px = g.q[i][0], py = g.q[i][1], dx = g.q[i + 1][0] - px, dy = g.q[i + 1][1] - py, l2 = dx * dx + dy * dy, w = l2 > 0 ? Math.max(0, Math.min(1, ((b.x - px) * dx + (b.y - py) * dy) / l2)) : 0; d = Math.min(d, Math.hypot(px + dx * w - b.x, py + dy * w - b.y)); } out.push({ x: r.left + view.x + b.x * view.s, y: r.top + view.y + b.y * view.s, off: d, a: b.a }); } } return out; }, linkCard: li => { const d = document.createElement('div'); d.innerHTML = tradeLinkHTML(ECON.links[li]); return d.textContent; }, cityCard: k => { const d = document.createElement('div'); d.innerHTML = tradeCityHTML(k); return d.textContent; }, drawOrder: () => { const seq = {}; let n = 0; const g = drawOverGround, r = drawRoutes, t = drawTrade, m = drawNames; drawOverGround = function () { seq.ground = ++n; return g.apply(this, arguments); }; drawRoutes = function () { seq.routes = ++n; return r.apply(this, arguments); }; drawTrade = function () { seq.trade = ++n; return t.apply(this, arguments); }; drawNames = function () { seq.names = ++n; return m.apply(this, arguments); }; try { draw(); } finally { drawOverGround = g; drawRoutes = r; drawTrade = t; drawNames = m; } return seq; }, landSheet: () => { const cvs = landSheet(); return { on: !!cvs, any: landAny, key: landKey, w: cvs ? cvs.width : 0, ms: Math.round(landMs) }; }, landPx: i => { if (!landSheet()) return null; return Array.from(LLC.getImageData(Math.round(CX[i] * LS), Math.round(CY[i] * LS), 1, 1).data); }, landUse: () => { landCompute(); return LAND ? { use: Array.from(LAND.use), own: Array.from(LAND.own) } : null; }, slaveLoad: () => { if (!ECON) return null; const S = slaveNow().S; return S ? { links: [...S.load].map(([li, x]) => ({ li, fwd: x[0], back: x[1], a: ECON.links[li].ia, b: ECON.links[li].ib })), tRef: S.tRef, haul: S.tot.haul } : null; }, land: () => { landCompute(); return LAND ? { tot: LAND.tot, total: LAND.total, crop: LAND.crop, haHex: LAND.haHex, short: LAND.short, rows: LAND.rows.map((r, k) => ({ id: ECON.cities[k].id, people: Math.round(ECON.cities[k].pop * ECO.unit), ...r })) } : null; }, eco: () => JSON.parse(JSON.stringify(ecoSerial())), ecoSet: b => { ecoLoad(b); ecoChanged(true); ecoRender(); }, orgs: () => [...orgValues(ecoIncome(ecoGdp()))].map(([id, v]) => ({ id, ...v })), cityXY: id => { const c = visibleCities().find(x => x.id === id), r = cv.getBoundingClientRect(); return c ? [r.left + view.x + c.x * view.s, r.top + view.y + c.y * view.s] : null; }, hexXY: i => { const r = cv.getBoundingClientRect(); return [r.left + view.x + CX[i] * view.s, r.top + view.y + CY[i] * view.s]; }, flowsOf: () => ECON ? ECON.flows.map(f => ({ a: ECON.cities[f.from].id, b: ECON.cities[f.to].id, cat: f.cat, amt: f.amt, org: f.org || null, broker: f.broker })) : [], tune: () => ({ ...ECO.tune }), pt: (fx, fy) => { const r = cv.getBoundingClientRect(); return [r.left + view.x + fx * G.w * view.s, r.top + view.y + fy * G.h * view.s]; }, way: (a, b) => { const C = ECON.cities, i = C.findIndex(c => c.name === a), j = C.findIndex(c => c.name === b); if (i < 0 || j < 0 || !ECOX.on) return null; const w = ecoWay(i, j); return [a, ...(w.mids || []).map(k => C[k].name), b].join('>') + ' t=' + w.t.toFixed(1) + ' direct=' + ECOX.NT[i][j].toFixed(1); }, linkAt: k => { const L = ECON && ECON.links[k]; if (!L || !L.states) return null; const t = L.states[L.states.length >> 1], h = t >> 1, r = cv.getBoundingClientRect(); return [r.left + view.x + (t & 1 && NAVR[h] ? NPX[h] : CX[h]) * view.s, r.top + view.y + (t & 1 && NAVR[h] ? NPY[h] : CY[h]) * view.s, L.id, L.danger, L.dauto ? L.dauto.lv : -1]; } },
   clim: () => { const A = climEnsure(), land = []; for (let i = 0; i < N; i++) if (!isNaN(A.h[i])) land.push(i); const mean = f => land.reduce((a, i) => a + f(i), 0) / (land.length || 1), band = (f, lo, hi) => { const q = land.filter(i => CY[i] / G.h >= lo && CY[i] / G.h < hi); return q.length ? q.reduce((a, i) => a + f(i), 0) / q.length : null; };
     return { seasons: A.seas ? A.seas.map((s, k) => ({ id: s.id, name: s.name, t: mean(i => A.S[k].t[i]), p: mean(i => A.S[k].p[i]), north: band(i => A.S[k].t[i], 0, 0.33), south: band(i => A.S[k].t[i], 0.67, 1.01), wind: clWindOf(s) })) : null, p: mean(i => A.p[i]), ai: mean(i => Math.min(5, A.ai[i])), f: mean(i => A.f[i]), grow: A.grow ? mean(i => A.grow[i]) : null, lat: [clLat0(), clLat1()], land: land.length, bad: land.filter(i => !isFinite(A.ts[i]) || !isFinite(A.tw[i]) || !isFinite(A.p[i]) || !isFinite(A.f[i])).length, sum: A.S ? mean(i => Math.abs(A.S.reduce((a, S) => a + S.p[i], 0) - A.p[i])) : 0 }; },
   climHex: i => { const A = climEnsure(); return isNaN(A.h[i]) ? null : { h: A.h[i], ts: A.ts[i], tw: A.tw[i], p: A.p[i], ai: A.ai[i], f: A.f[i], grow: A.grow ? A.grow[i] : null, s: A.S ? A.S.map(S => [Math.round(S.t[i] * 10) / 10, Math.round(S.p[i])]) : null }; },

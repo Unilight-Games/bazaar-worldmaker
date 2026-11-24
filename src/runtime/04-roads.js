@@ -143,7 +143,7 @@ function routeGeom(r) {
   const bridges = [], tun = new Set();
   for (let i = 0; i < hexes.length - 1; i++) {
     const u = hexes[i], v = hexes[i + 1], k = nbIndex(u, v);
-    if (k >= 0 && EX[u * 6 + k] & 2) bridges.push({ x: (CX[u] + CX[v]) / 2, y: (CY[u] + CY[v]) / 2, a: Math.atan2(CY[v] - CY[u], CX[v] - CX[u]) });
+    if (k >= 0 && EX[u * 6 + k] & 2) bridges.push(bridgeAt(q, u, v, k));
   }
   if (mode === 'road') {                            // a tunnel: a run of mountain hexes the road passes through, not the one it starts or ends on
     let i = 0;
@@ -238,6 +238,22 @@ function strokeRoad(c, px, cls, g, glow) {
     c.save(); c.translate(p[0], p[1]); c.rotate(ang); c.beginPath(); c.arc(0, 0, w * 0.95 + 0.6 * px, -Math.PI / 2, Math.PI / 2, runs[i].t);
     c.strokeStyle = 'rgba(30,24,20,.95)'; c.lineWidth = Math.max(0.8, 1.3 * px); c.stroke(); c.restore();
   }
+}
+// Where a bridge stands (v0.13.0, the owner saw bridges off their roads): on the road as it is drawn, at the point where the
+// drawn line crosses the edge between the two hexes the river runs between, and turned the way the road runs there. The drawn
+// road is a smoothed line that cuts its corners, so the middle of the two hex centres is often beside it. Where the line does
+// not cross that edge at all, the bridge goes to the point of the road nearest the middle of the edge.
+function bridgeAt(q, u, v, k) {
+  const e = EDGE[k], e2 = (e + 1) % 6, ax = CX[u] + R * COS[e], ay = CY[u] + R * SIN[e], bx = CX[u] + R * COS[e2], by = CY[u] + R * SIN[e2];
+  const mx = (ax + bx) / 2, my = (ay + by) / 2, ex = (bx - ax) * 0.62, ey = (by - ay) * 0.62, x1 = mx - ex, y1 = my - ey, x2 = mx + ex, y2 = my + ey;   // the edge, a little longer at both ends
+  let best = null, bd = Infinity;
+  for (let i = 0; i + 1 < q.length; i++) {
+    const px = q[i][0], py = q[i][1], dx = q[i + 1][0] - px, dy = q[i + 1][1] - py, den = dx * (y2 - y1) - dy * (x2 - x1);
+    if (Math.abs(den) > 1e-9) { const t = ((x1 - px) * (y2 - y1) - (y1 - py) * (x2 - x1)) / den, s = ((x1 - px) * dy - (y1 - py) * dx) / den; if (t >= 0 && t <= 1 && s >= 0 && s <= 1) return { x: px + dx * t, y: py + dy * t, a: Math.atan2(dy, dx) }; }
+    const l2 = dx * dx + dy * dy, w = l2 > 0 ? clamp(((mx - px) * dx + (my - py) * dy) / l2, 0, 1) : 0, nx = px + dx * w, ny = py + dy * w, d = Math.hypot(nx - mx, ny - my);
+    if (d < bd) { bd = d; best = { x: nx, y: ny, a: Math.atan2(dy, dx) }; }
+  }
+  return best || { x: mx, y: my, a: Math.atan2(CY[v] - CY[u], CX[v] - CX[u]) };
 }
 function drawBridge(c, px, b, cls) {
   const st = RDC[cls] || RDC.cart, w = Math.max(st.w, st.px * px), L = Math.max(4.2, 7 * px), hw = w / 2 + Math.max(0.5, 0.9 * px), f = Math.max(0.6, 1.2 * px);

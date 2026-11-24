@@ -25,43 +25,53 @@ const LAND_GARDEN = 0.3, LAND_TERRACE = 0.25, LAND_WOODY = 0.5, LAND_HILLY = 0.3
 const LAND_TILL = 0.45, LAND_REACH = 16, LAND_MINE = 1e5, LAND_OPEN = new Set(['g', 's', 'v', 'h', 'e', 'm', 'c', 'y']), LAND_FARM = new Set(['p', 'r']);
 function ecoCrop(total) { return total < 5e8 ? 0.45 : total < 5e9 ? 0.3 : 0.15; }
 let LAND = null, landOn = (() => { try { return localStorage.getItem('mme-land') !== '0'; } catch (err) { return true; } })();
-function landCompute() {
-  const E = ECON; if (!E) { LAND = null; return; }
-  if (LAND && LAND.ver === E.ver && LAND.unit === ECO.unit) return;                     // the year is worked out again whenever the land or the cities change
+// The land is worked out with the year itself (v0.13.0): the year asks it how far each city's fields reach, to work the ground
+// that far, and how short of land each city is, to send it abroad for food. So the land on the map is always the land of the
+// cities as they stand, and a city that is moved takes its land with it in the same step.
+function landCompute() { LAND = ECON && ECON.land ? ECON.land : null; }
+const landDice = u => { const x = Math.sin(u * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };   // a hex's own lot, the same every year
+function landPlan(cities) {
+  const E = { cities };
   const km = ENV.meta && +ENV.meta.kmPerHex || 34, haHex = 0.866 * km * km * 100, total = E.cities.reduce((a, c) => a + c.pop, 0) * ECO.unit, crop = ecoCrop(total), wood = crop * 2 / 3;
-  const use = new Int8Array(N), own = new Int16Array(N).fill(-1), rows = E.cities.map(() => ({ farm: 0, cleared: 0, logged: 0, mine: 0, terrace: 0, garden: 0, need: 0, short: 0, kind: '' })), tot = { farm: 0, cleared: 0, logged: 0, mine: 0, terrace: 0, garden: 0, was: 0 };
+  const use = new Int8Array(N), own = new Int16Array(N).fill(-1), rows = E.cities.map(() => ({ farm: 0, cleared: 0, logged: 0, mine: 0, terrace: 0, garden: 0, need: 0, short: 0, want: 0, lack: 0, ring: 0, kind: '' })), tot = { farm: 0, cleared: 0, logged: 0, mine: 0, terrace: 0, garden: 0, was: 0 };
   let short = 0;
   for (const k of E.cities.map((c, i) => i).sort((a, b) => E.cities[b].pop - E.cities[a].pop)) {   // the largest city takes its land first
     const c = E.cities[k], r = rows[k], P = c.pop * ECO.unit; r.need = P * crop / 100;             // square kilometres of ploughland
     if (c.h < 0) continue;
     let nF = Math.round(P * crop / (haHex * LAND_TILL)), nW = Math.round(P * wood / (haHex * 0.8)), nM = P >= LAND_MINE ? Math.min(12, 1 + Math.floor((P - LAND_MINE) / 2.5e5)) : 0;
-    if (!nF && !nW && !nM) continue;
+    r.want = nF; if (!nF && !nW && !nM) continue;
     // what kind of country the city stands in, read off the land within two hexes of it
     let nl = 0, nf = 0, nm = 0; { let rg = [c.h]; const sn = new Set(rg); for (let d = 0; d <= 2; d++) { const nx = []; for (const u of rg) { const b = eff(u); if (!isW(b)) { nl++; if (FOREST.has(b)) nf++; else if (b === 'M') nm++; } for (let j = 0; j < 6; j++) { const v = NB[u * 6 + j]; if (v >= 0 && !sn.has(v)) { sn.add(v); nx.push(v); } } } rg = nx; } }
-    const woody = nl > 0 && nf / nl >= LAND_WOODY, hilly = nl > 0 && nm / nl >= LAND_HILLY, gG = LAND_GARDEN / LAND_TILL, gT = LAND_TERRACE / LAND_TILL;
+    // How much of a forest city it is decides what share of its forest it gardens, hex by hex, and likewise its slopes: a city
+    // moved a hex or two changes a few hexes of its land, where a plain yes or no changed all of it at once (the owner saw the
+    // fields vanish when a city was moved).
+    const wf = nl > 0 ? nf / nl : 0, wm = nl > 0 ? nm / nl : 0, woodP = clamp((wf - (LAND_WOODY - 0.2)) / 0.4, 0, 1), hillP = clamp((wm - (LAND_HILLY - 0.15)) / 0.3, 0, 1), gG = LAND_GARDEN / LAND_TILL, gT = LAND_TERRACE / LAND_TILL;
+    const woody = wf >= LAND_WOODY, hilly = wm >= LAND_HILLY;
     r.kind = woody && hilly ? 'both' : woody ? 'forest' : hilly ? 'mount' : '';
     let ring = [c.h]; const seen = new Set(ring);
     for (let d = 0; d <= LAND_REACH && (nF >= 0.5 || nW > 0 || nM > 0) && ring.length; d++) {
-      const trees = [], hills = [];
+      const trees = [], hills = [], d0 = r.farm + r.cleared + r.logged + r.mine + r.terrace + r.garden + tot.was;
       for (const u of ring) {
         if (use[u]) continue; const b = eff(u);
         if (LAND_FARM.has(b)) { if (nF >= 0.5) { use[u] = 5; own[u] = k; nF--; tot.was++; } }                  // fields the map already shows
         else if (LAND_OPEN.has(b)) { if (nF >= 0.5) { use[u] = 1; own[u] = k; nF--; r.farm++; } }
         else if (FOREST.has(b)) trees.push(u);
-        else if (b === 'M') { if (nM > 0 && d > 0) { use[u] = 4; own[u] = k; nM--; r.mine++; } else if (hilly) hills.push(u); }
+        else if (b === 'M') { if (nM > 0 && d > 0) { use[u] = 4; own[u] = k; nM--; r.mine++; } else if (hillP > 0 && landDice(u) < hillP) hills.push(u); }
       }
       for (const u of hills) if (nF >= 0.5 * gT) { use[u] = 6; own[u] = k; nF -= gT; r.terrace++; }                   // a city of the mountains terraces the slopes
       for (const u of trees) {
-        if (woody && nF >= 0.5 * gG) { use[u] = 7; own[u] = k; nF -= gG; r.garden++; }                               // a city of the forest gardens under the trees
-        else if (!woody && nF >= 0.5) { use[u] = 2; own[u] = k; nF--; r.cleared++; }
+        const gd = woodP > 0 && landDice(u) < woodP;
+        if (gd && nF >= 0.5 * gG) { use[u] = 7; own[u] = k; nF -= gG; r.garden++; }                                   // a city of the forest gardens under the trees
+        else if (!gd && nF >= 0.5) { use[u] = 2; own[u] = k; nF--; r.cleared++; }
         else if (nW > 0) { use[u] = 3; own[u] = k; nW--; r.logged++; }
       }
+      if (r.farm + r.cleared + r.logged + r.mine + r.terrace + r.garden + tot.was > d0) r.ring = d;
       const nx = []; for (const u of ring) for (let j = 0; j < 6; j++) { const v = NB[u * 6 + j]; if (v >= 0 && !seen.has(v)) { seen.add(v); nx.push(v); } } ring = nx;
     }
-    r.short = Math.max(0, Math.round(nF)); short += r.short; tot.farm += r.farm; tot.cleared += r.cleared; tot.logged += r.logged; tot.mine += r.mine; tot.terrace += r.terrace; tot.garden += r.garden;
+    r.short = Math.max(0, Math.round(nF)); r.lack = r.want > 0 ? clamp(Math.max(0, nF) / r.want, 0, 1) : 0; short += r.short; tot.farm += r.farm; tot.cleared += r.cleared; tot.logged += r.logged; tot.mine += r.mine; tot.terrace += r.terrace; tot.garden += r.garden;
   }
   let landN = 0; for (let i = 0; i < N; i++) { const b = eff(i); if (b !== 'S' && b !== 'L') landN++; }
-  LAND = { ver: E.ver, unit: ECO.unit, use, own, rows, tot, total, crop, haHex, short, landN, km2: landN * haHex / 100 };
+  return { ver: 0, unit: ECO.unit, use, own, rows, tot, total, crop, haHex, short, landN, km2: landN * haHex / 100 };
 }
 // ---------- the land as ground of its own (v0.12.0) ----------
 // The owner asked for fields, clearings and mines to look better and to lie low, as hexes of ground in their own right like the
@@ -77,7 +87,7 @@ const LAND_TREEY = new Set(['f', 'o', 'k', 'a', 'j', 'w', 'e', 'h', 'v']);
 const landMix = (a, b, t) => a.map((x, k) => x + (b[k] - x) * t);
 function landFill(i, t, b) {
   const base = RCOL[b] || RCOL.g;
-  return jit(t === 1 ? landMix([192, 180, 106], base, 0.3) : t === 2 ? landMix([174, 168, 100], base, 0.35) : t === 3 ? landMix(base, [160, 150, 106], 0.42) : t === 6 ? landMix(RCOL.M, [150, 150, 104], 0.4) : t === 7 ? landMix(base, [150, 162, 100], 0.34) : landMix(RCOL.M, [134, 118, 98], 0.45), i, 6);
+  return jit(t === 1 ? landMix([192, 180, 106], base, 0.3) : t === 2 ? landMix([174, 168, 100], base, 0.35) : t === 3 ? landMix(base, [160, 150, 106], 0.42) : t === 6 ? landMix(RCOL.M, [150, 150, 104], 0.4) : t === 7 ? landMix(base, [172, 180, 108], 0.6) : landMix(RCOL.M, [134, 118, 98], 0.45), i, 6);
 }
 function landTreesOf(i, b) {                         // the trees a hex of forest carries, where the map's own drawing puts them
   return b === 'f' || b === 'k' || b === 'w' ? spots(i, 4, 0.6, 0).map(p => ['con', p]) : b === 'o' ? spots(i, 3, 0.58, 0).map(p => ['broad', p]) : b === 'a' ? spots(i, 3, 0.55, 0).map(p => ['anc', p]) : b === 'j' ? spots(i, 4, 0.62, 17).map(p => ['jung', p]) : [];
@@ -133,11 +143,12 @@ function landTerrace(c, i) {                         // a slope cut into steps: 
   });
   peak(c, x, y - 4.9, 0.4, false);
 }
-function landGarden(c, i, b, trees, flat) {          // the forest stays standing: most of its trees, plots of garden in their shade, a house here and there
-  const was = landTreesOf(i, b), keep = Math.max(2, was.length - 1), r = rng(i * 37 + 5);
-  was.forEach(([kind, [x, y]], k) => { if (k < keep) trees.push([y, kind, x, y, b]); });
-  for (const [x, y] of spots(i, 2, 0.5, 37)) flat.push([y, 'plot', x, y, Math.floor(r() * LAND_STEP.length)]);
-  if (r() < 0.3) flat.push([CY[i] + 0.2 * R, 'house', CX[i] + (r() - 0.5) * 0.7 * R, CY[i] + 0.2 * R]);
+function landGarden(c, i, b, trees, flat) {          // the forest thinned to a grove: two of its trees, three plots of garden between them, a path, often a house
+  const was = landTreesOf(i, b), r = rng(i * 37 + 5);
+  was.forEach(([kind, [x, y]], k) => { if (k < 2) trees.push([y, kind, x, y, b]); });
+  for (const [x, y] of spots(i, 3, 0.56, 37)) flat.push([y, 'plot', x, y, Math.floor(r() * LAND_STEP.length)]);
+  flat.push([CY[i] - 0.5 * R, 'path', CX[i] - 0.55 * R, CY[i] + 0.1 * R, CX[i] + 0.5 * R, CY[i] - 0.15 * R]);
+  if (r() < 0.45) flat.push([CY[i] + 0.2 * R, 'house', CX[i] + (r() - 0.5) * 0.7 * R, CY[i] + 0.2 * R]);
 }
 let landMk = null, landCv = null, LLC = null, landKey = '', landAny = false, landMs = 0;
 function landPaint() {
@@ -167,8 +178,9 @@ function landPaint() {
   const shapes = (list, ptsOf, fill, line) => { if (!list.length) return; c.beginPath(); for (const f of list) { const q = ptsOf(f[2], f[3]); c.moveTo(q[0][0], q[0][1]); for (let k = 1; k < q.length; k++) c.lineTo(q[k][0], q[k][1]); c.closePath(); } c.fillStyle = fill; c.fill(); if (line) { c.strokeStyle = line; c.lineWidth = 1 / 3; c.stroke(); } };
   const sm = of('stump'); ells(sm, 0.25, 0.75, 0.5, 'rgb(104,80,54)'); ells(sm, 0, 0.62, 0.38, 'rgb(196,170,124)', 'rgb(104,80,54)');
   const lg = of('logs'); lines(lg.map(f => [f[2] - 1.5, f[3], f[2] + 1.5, f[3]]), 'rgb(120,92,60)', 0.7); lines(lg.map(f => [f[2] - 1.2, f[3] - 0.7, f[2] + 1.2, f[3] - 0.7]), 'rgb(142,112,74)', 0.7);
-  const pl = of('plot'); LAND_STEP.forEach((col, k) => shapes(pl.filter(f => f[4] === k), (x, y) => [[x - 2.1, y - 0.9], [x + 1.7, y - 1.2], [x + 2.1, y + 0.9], [x - 1.7, y + 1.2]], col, 'rgb(62,74,44)'));
-  lines(pl.map(f => [f[2] - 1.8, f[3] - 0.2, f[2] + 1.8, f[3] - 0.5]).concat(pl.map(f => [f[2] - 1.7, f[3] + 0.5, f[2] + 1.9, f[3] + 0.2])), 'rgba(84,96,46,.6)', 1 / 3);
+  lines(of('path').map(f => [f[2], f[3], f[4], f[5]]), 'rgba(196,176,128,.85)', 0.6);
+  const pl = of('plot'); LAND_STEP.forEach((col, k) => shapes(pl.filter(f => f[4] === k), (x, y) => [[x - 2.6, y - 1.1], [x + 2.2, y - 1.5], [x + 2.6, y + 1.1], [x - 2.2, y + 1.5]], col, 'rgb(62,74,44)'));
+  lines(pl.map(f => [f[2] - 2.3, f[3] - 0.3, f[2] + 2.3, f[3] - 0.7]).concat(pl.map(f => [f[2] - 2.2, f[3] + 0.6, f[2] + 2.4, f[3] + 0.2])), 'rgba(84,96,46,.6)', 1 / 3);
   const hs = of('house'); shapes(hs, (x, y) => [[x - 1, y - 0.5], [x + 1, y - 0.5], [x + 1, y + 0.7], [x - 1, y + 0.7]], 'rgb(228,214,184)', 'rgb(66,54,44)'); shapes(hs, (x, y) => [[x - 1.35, y - 0.45], [x, y - 1.7], [x + 1.35, y - 0.45]], 'rgb(162,88,62)', 'rgb(66,54,44)');
   trees.sort((a, b) => a[0] - b[0]);
   for (const t of trees) if (clearOfWater(t[1], t[2], t[3])) TREE[t[1]](c, t[2], t[3], t[4]);
@@ -193,7 +205,7 @@ function landSheet() {                               // the sheet as the year no
   if (!landOn || !ECON || mode === 'terrain' || mode === 'river') return null;   // while the ground or its rivers are being drawn, the ground shows as it is
   landCompute(); const L = LAND; if (!L || !(L.tot.farm + L.tot.cleared + L.tot.logged + L.tot.mine + L.tot.terrace + L.tot.garden)) return null;
   const key = L.ver + '|' + L.unit + '|' + painted.size + '|' + ED.rivers.length;
-  if (key !== landKey) { landKey = key; const t0 = performance.now(); try { landPaint(); } catch (err) { landAny = false; console.error('land sheet', err); } landMs = performance.now() - t0; }
+  if (key !== landKey) { landKey = key; const t0 = performance.now(); try { landPaint(); } catch (err) { console.error('land sheet', err); } landMs = performance.now() - t0; }   // a sheet that fails to paint leaves the last one lying
   return landAny ? landCv : null;
 }
 drawOverGround = function (c, w, h) { const cvs = landSheet(); if (cvs) c.drawImage(cvs, 0, 0, w, h); };

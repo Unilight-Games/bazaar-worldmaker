@@ -26,11 +26,11 @@ function slaveApply(rows) {
   let ppl = 0, inc = 0; for (const r of rows) { ppl += r.people; inc += r.inc; } const mean = ppl > 0 ? inc / ppl : 0; if (!(mean > 0)) return rows;
   const n = rows.length, law = rows.map(r => slaveLaw(r.c)), sup = new Float64Array(n), dem = new Float64Array(n), held = new Float64Array(n), out = new Float64Array(n), got = new Float64Array(n), flows = [];
   rows.forEach((r, k) => {
-    const y = r.inc / r.people, poor = clamp(clamp((0.8 * mean - y) / (0.8 * mean), 0, 1) + 0.08 * (r.short || 0) - orgWell(r.c), 0, 1), rich = clamp((y - mean) / mean, 0, 1.5);
+    const y = r.inc / r.people, poor = clamp(clamp((0.8 * mean - y) / (0.8 * mean), 0, 1) + 0.08 * (r.short || 0) + (r.c.reg === 'sweat' ? 0.04 : 0) + 0.004 * (r.wellPen || 0) - orgWell(r.c), 0, 1), rich = clamp((y - mean) / mean, 0, 1.5);
     if (law[k] !== 'abol') { sup[k] = r.people * TU('slaveOut') * poor * (law[k] === 'pat' ? 0.5 : 1); dem[k] = r.people * TU('slaveIn') * (1 / 3 + rich) * (law[k] === 'pat' ? 0.4 : 1) / (1 + r.people / TU('slaveCheap')); }   // a crowded city has cheap free hands, and wants few slaves
   });
   for (let k = 0; k < n; k++) { const own = Math.min(sup[k], dem[k]); held[k] += own; sup[k] -= own; dem[k] -= own; }   // a city's own poor first
-  const may = (a, b) => { const sa = rows[a].c.sto, sb = rows[b].c.sto, same = !!sa && sa === sb; if (law[a] === 'pat' || law[b] === 'pat') return same; return same || !ecoRival(sa, sb); };
+  const may = (a, b) => { const sa = rows[a].c.sto, sb = rows[b].c.sto, same = !!sa && sa === sb; if (law[a] === 'pat') return same; return same || !ecoRival(sa, sb); };   // a is the seller: under patronage people are not sold out of the state, but a city of such a state may buy from abroad (v0.13.0, the owner's)
   // The journey (v0.12.0, the owner's): people are marched and shipped along the lines of the trade network, as goods are. The
   // nearest seller is the one the network brings nearest. Carrying costs a share of the price that grows with the journey, so a
   // buyer gets fewer from far away, and a journey that would cost more than the slave is not made. Where no line joins two
@@ -64,7 +64,7 @@ function slaveApply(rows) {
   return rows;
 }
 const __incLabor = ecoIncome;
-ecoIncome = function (rows) { return slaveApply(__incLabor(rows)); };
+ecoIncome = function (rows) { __incLabor(rows); socApply(rows); return slaveApply(rows); };
 
 function slaveHTML() {
   if (!ECON) return '';
@@ -162,5 +162,5 @@ const __tcLabor = tradeCityHTML;
 tradeCityHTML = function (k) {
   let h = __tcLabor(k); if (!ECON || ECO.noSlave) return h;
   const seen = slaveNow(), sl = seen.rows[k]; if (!sl) return h;
-  return h + `<h4>แรงงานทาส</h4><div class="tr">ทาสในเมือง <b>${ecoNumF(sl.held)}</b> คน <span class="w">ซื้อเข้า ${ecoNumF(sl.bought)} · ถูกขายออก ${ecoNumF(sl.out)}${sl.law === 'pat' ? ' · ระบบอุปถัมภ์' : ''}</span></div>`;
+  return h + `<h4>แรงงานทาส</h4><div class="tr">ทาสในเมือง <b>${socN(sl.held)}</b> คน <span class="w">ซื้อเข้า ${socN(sl.bought)} · ถูกขายออก ${socN(sl.out)}${sl.law === 'pat' ? ' · ระบบอุปถัมภ์' : ''}</span></div>`;
 };

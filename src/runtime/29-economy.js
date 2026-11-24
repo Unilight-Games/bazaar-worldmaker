@@ -9,6 +9,7 @@ const ECO = { goods: {}, custom: [], cats: {}, ucats: [], tune: {}, work: {}, po
 // load of staple food, is ECOIN coins for each of those people: a person's grain for a year costs 40 coins, and what a person
 // makes in a year comes to about 250, when a coin is roughly what unskilled work earns in most of a day. Both are my numbers.
 const EUNIT = 1000, ECOIN = 40;
+let POL = null, POLG = 0, POLC = 0;               // what each state is doing about its balance this year (worked out in the society part), and the two numbers it hands back to a trade
 // How many people the whole map holds (v0.10.0, the owner's five levels and his words for them). With a level chosen, the people
 // of a head of the model follow from it: the level's number shared over every city by its weight. The numbers inside each band are mine.
 // The levels of people a map can hold (v0.11.1, the owner's three): a few million, a few hundred million, billions. Anything else
@@ -30,7 +31,7 @@ function ecoScale() {
 // What a state's law says of slaves (v0.11.0, the owner's three). A city under no state, and a land without one, trade freely.
 const ESLAVE = {
   abol: ['เลิกทาสสมบูรณ์', 'ไม่มีใครถือทาสได้ คนของรัฐนี้ถูกขายไม่ได้ และเมืองของรัฐนี้ซื้อทาสไม่ได้'],
-  pat: ['ระบบอุปถัมภ์', 'ถือทาสได้ตามเงื่อนไข และทาสเป็นไทได้ง่าย เมืองจึงมีทาสน้อยกว่าและได้แรงงานจากทาสน้อยกว่า ซื้อขายกันได้เฉพาะภายในรัฐ'],
+  pat: ['ระบบอุปถัมภ์', 'ถือทาสได้ตามเงื่อนไข และทาสเป็นไทได้ง่าย เมืองจึงมีทาสน้อยกว่าและได้แรงงานจากทาสน้อยกว่า ซื้อทาสจากนอกรัฐเข้ามาได้ แต่ขายคนของรัฐออกนอกรัฐไม่ได้'],
   free: ['ค้าทาสเสรี', 'ซื้อขายทาสได้ทั้งในรัฐและข้ามรัฐ เว้นแต่กับคู่อริ'],
 };
 const OKIND = {
@@ -250,6 +251,7 @@ function ecoEarn(i, j, cat, pi, pj, v, t, bulk, phase, w) {
       if (!black && si && si.sys === 'merc' && MERCKEEP.has(cat)) cost += TU('keep') * v;                          // and raw stuff kept at home
     }
   }
+  if (POL && phase >= 0 && !(w && w.org)) { polEarn(ci, cj, cat, pi, pj, v, gain, cost); gain = POLG; cost = POLC; }   // what a state does about its balance: a wall, a bounty, a cheaper coin
   let m = gain * v - cost;
   if (m > 0 && ECOX.bargain) m *= 1 + TU('big') * Math.log2(Math.max(0.25, cj.pop) / 4);                    // a great market is served before a small one
   return m;
@@ -290,7 +292,7 @@ function ecoLoad(b) {
   ECO.cpp = clamp(ECO.central.per / ECO.unit, 1e-6, 1e9);
   ecoStamp++; ecoApply();
 }
-const ecoSerial = () => ({ v: 2, noSlave: ECO.noSlave, tier: ECO.tier, total: ECO.tier === 'own' ? ECO.total : 0, orgs: ECO.orgs, goods: ECO.goods, custom: ECO.custom, cats: ECO.cats, ucats: ECO.ucats, tune: ECO.tune, work: ECO.work, pop: ECO.pop, danger: ECO.danger, auto: ECO.auto, states: ECO.states, cells: ECO.cells.join(''), unit: ECO.unit, central: ECO.central });
+let ecoSerial = () => ({ v: 2, noSlave: ECO.noSlave, tier: ECO.tier, total: ECO.tier === 'own' ? ECO.total : 0, orgs: ECO.orgs, goods: ECO.goods, custom: ECO.custom, cats: ECO.cats, ucats: ECO.ucats, tune: ECO.tune, work: ECO.work, pop: ECO.pop, danger: ECO.danger, auto: ECO.auto, states: ECO.states, cells: ECO.cells.join(''), unit: ECO.unit, central: ECO.central });
 async function ecoSaveNow() { if (!ENV.db || !ecoLoaded || !ecoDirty || ecoSaving) return; ecoSaving = true; ecoDirty = false; try { await ENV.db.doc('map/economy').set(ecoSerial()); } catch (err) { ecoDirty = true; } ecoSaving = false; if (ecoDirty) ecoSaveNow(); }
 async function ecoFlush() { clearTimeout(ecoT); await ecoSaveNow(); }
 function ecoChanged(tables) {                      // the owner changed something: the tables, the year, the card, the save
@@ -387,7 +389,7 @@ function ecoGoodsHTML() {
 }
 function ecoCatsHTML() {
   return `<p class="note" style="margin-top:0">ราคาฐานคือราคาของหนึ่งหน่วยเมื่อของพอดีกับที่ต้องการ เมืองที่ขาดจ่ายได้ถึง 1.75 เท่า เมืองที่ล้นขายเหลือ 0.25 เท่า ความเทอะทะคือค่าขนต่อระยะทาง</p><div class="etable"><div class="eth"><span>ประเภท</span><span>ราคาฐาน</span><span>เทอะทะ</span></div>`
-    + ECATS.filter(c => !ECAT[c].own).map(c => `<div class="etr" data-c="${c}"><span><i style="background:${ECAT[c].col}"></i><input type="text" data-f="cname" maxlength="60" value="${esc(ECAT[c].name)}"></span><input type="number" data-f="cv" min="0.05" max="200" step="0.1" value="${ECAT[c].v}"><input type="number" data-f="cbulk" min="0.01" max="10" step="0.05" value="${ECAT[c].bulk}"></div>`).join('')
+    + ECATS.filter(c => !ECAT[c].own && !ECAT[c].people).map(c => `<div class="etr" data-c="${c}"><span><i style="background:${ECAT[c].col}"></i><input type="text" data-f="cname" maxlength="60" value="${esc(ECAT[c].name)}"></span><input type="number" data-f="cv" min="0.05" max="200" step="0.1" value="${ECAT[c].v}"><input type="number" data-f="cbulk" min="0.01" max="10" step="0.05" value="${ECAT[c].bulk}"></div>`).join('')
     + `</div><div class="btns"><button type="button" class="btn" data-a="creset">คืนค่าตั้งต้นทุกประเภท</button></div>`
     + `<h4>ประเภทที่เพิ่มเอง</h4>` + (ECO.ucats.length ? '' : `<p class="note">ยังไม่มี เพิ่มประเภทแล้วย้ายสินค้าเข้ามาได้จากแท็บสินค้า</p>`)
     + ECO.ucats.map(u => `<div class="eform" data-u="${u.id}"><div class="erow"><input type="color" data-f="ucol" value="${u.col}" aria-label="สีของประเภท"><input type="text" data-f="uname" maxlength="60" value="${esc(u.name)}" style="flex:1"></div>`
@@ -423,18 +425,18 @@ function ecoCapHTML(s) {                            // the city a socialist stat
   return ecoIn('เมืองศูนย์กลางของรัฐ', `<select data-f="scap"><option value="">ให้ระบบเลือก${now && !cs.some(c => c.id === s.cap) ? ' (ตอนนี้ ' + esc(now) + ')' : ''}</option>${cs.map(c => `<option value="${esc(c.id)}"${c.id === s.cap ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}</select>`);
 }
 function ecoStatesHTML() {
-  let h = `<div class="btns" style="margin:0 0 8px"><button type="button" class="btn" data-a="snew"${ECO.states.length >= 52 ? ' disabled' : ''}>เพิ่มรัฐ</button></div>`;
+  let h = `<div class="btns" style="margin:0 0 8px"><button type="button" class="btn" data-a="snew"${ECO.states.length >= 52 ? ' disabled' : ''}>เพิ่มรัฐ</button>${ECO.states.length > 1 ? `<button type="button" class="btn" data-a="stfold" data-v="0">พับทุกรัฐ</button><button type="button" class="btn" data-a="stfold" data-v="1">กางทุกรัฐ</button>` : ''}</div>`;
   if (!ECO.states.length) return h + `<p class="note">ยังไม่มีรัฐ เพิ่มรัฐแล้วเลือกชื่อรัฐในแถบเครื่องมือเพื่อระบายเขตลงบนแผนที่ ระบายลงทะเลได้เพื่อกำหนดน่านน้ำ เมืองขึ้นกับรัฐของช่องที่ตั้งอยู่</p>`;
   const cnt = {}; for (const z of ECO.cells) if (z !== '.') cnt[z] = (cnt[z] || 0) + 1;
   for (const s of ECO.states) {
     const others = s.sys === 'anar' ? [] : ECO.states.filter(o => o !== s && o.sys !== 'anar');
-    h += `<div class="eform" data-s="${s.id}"><div class="erow"><input type="color" data-f="scolor" value="${s.color}" aria-label="สีของรัฐ"><input type="text" data-f="sname" maxlength="60" value="${esc(s.name)}" style="flex:1"></div>`
+    h += `<details class="efold stfold" data-fold="st${s.id}"${GDPV['st' + s.id] === 0 ? '' : ' open'}><summary><i class="sdot" style="background:${s.color}"></i>${esc(s.name)} <small>${ESYS[s.sys][0]} · ${cnt[s.id] || 0} ช่อง</small></summary><div class="eform" data-s="${s.id}"><div class="erow"><input type="color" data-f="scolor" value="${s.color}" aria-label="สีของรัฐ"><input type="text" data-f="sname" maxlength="60" value="${esc(s.name)}" style="flex:1"></div>`
       + ecoIn('ระบอบเศรษฐกิจ', `<select data-f="ssys">${Object.entries(ESYS).map(([k, v]) => `<option value="${k}"${k === s.sys ? ' selected' : ''}>${v[0]}</option>`).join('')}</select>`) + `<div class="tr w">${ESYS[s.sys][1]}</div>`
       + (s.sys === 'anar' ? `<div class="tr w">แรงงานทาส: ดินแดนที่ไม่มีรัฐค้าทาสเสรีเสมอ</div>` : ecoIn('แรงงานทาส', `<select data-f="sslave">${Object.entries(ESLAVE).map(([k, v]) => `<option value="${k}"${k === (s.slave || 'abol') ? ' selected' : ''}>${v[0]}</option>`).join('')}</select>`) + `<div class="tr w">${ESLAVE[s.slave || 'abol'][1]}</div>`)
-      + (s.sys === 'soc' ? ecoCapHTML(s) : '')
+      + (s.sys === 'soc' ? ecoCapHTML(s) : '') + socStateForm(s)
       + `<div class="erow"><label>สกุลเงิน <input type="text" data-f="scur" maxlength="30" value="${esc(s.cur)}" placeholder="${esc(ECO.central.name)}" style="width:8em"></label><label>1 หน่วย = <input type="number" data-f="srate" min="0.01" max="1000" step="0.05" value="${s.rate}"> ${esc(ECO.central.name)}</label></div>`
       + (others.length ? `<div class="erow">${others.map(o => `<label><i class="sdot" style="background:${o.color}"></i>${esc(o.name)} <select data-f="srel" data-o="${o.id}"><option value="">เป็นกลาง</option><option value="ally"${(s.rel[o.id] || o.rel[s.id]) === 'ally' ? ' selected' : ''}>พันธมิตร</option><option value="rival"${(s.rel[o.id] || o.rel[s.id]) === 'rival' ? ' selected' : ''}>คู่อริ</option></select></label>`).join('')}</div>` : '')
-      + `<div class="tr w">${cnt[s.id] || 0} ช่อง</div><div class="btns"><button type="button" class="btn warn" data-a="sdel">ลบรัฐนี้</button></div></div>`;
+      + `<div class="tr w">${cnt[s.id] || 0} ช่อง</div><div class="btns"><button type="button" class="btn warn" data-a="sdel">ลบรัฐนี้</button></div></div></details>`;
   }
   return h;
 }

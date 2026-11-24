@@ -22,10 +22,11 @@ const ECAT = {   // name, colour, value of a load, bulk (what a load pays per un
   tech: { name: 'เครื่องกลและอุปกรณ์เวท', col: '#6ad0c8', v: 10, bulk: 0.4, made: true },
   ships: { name: 'เรือ', col: '#5a90b4', v: 8, bulk: 0.05, made: true },
   books: { name: 'ตำราและความรู้', col: '#dccca2', v: 6, bulk: 0.2, made: true },
+  labor: { name: 'แรงงาน (ทาส)', col: '#d0343c', v: 1, bulk: 0.5, people: true },   // people bought and sold (v0.13.0): no ground yields it and no workshop makes it; the year's slave trade fills its books
 };
 // on a map of our own world the class that is mana in Gresland is crude oil, priced with gems and gold as the owner ruled; coal burns with the other fuels
 if (BLANK) { ECAT.mana.name = 'น้ำมันดิบ'; ECAT.mana.v = ECAT.rare.v; ECAT.fuel.name = 'เชื้อเพลิง ถ่านหิน และยางไม้'; ECAT.tech.name = 'เครื่องจักรและเครื่องกล'; ECAT.rare.name = 'โลหะมีค่าและอัญมณี'; ECAT.herbs.name = 'สมุนไพร เครื่องเทศ และน้ำผึ้ง'; }
-const ECATS = Object.keys(ECAT), ERAW = ECATS.filter(c => !ECAT[c].made), EMADEC = ECATS.filter(c => ECAT[c].made);
+const ECATS = Object.keys(ECAT), ERAW = ECATS.filter(c => !ECAT[c].made && !ECAT[c].people), EMADEC = ECATS.filter(c => ECAT[c].made);
 const KIX = { capital: 0, city: 1, town: 2, fort: 3, village: 4 };
 const EPOP = [12, 7, 4, 3, 1.6];                   // heads of a capital, a city, a town, a fort, a village
 const EREACH = [7, 6, 5, 4, 4];                    // how far out each works the land, in hexes of open ground
@@ -35,7 +36,7 @@ const ENEED = {                                    // loads a head needs a year,
   timber: [0.3, 0.25, 0.2, 0.25, 0.15], fuel: [0.25, 0.2, 0.18, 0.2, 0.15], stone: [0.2, 0.15, 0.08, 0.2, 0.04], ore: [0, 0, 0, 0, 0],
   cloth: [0.18, 0.15, 0.12, 0.12, 0.08], mana: [0.16, 0.1, 0.04, 0.08, 0.01], rare: [0.05, 0.03, 0.01, 0.01, 0], luxury: [0.14, 0.08, 0.03, 0.02, 0.01],
   tools: [0.1, 0.1, 0.1, 0.08, 0.1], arms: [0.12, 0.08, 0.03, 0.35, 0.01], tech: [0.06, 0.04, 0.01, 0.04, 0], ships: [0.04, 0.03, 0.015, 0.01, 0.01],
-  books: [0.03, 0.02, 0.005, 0.004, 0],
+  books: [0.03, 0.02, 0.005, 0.004, 0], labor: [0, 0, 0, 0, 0],
 };
 // the workshops: loads a head turns out at full supply, and what one load takes
 const EWORK = {

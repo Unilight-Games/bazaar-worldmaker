@@ -435,3 +435,20 @@ body:has(#mapscreen:not([hidden])) .uisize.fixed { display: none; }
 .tierpick input.bad, .erow input.bad { color: #ff9a8a; outline: 1px solid #c8553d; outline-offset: -1px; }
 .tierpick input[hidden], .tierpick input[hidden] + .tu { display: none; }
 .tierpick .tu { padding-right: 4px; }
+
+/* ---- v0.13.0: the city's folding tables, a state's choices, a city's lot ---- */
+#tradecard details.tfold { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 5px; }
+#tradecard details.tfold > summary { cursor: pointer; font-family: var(--display, inherit); font-weight: 700; font-size: .9rem; padding: 2px 0 5px; list-style-position: inside; }
+#tradecard details.tfold > summary small { font-weight: 400; color: var(--muted); font-size: .76rem; margin-left: 6px; }
+#tradecard .etable.g6 .eth, #tradecard .etable.g6 .etr { grid-template-columns: minmax(0, 1.9fr) repeat(5, minmax(0, .8fr)); gap: 4px; }
+#tradecard .etable .eth.sortable span { cursor: pointer; user-select: none; }
+#tradecard .etable .eth.sortable span:hover { color: var(--text); }
+#tradecard .etable .etr span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#tradecard .etable .etr span:first-child i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
+#tradecard .soclot { flex-wrap: wrap; gap: 6px 10px; font-size: .84rem; }
+#tradecard .soclot label { display: inline-flex; align-items: center; gap: 4px; }
+#tradecard .soclot input { width: 4.2em; }
+#ecocard details.stfold > summary .sdot { margin-right: 6px; }
+#ecocard .polset { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 4px 0 6px; font-size: .84rem; }
+#ecocard .polset label { display: inline-flex; align-items: center; gap: 4px; cursor: help; }
+#ecocard .etable .etr em, #ecocard .etable .etr span em { font-style: normal; color: var(--brass); font-size: .88em; }

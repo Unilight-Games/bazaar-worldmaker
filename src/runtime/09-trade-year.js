@@ -10,10 +10,13 @@ function econCompute() {
     const h = landHex(hexAt(c.x, c.y)), ki0 = KIX[c.kind] != null ? KIX[c.kind] : 1, ki = ecoKi(c.id, c.kind);
     return { id: c.id, name: c.name || 'เมืองไม่มีชื่อ', kind: c.kind, ki, x: c.x, y: c.y, h, zone: h >= 0 ? ZO[h] : '.', pop: ecoPop(c.id, ki0), lk: KIK[ki], st: h >= 0 ? ECO.cells[h] : '.' };
   }).filter(c => c.h >= 0);
+  const LP = landPlan(cities);                       // the land each city takes for its people: how far its fields reach, and how short it falls
+  cities.forEach((c, k) => { c.land = LP.rows[k]; c.people = c.pop * ECO.unit; c.reach = Math.max(EREACH[c.ki], Math.min(LAND_REACH, c.land.ring + 1)); });
+  socPrep(cities);
   PORTZ.fill(0);
   for (const c of cities) { PORTZ[c.h] = 1; for (let k = 0; k < 6; k++) { const v = NB[c.h * 6 + k]; if (v >= 0 && !WATR[v]) PORTZ[v] = 1; } }
   eLanes(cities);
-  const { own, dist } = eHinterland(cities, false), Hs = eStats(cities, own, (i, k) => 1 - 0.5 * dist[i] / EREACH[cities[k].ki]);
+  const { own, dist } = eHinterland(cities, false), Hs = eStats(cities, own, (i, k) => 1 - 0.5 * dist[i] / cities[k].reach);
   const outer = eHinterland(cities, true).own;
   for (let i = 0; i < N; i++) if (own[i] >= 0) outer[i] = -1;
   const Ho = eStats(cities, outer, () => 0.5);
@@ -31,11 +34,11 @@ function econCompute() {
   const prod = cities.map(() => new Map());
   cities.forEach((c, k) => {
     const H = Hs[k], cn = ECANON[c.id] || {};
-    for (const g of EGOODS) { if (g.off) continue; let v = (g.f(H) + (g.far ? g.f(Ho[k]) : 0)) * (g.pct == null ? 1 : g.pct); if (!(v > 0.004)) continue; v *= (cn[g.cat] || 1) * orgProd(c, g.cat); if (g.id === 'silver' && c.id === 'vidsaga') v *= 1.5; prod[k].set(g.id, v); }
+    for (const g of EGOODS) { if (g.off) continue; let v = (g.f(H) + (g.far ? g.f(Ho[k]) : 0)) * (g.pct == null ? 1 : g.pct); if (!(v > 0.004)) continue; v *= (cn[g.cat] || 1) * orgProd(c, g.cat) * socRaw(c, g.cat); if (g.id === 'silver' && c.id === 'vidsaga') v *= 1.5; prod[k].set(g.id, v); }
   });
   // what each city needs, before its workshops
   const need = cities.map(c => {
-    const m = {}; for (const cat of ECATS) m[cat] = ENEED[cat][c.ki] * c.pop; if (!c.port) m.ships = 0;
+    const m = {}; for (const cat of ECATS) m[cat] = ENEED[cat][c.ki] * c.pop * socNeed(c, cat); if (!c.port) m.ships = 0;
     m.fuel *= c.cm.fuel; m.cloth *= c.cm.cloth; m.herbs *= c.cm.herbs; m.tools *= c.cm.tools;   // what the climate asks of the city
     return m;
   });
@@ -50,7 +53,7 @@ function econCompute() {
       ships: c.port === 2 ? 1 : c.port === 1 ? 0.4 : 0,
       books: (z === 'T' ? 3 : 1) * [1, 0.5, 0.2, 0.1, 0][c.ki],
     };
-    for (const m of EMADEC) { const v = ind * EWORK[m].base * spec[m] * (cn[m] || 1) * orgProd(c, m); if (v > 0.01) p[m] = v; }
+    for (const m of EMADEC) { const v = ind * EWORK[m].base * spec[m] * (cn[m] || 1) * orgProd(c, m) * socMake(c, m); if (v > 0.01) p[m] = v; }
     for (const m in p) for (const [cat, q] of Object.entries(EWORK[m].in)) need[k][cat] += p[m] * q;
     return p;
   });
@@ -60,7 +63,7 @@ function econCompute() {
   // to be sorted and sent on, and pays the quay both ways, as it does wherever it changes between boat and caravan.
   const wetEnd = (L, atA) => { const st = L.states; if (!st) return false; for (let q = 1; q <= 2 && q < st.length; q++) if (st[atA ? q : st.length - 1 - q] & 1) return true; return false; };
   const adj = cities.map(() => []);
-  links.forEach((L, li) => { if (L.fail) return; const wa = wetEnd(L, true), wb = wetEnd(L, false); const lc = ecoLinkCost(L, cities) * orgHaul(cities[L.ia], cities[L.ib]); adj[L.ia].push([L.ib, lc, li, wa, wb]); adj[L.ib].push([L.ia, lc, li, wb, wa]); });
+  links.forEach((L, li) => { if (L.fail) return; const wa = wetEnd(L, true), wb = wetEnd(L, false); const lc = ecoLinkCost(L, cities) * orgHaul(cities[L.ia], cities[L.ib]) * socHaul(L, cities); adj[L.ia].push([L.ib, lc, li, wa, wb]); adj[L.ib].push([L.ia, lc, li, wb, wa]); });
   const NT = [], NWAY = [];                         // NWAY[i][j]: the lines from i to j, each as [line, +1 from its first city or -1]
   for (let i = 0; i < n; i++) {                     // states: a city, reached by land (2k) or still afloat (2k + 1)
     const d = new Float64Array(2 * n).fill(Infinity), pv = new Int32Array(2 * n).fill(-1), pl = new Int32Array(2 * n).fill(-1), done = new Uint8Array(2 * n); d[2 * i] = 0;
@@ -211,8 +214,10 @@ function econCompute() {
   for (const f of flows) { const val = f.amt * ECAT[f.cat].v, seen = new Set([f.from]); let at = f.from; for (const [li] of f.way) { const L = links[li]; at = L.ia === at ? L.ib : L.ia; seen.add(at); } for (const k of seen) cities[k].through += val; }
   const top = Math.max(0, ...cities.map(c => c.through));
   for (const c of cities) { c.level = c.rank; c.sug = !(top > 0) ? 0 : c.through >= 0.5 * top ? 3 : c.through >= 0.2 * top ? 2 : c.through >= 0.05 * top ? 1 : 0; }
-  const bundles = eBundles(links, cities);
-  ECON = { ver: (ECON ? ECON.ver : 0) + 1, plan, cities, prod, need, got, left, flows, links, bundles, NT, NWAY, P0, P1, MK, rounds, ms: performance.now() - t0 };
+  ECON = { ver: (ECON ? ECON.ver : 0) + 1, plan, cities, prod, need, got, left, flows, links, bundles: null, NT, NWAY, P0, P1, MK, rounds, land: LP, ms: 0 };
+  LP.ver = ECON.ver; landCompute();
+  try { socYear(ECON); } catch (err) { console.error('society', err); }   // who ends up where and with what: people on the move, visitors, slaves as a class of goods, each state's books
+  ECON.bundles = eBundles(links, cities); ECON.ms = performance.now() - t0;
   return ECON;
 }
 const GBY = new Map(EGOODS.map(g => [g.id, g]));
