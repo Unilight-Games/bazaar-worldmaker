@@ -61,6 +61,7 @@ function econCompute() {
     for (const m in p) for (const [cat, q] of Object.entries(EWORK[m].in)) need[k][cat] += p[m] * q;
     return p;
   });
+  landYield(cities, prod, need, LP);                // what the city's own fields, felled woods and mines bring in (v0.14.2)
   const flows = [], links = eNetwork(cities);
   // what trade between two cities costs: the cheapest way along the network's lines, through the cities between. A boat that
   // comes in and goes on by water passes a smaller place without unloading; at a centre of rank 2 or up the cargo comes ashore

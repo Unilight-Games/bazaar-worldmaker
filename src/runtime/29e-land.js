@@ -33,13 +33,13 @@ const landDice = u => { const x = Math.sin(u * 127.1 + 311.7) * 43758.5453; retu
 function landPlan(cities) {
   const E = { cities };
   const km = ENV.meta && +ENV.meta.kmPerHex || 34, haHex = 0.866 * km * km * 100, total = E.cities.reduce((a, c) => a + c.pop, 0) * ECO.unit, crop = ecoCrop(total), wood = crop * 2 / 3;
-  const use = new Int8Array(N), own = new Int16Array(N).fill(-1), rows = E.cities.map(() => ({ farm: 0, cleared: 0, logged: 0, mine: 0, terrace: 0, garden: 0, need: 0, short: 0, want: 0, lack: 0, ring: 0, kind: '' })), tot = { farm: 0, cleared: 0, logged: 0, mine: 0, terrace: 0, garden: 0, was: 0 };
+  const use = new Int8Array(N), own = new Int16Array(N).fill(-1), rows = E.cities.map(() => ({ farm: 0, cleared: 0, logged: 0, mine: 0, terrace: 0, garden: 0, need: 0, short: 0, want: 0, wantW: 0, wantM: 0, lack: 0, ring: 0, kind: '' })), tot = { farm: 0, cleared: 0, logged: 0, mine: 0, terrace: 0, garden: 0, was: 0 };
   let short = 0;
   for (const k of E.cities.map((c, i) => i).sort((a, b) => E.cities[b].pop - E.cities[a].pop)) {   // the largest city takes its land first
     const c = E.cities[k], r = rows[k], P = c.pop * ECO.unit; r.need = P * crop / 100;             // square kilometres of ploughland
     if (c.h < 0) continue;
     let nF = Math.round(P * crop / (haHex * LAND_TILL)), nW = Math.round(P * wood / (haHex * 0.8)), nM = P >= LAND_MINE ? Math.min(12, 1 + Math.floor((P - LAND_MINE) / 2.5e5)) : 0;
-    r.want = nF; if (!nF && !nW && !nM) continue;
+    r.want = nF; r.wantW = nW; r.wantM = nM; if (!nF && !nW && !nM) continue;
     // what kind of country the city stands in, read off the land within two hexes of it
     let nl = 0, nf = 0, nm = 0; { let rg = [c.h]; const sn = new Set(rg); for (let d = 0; d <= 2; d++) { const nx = []; for (const u of rg) { const b = eff(u); if (!isW(b)) { nl++; if (FOREST.has(b)) nf++; else if (b === 'M') nm++; } for (let j = 0; j < 6; j++) { const v = NB[u * 6 + j]; if (v >= 0 && !sn.has(v)) { sn.add(v); nx.push(v); } } } rg = nx; } }
     // How much of a forest city it is decides what share of its forest it gardens, hex by hex, and likewise its slopes: a city
@@ -72,6 +72,31 @@ function landPlan(cities) {
   }
   let landN = 0; for (let i = 0; i < N; i++) { const b = eff(i); if (b !== 'S' && b !== 'L') landN++; }
   return { ver: 0, unit: ECO.unit, use, own, rows, tot, total, crop, haHex, short, landN, km2: landN * haHex / 100 };
+}
+// ---------- what the land a city works brings in (v0.14.2) ----------
+// The owner set his capital at a million heads and found it starving beside the ten hexes of ploughland laid out for it: the year
+// counted the natural yield of the hinterland, sized for an ordinary city, and never what the fields, the felled woods and the
+// mines laid out for the city's own people brought in. Now they feed the share of the city they were laid out for: the fields its
+// grain and part of its meat, at the yield the climate allows; the felled woods its timber and firewood; the mines its stone and
+// ore. Where the hinterland's own yield is the larger, that stands. A city short of land keeps the gap, and buys or goes without.
+const LAND_FEED = { grain: 1, protein: 0.6 }, LAND_FELL = ['timber', 'fuel'], LAND_DIG = ['stone', 'ore'];
+const landClimY = c => clamp(c.cm ? c.cm.hs : 1, 0.15, 1.15) * clamp(c.cm && c.cm.grain > 0 ? c.cm.grain : 1, 0.3, 1);
+function landGood(cat) { for (const g of EGOODS) if (g.cat === cat && !g.off) return g; return null; }
+function landYield(cities, prod, need, LP) {
+  if (!LP || !LP.rows) return;
+  cities.forEach((c, k) => {
+    const r = LP.rows[k]; if (!r) return;
+    const lift = (cat, q) => {
+      if (!(q > 0.004) || !ECAT[cat]) return; let t = 0; for (const g of EGOODS) if (g.cat === cat && prod[k].has(g.id)) t += prod[k].get(g.id);
+      if (t >= q) return;
+      if (t > 0) { const f = q / t; for (const g of EGOODS) if (g.cat === cat && prod[k].has(g.id)) prod[k].set(g.id, prod[k].get(g.id) * f); }
+      else { const g = landGood(cat); if (g) prod[k].set(g.id, q); }
+    };
+    if (r.want >= 1) { const fed = clamp(1 - r.lack, 0, 1) * landClimY(c); for (const cat in LAND_FEED) lift(cat, need[k][cat] * fed * LAND_FEED[cat]); }
+    if (r.wantW >= 1) { const w = Math.min(1, r.logged / r.wantW); for (const cat of LAND_FELL) lift(cat, need[k][cat] * w); }
+    if (r.wantM >= 1) { const m = Math.min(1, r.mine / r.wantM); for (const cat of LAND_DIG) lift(cat, need[k][cat] * m); }
+    r.yield = landClimY(c);
+  });
 }
 // ---------- the land as ground of its own (v0.12.0) ----------
 // The owner asked for fields, clearings and mines to look better and to lie low, as hexes of ground in their own right like the

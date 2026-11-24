@@ -33,8 +33,11 @@ const URL = 'http://localhost:8765/index.html?fit=0';
       await A.waitForTimeout(2500); console.log(`[${label}] a stranger's change: cities at A, B, C`, (await st(A)).cities, (await st(B)).cities, (await st(C)).cities, (await st(A)).cities === 0 && (await st(B)).cities === 0 && (await st(C)).cities === 0 ? 'REFUSED' : 'TAKEN');
       await D.close();
       // the owner sends B away
-      await A.bringToFront(); await A.evaluate(() => window.scrollTo(0, 0)); const kicks = await A.$$('#roomPeople [data-kick]'); let done = false;
-      for (const k of kicks) { const li = await k.evaluateHandle(e => e.closest('li')); if (/บี/.test(await li.evaluate(e => e.textContent))) { await k.click(); done = true; break; } }
+      await A.bringToFront(); await A.evaluate(() => window.scrollTo(0, 0)); let done = false;
+      for (let tries = 0; tries < 6 && !done; tries++) {   // the people list is drawn again as D leaves; look again if the button went
+        await A.waitForTimeout(tries ? 600 : 0);
+        try { const kicks = await A.$$('#roomPeople [data-kick]'); for (const k of kicks) { const li = await k.evaluateHandle(e => e.closest('li')); if (/บี/.test(await li.evaluate(e => e.textContent))) { await k.click({ timeout: 3000 }); done = true; break; } } } catch (e) { /* drawn again under the click */ }
+      }
       await B.waitForSelector('#menu:not([hidden])', { timeout: 15000 }); console.log(`[${label}] B sent away:`, done, '|', (await B.textContent('#mtoast')).trim());
       await B.bringToFront(); await B.fill('#joinCode', code); await B.click('#joinBtn'); await B.waitForTimeout(6000);
       console.log(`[${label}] B tries to come back: in the room`, await B.isVisible('#mapscreen'), '|', (await B.textContent('#mtoast')).trim(), '| banned at the owner', await A.evaluate(() => MME.shell.cur.room.banned));
