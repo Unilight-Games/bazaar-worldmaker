@@ -111,6 +111,13 @@ const { chromium } = require('playwright');
   await p.keyboard.press('Escape'); await p.waitForTimeout(200); await p.mouse.click(xy[0], xy[1]); await p.waitForTimeout(600);
   ok('and remembers what was left open', await p.evaluate(() => document.querySelector('#tradebody details[data-tfold="exp"]').open && document.querySelector('#tradebody details[data-tfold="rank"]').open));
   await p.click('#tradebody details[data-tfold="exp"] > summary'); await p.click('#tradebody details[data-tfold="rank"] > summary');
+  // ---- v0.14.1: a populous city works the land its people need ----
+  await eco('e => { e.states = []; e.cells = e.cells.replace(/[A-Z]/g, "."); e.tune = {}; e.tier = "mid"; e.total = 3e8; }');
+  const lx1 = await p.evaluate(() => [MME.shell.cur.rt.test.reachOf('luxonia').ni, MME.shell.cur.rt.test.fieldsOf('luxonia'), MME.shell.cur.rt.test.gdp().find(r => r.id === 'luxonia').well]);
+  await eco('e => { e.tune = { claimPow: 0 }; }');
+  const lx0 = await p.evaluate(() => MME.shell.cur.rt.test.reachOf('luxonia').ni);
+  ok('a populous city hemmed in by towns works the land its people need (v0.14.0 gave Luxonia 40 hexes at this level)', lx1[0] > 80 && lx1[0] >= lx0, `Luxonia works ${lx1[0]} hexes, ${lx0} when every city pressed alike; well-being ${Math.round(lx1[2])}`);
+  ok('and every field, clearing and mine it has made is its own to harvest', lx1[1][1] > 20 && lx1[1][0] === lx1[1][1], `${lx1[1][0]} of ${lx1[1][1]}`);
   console.log('errors', errs.length + bad, errs.slice(0, 4).join(' | '));
   await browser.close();
 })().catch(e => { console.error('TEST FAILED', e.message.slice(0, 900)); process.exit(1); });

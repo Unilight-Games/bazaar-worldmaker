@@ -12,11 +12,14 @@ function econCompute() {
   }).filter(c => c.h >= 0);
   const LP = landPlan(cities);                       // the land each city takes for its people: how far its fields reach, and how short it falls
   cities.forEach((c, k) => { c.land = LP.rows[k]; c.people = c.pop * ECO.unit; c.reach = Math.max(EREACH[c.ki], Math.min(LAND_REACH, c.land.ring + 1)); });
+  { const ps = cities.map(c => c.pop).sort((a, b) => a - b), med = ps.length ? ps[ps.length >> 1] : 1; for (const c of cities) c.claim = clamp(Math.pow(c.pop / Math.max(1e-9, med), TU('claimPow')), 0.6, 2.5); }   // how hard a city presses on its neighbours' land
   socPrep(cities);
   PORTZ.fill(0);
   for (const c of cities) { PORTZ[c.h] = 1; for (let k = 0; k < 6; k++) { const v = NB[c.h * 6 + k]; if (v >= 0 && !WATR[v]) PORTZ[v] = 1; } }
   eLanes(cities);
-  const { own, dist } = eHinterland(cities, false), Hs = eStats(cities, own, (i, k) => 1 - 0.5 * dist[i] / cities[k].reach);
+  const { own, dist } = eHinterland(cities, false);
+  for (let i = 0; i < N; i++) { const k = LP.own[i], u = LP.use[i]; if (k >= 0 && u >= 1 && u !== 5 && own[i] !== k) { own[i] = k; dist[i] = 0.5 * cities[k].reach; } }   // the fields, clearings and mines a city has made are its own to harvest (v0.14.1)
+  const Hs = eStats(cities, own, (i, k) => 1 - 0.5 * dist[i] / cities[k].reach);
   const outer = eHinterland(cities, true).own;
   for (let i = 0; i < N; i++) if (own[i] >= 0) outer[i] = -1;
   const Ho = eStats(cities, outer, () => 0.5);

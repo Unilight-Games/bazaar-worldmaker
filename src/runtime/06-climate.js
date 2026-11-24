@@ -349,18 +349,21 @@ const HZ = new Float32Array(N);
 // The mines, quarries and phantom diggings a city sends crews to reach further, to twice as far for a capital or a city:
 // a hex no city farms goes to the nearest city within that reach, and yields its far goods at half the rate.
 const EFAR = [2, 2, 1.5, 1.5, 1];
+// Each hex goes to the city that reaches it first, a populous city reaching as if its hexes were shorter (v0.14.1: a great
+// city hemmed in by towns used to work no more land than they did, however many it had to feed). c.claim is that weight.
+const HKEY = new Float32Array(N);
 function eHinterland(cities, far) {
   const own = new Int32Array(N).fill(-1), dist = new Float32Array(N).fill(1e9);
-  HN = 0; const s = ++stampN;
-  cities.forEach((c, k) => { const h = c.h; if (h < 0) return; if (0 < dist[h]) { dist[h] = 0; own[h] = k; SEENS[h] = s; hpush(h, 0); } });
+  HN = 0; const s = ++stampN; HKEY.fill(1e9);
+  cities.forEach((c, k) => { const h = c.h; if (h < 0) return; if (0 < HKEY[h]) { dist[h] = 0; HKEY[h] = 0; own[h] = k; SEENS[h] = s; hpush(h, 0); } });
   while (HN) {
     const u = hpop(); if (DONES[u] === s) continue; DONES[u] = s;
     if (isW(eff(u))) continue;                                     // water is claimed but not crossed
-    const k = own[u], reach = (cities[k].reach || EREACH[cities[k].ki]) * (far ? EFAR[cities[k].ki] : 1);
+    const k = own[u], reach = (cities[k].reach || EREACH[cities[k].ki]) * (far ? EFAR[cities[k].ki] : 1), w = cities[k].claim || 1;
     for (let j = 0; j < 6; j++) {
       const v = NB[u * 6 + j]; if (v < 0 || DONES[v] === s) continue;
       const g = dist[u] + (eff(v) === 'M' ? 1.5 : 1); if (g > reach) continue;
-      if (g < dist[v]) { dist[v] = g; own[v] = k; SEENS[v] = s; hpush(v, g); }
+      const key = g / w; if (key < HKEY[v]) { HKEY[v] = key; dist[v] = g; own[v] = k; SEENS[v] = s; hpush(v, key); }
     }
   }
   return { own, dist };
