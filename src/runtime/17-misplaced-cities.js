@@ -51,9 +51,20 @@ function drawHandles(c, px) {
   const r = rsel && visibleRoutes().find(v => v.id === rsel); if (!r) return;
   const via = act && act.k === 'rbend' && act.id === r.id ? act.via : r.via || [];
   for (const p of via) { c.beginPath(); c.arc(p[0], p[1], 4.2 * px, 0, 2 * Math.PI); c.fillStyle = '#fff4d6'; c.fill(); c.lineWidth = 1.5 * px; c.strokeStyle = '#2a2116'; c.stroke(); }
+  // v0.18.4: the two ends, as square handles; the one being moved follows the pointer, red over water
+  const moving = act && act.k === 'rend' && act.id === r.id && act.moved ? act : null;
+  for (const k of ['a', 'b']) {
+    let e = endPoint(r[k]); if (moving && moving.end === k) e = { x: moving.at[0], y: moving.at[1] };
+    if (!e) continue;
+    const s = 4.6 * px, bad = moving && moving.end === k && (moving.to == null || !moving.geo);
+    c.save(); c.translate(e.x, e.y); c.rotate(Math.PI / 4);
+    c.fillStyle = bad ? '#e2748a' : '#ffd678'; c.fillRect(-s, -s, 2 * s, 2 * s);
+    c.lineWidth = 1.5 * px; c.strokeStyle = '#2a2116'; c.strokeRect(-s, -s, 2 * s, 2 * s); c.restore();
+  }
 }
 function liveRoute() {                              // what the canvas shows instead of the stored line: a bend in progress, or a route being laid
-  if (act && act.k === 'rbend') return { id: act.id, geo: act.geo };
+  if (act && act.k === 'rbend' && act.moved) return { id: act.id, geo: act.geo };
+  if (act && act.k === 'rend' && act.moved) return { id: act.id, geo: act.geo || { fail: true } };
   if (mode === 'route' && rpend != null && cursor) {
     const b = endAt(cursor[0], cursor[1]); if (b == null) return null;
     const key = JSON.stringify([rcls, rpend, typeof b === 'string' ? b : hexAt(b[0], b[1]), RT_EPOCH]);

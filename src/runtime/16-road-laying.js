@@ -66,7 +66,7 @@ function setRoadCls(k) {
   rcls = RDC[k] ? k : 'royal'; rpend = null; rprev = null;
   $('rtCls').innerHTML = Object.entries(RDC).map(([q, v]) => `<button type="button" data-k="${q}">${esc(v.name)}</button>`).join('');
   segPick('rtCls', 'k', rcls, setRoadCls);
-  $('rtHint').textContent = 'คลิกเมืองต้นทางแล้วคลิกเมืองปลายทาง ถนนจะหาทางที่สั้นที่สุดเอง เลี่ยงภูเขา แม่น้ำใหญ่ และป่าบรรพกาล ถ้าเลี่ยงไม่ได้จะมีอุโมงค์หรือสะพาน คลิกที่ว่างเพื่อเริ่มหรือจบที่จุดนั้น คลิกเส้นที่มีอยู่เพื่อเลือก แล้วลากเส้นเพื่อดัดทาง Esc ยกเลิก เมืองที่วางใหม่ยังไม่มีถนน กดปุ่มต่อถนนเพื่อต่อให้ คาราวานใช้ถนนที่วางไว้' + (rcls === 'rail' ? ' ทางรถไฟวางเองเท่านั้น ไม่มีเมืองไหนได้ทางรถไฟอัตโนมัติ รถไฟขนของและผู้คนถูกกว่าถนนหลวงราวครึ่งหนึ่ง และเลี่ยงทางลาดชันจึงเจาะอุโมงค์และสร้างสะพานบ่อยกว่าถนน' : '');
+  $('rtHint').textContent = 'คลิกเมืองต้นทางแล้วคลิกเมืองปลายทาง ถนนจะหาทางที่สั้นที่สุดเอง เลี่ยงภูเขา แม่น้ำใหญ่ และป่าบรรพกาล ถ้าเลี่ยงไม่ได้จะมีอุโมงค์หรือสะพาน คลิกที่ว่างเพื่อเริ่มหรือจบที่จุดนั้น ลากถนนหรือทางรถไฟเส้นไหนก็ได้เพื่อดัดทาง คลิกเส้นเพื่อเลือก แล้วลากปลายเส้นที่เลือกไปวางที่เมืองอื่นหรือที่ว่างเพื่อย้ายปลาย Esc ยกเลิก เมืองที่วางใหม่ยังไม่มีถนน กดปุ่มต่อถนนเพื่อต่อให้ คาราวานใช้ถนนที่วางไว้' + (rcls === 'rail' ? ' ทางรถไฟวางเองเท่านั้น ไม่มีเมืองไหนได้ทางรถไฟอัตโนมัติ รถไฟขนของและผู้คนถูกกว่าถนนหลวงราวครึ่งหนึ่ง และเลี่ยงทางลาดชันจึงเจาะอุโมงค์และสร้างสะพานบ่อยกว่าถนน' : '');
   requestDraw();
 }
 function drawnLine(r, g) { return g.q; }
@@ -89,6 +89,22 @@ function legAt(g, x, y) {
   for (let i = 0; i < g.raw.length - 1; i++) { const d = segDist(x, y, g.raw[i], g.raw[i + 1]); if (d < bd) { bd = d; best = i; } }
   let leg = 0; for (let l = 0; l < g.legs.length; l++) if (best >= g.legs[l]) leg = l;
   return leg;
+}
+function endHandleAt(r, mx, my) {                  // v0.18.4: which end of the chosen route is under the pointer
+  const lim = Math.max(4, 9 / view.s);
+  for (const k of ['a', 'b']) { const e = endPoint(r[k]); if (e && Math.hypot(e.x - mx, e.y - my) <= lim) return k; }
+  return null;
+}
+function moveRouteEnd(id, end, to) {
+  const r = visibleRoutes().find(v => v.id === id); if (!r) return;
+  if (to == null) { flash('วางปลายเส้นในน้ำไม่ได้'); return; }
+  const other = r[end === 'a' ? 'b' : 'a'];
+  if (JSON.stringify(to) === JSON.stringify(other)) { flash('ปลายทั้งสองข้างอยู่ที่เดียวกันไม่ได้'); return; }
+  if (JSON.stringify(to) === JSON.stringify(r[end])) return;
+  ensureRoutes(); const g = routeGeom({ ...r, [end]: to });
+  if (!g || g.fail) { flash('หาทางไปจุดนั้นไม่ได้'); return; }
+  changeRoute(id, { [end]: to });
+  flash(typeof to === 'string' ? `ย้ายปลายเส้นไป${endName(to)}แล้ว` : 'ย้ายปลายเส้นแล้ว');
 }
 function handleAt(r, mx, my) {
   const lim = Math.max(3, 8 / view.s);

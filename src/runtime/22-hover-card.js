@@ -70,6 +70,6 @@ function showTradeTip(mx, my, e) {                  // the trade mode: a city's 
   const c = cityAt(mx, my), ch = c ? null : chainAt(mx, my);
   if (!c && !ch) { hideTip(true); return; }
   tip.set(c ? `<b>${esc(c.name || 'เมืองไม่มีชื่อ')}</b>${cityTradeLine(c.id)}<div class="m">คลิกเพื่อดูรายละเอียด</div>`
-    : bundleTipHTML(ch) + (ch.ls.length > 1 ? '<div class="m">คลิกเพื่อเลือกทีละเส้น</div>' : editable ? '<div class="m">คลิกเพื่อเลือก แล้วลากเพื่อดัดทาง</div>' : ''), ch ? TRD[ch.wet ? 'water' : 'caravan'].line : 'var(--brass)');
+    : bundleTipHTML(ch) + (ch.ls.length > 1 ? '<div class="m">คลิกเพื่อเลือกทีละเส้น</div>' : editable ? '<div class="m">ลากเพื่อดัดทาง คลิกเพื่อเลือก</div>' : ''), ch ? TRD[ch.wet ? 'water' : 'caravan'].line : 'var(--brass)');
 }
 

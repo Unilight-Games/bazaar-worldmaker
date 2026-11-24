@@ -51,6 +51,10 @@ cv.addEventListener('pointerdown', e => {
   if (e.button === 0 && editable && !spaceDown && mode === 'route') {
     // the chosen route: grabbed on a waypoint, that waypoint moves; grabbed on its line, a new waypoint goes there
     const r = rsel && visibleRoutes().find(v => v.id === rsel), g = r && geoOf(r);
+    if (r && g && !g.fail) {                        // v0.18.4: an end of the chosen route goes to another city or spot
+      const end = endHandleAt(r, mx, my);
+      if (end) { cv.classList.add('drag'); act = { k: 'rend', id: r.id, end, to: r[end], sx: e.clientX, sy: e.clientY, moved: false, geo: g, at: [mx, my] }; requestDraw(); return; }
+    }
     if (r && g && !g.fail) {
       const hi = handleAt(r, mx, my);
       if (hi >= 0 || distToLine(drawnLine(r, g), mx, my) <= Math.max(3, 7 / view.s)) {
@@ -59,6 +63,12 @@ cv.addEventListener('pointerdown', e => {
         cv.classList.add('drag');
         act = { k: 'rbend', id: r.id, at, via, sx: e.clientX, sy: e.clientY, moved: false, geo: g }; requestDraw(); return;
       }
+    }
+    // v0.18.4: any road or railway is bent straight from a press on its line; a click without a drag still picks it
+    const r2 = rpend == null && !cityAt(mx, my) ? routeAt(mx, my) : null, g2 = r2 && geoOf(r2);
+    if (r2 && g2 && !g2.fail) {
+      const via = (r2.via || []).map(p => [p[0], p[1]]), at = legAt(g2, mx, my); via.splice(at, 0, [r1(mx), r1(my)]);
+      act = { k: 'rbend', id: r2.id, at, via, sx: e.clientX, sy: e.clientY, moved: false, geo: g2, fresh: true, px: [mx, my] }; return;
     }
     act = { k: 'rnew', sx: e.clientX, sy: e.clientY, at: [mx, my], vx: view.x, vy: view.y }; return;
   }
@@ -73,6 +83,12 @@ cv.addEventListener('pointerdown', e => {
         cv.classList.add('drag');
         act = { k: 'tbend', id: L.id, at, via, sx: e.clientX, sy: e.clientY, moved: false, geo: L.geo, hi, px: [mx, my] }; requestDraw(); return;
       }
+    }
+    // v0.18.4: any trade line is bent straight from a press on it (the chosen one where it runs, else the busiest there)
+    const L2 = editable && ttool === 'pick' && ECON && !cityAt(mx, my) ? linkAt(mx, my) : null;
+    if (L2 && L2.geo) {
+      const via = (L2.via || []).map(p => [p[0], p[1]]), at = linkLegAt(L2, mx, my); via.splice(at, 0, [r1(mx), r1(my)]);
+      act = { k: 'tbend', id: L2.id, at, via, sx: e.clientX, sy: e.clientY, moved: false, geo: L2.geo, hi: -1, px: [mx, my], fresh: true }; return;
     }
     act = { k: 'tnew', sx: e.clientX, sy: e.clientY, at: [mx, my], vx: view.x, vy: view.y }; return;
   }
@@ -115,6 +131,7 @@ cv.addEventListener('pointermove', e => {
     if (act.k === 'pdrag') { if (far || act.pos) act.pos = [r1(Math.max(0, Math.min(G.w, mx + act.d[0]))), r1(Math.max(0, Math.min(G.h, my + act.d[1])))]; requestDraw(); return; }
     if (act.k === 'tbend') {
       if (!act.moved && !far) return;
+      if (!act.moved && act.fresh) { tlsel = act.id; tsel = null; cv.classList.add('drag'); }   // the line grabbed becomes the chosen one
       act.moved = true; act.via[act.at] = [r1(Math.max(0, Math.min(G.w, mx))), r1(Math.max(0, Math.min(G.h, my)))];
       if (!act.pend) {                              // the course is found again once a frame, not once an event
         act.pend = true;
@@ -127,8 +144,24 @@ cv.addEventListener('pointermove', e => {
       }
       return;
     }
+    if (act.k === 'rend') {
+      if (!act.moved && !far) return;
+      act.moved = true; act.at = [mx, my];
+      const c = cityAt(mx, my); act.to = c ? c.id : endAt(mx, my);
+      if (!act.pend) {
+        act.pend = true;
+        requestAnimationFrame(() => {
+          const a = act; if (!a || a.k !== 'rend') return; a.pend = false;
+          const r = visibleRoutes().find(v => v.id === a.id);
+          if (r && a.to != null) { ensureRoutes(); const g = routeGeom({ ...r, [a.end]: a.to }); a.geo = g && !g.fail ? g : null; } else a.geo = null;
+          requestDraw();
+        });
+      }
+      return;
+    }
     if (act.k === 'rbend') {
       if (!act.moved && !far) return;
+      if (!act.moved && act.fresh) { selectRoute(act.id); cv.classList.add('drag'); }   // the road grabbed becomes the chosen one
       act.moved = true; act.via[act.at] = [r1(Math.max(0, Math.min(G.w, mx))), r1(Math.max(0, Math.min(G.h, my)))];
       if (!act.pend) {                              // the course is found again once a frame, not once an event
         act.pend = true;
@@ -186,6 +219,11 @@ function endPointer(e, cancel) {
       const o = { id: newLabelId(), text: 'ชื่อใหม่', x: r1(a.at[0]), y: r1(a.at[1]), size: lsize, ang: 0, color: '#f3ead2' };
       doOp({ k: 'lb', id: o.id, a: null, b: o }); selectLabel(o.id); const t = $('lfText'); t.focus(); t.select();
     }
+  } else if (a.k === 'rend') {
+    if (a.moved) moveRouteEnd(a.id, a.end, a.to);
+    else routeClick(a.at[0], a.at[1]);              // a click on the end, not a drag: as a click there always did
+  } else if (a.k === 'rbend' && !a.moved && a.fresh) {
+    routeClick(a.px[0], a.px[1]);                   // a click on a road, not a drag: it is picked
   } else if (a.k === 'rbend') {
     if (a.moved) {
       const r = visibleRoutes().find(v => v.id === a.id), own = ED.routes.get(a.id);
