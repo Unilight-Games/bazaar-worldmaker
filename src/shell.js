@@ -2,7 +2,7 @@
 // the sheet for a new map, and the room around an open map.
 (function () {
   const MME = window.MME;
-  MME.VERSION = '0.17.0';
+  MME.VERSION = '0.17.1';
   MME.NAME = 'Bazaar Worldmaker';
   MME.GRESLAND_KM = 34;   // canon: the continent is about 12 million square kilometres, and the map draws it on 12,208 hexes
   const $ = id => document.getElementById(id);
@@ -367,7 +367,7 @@
     let shift = 0, cap = 0; const fig = on && PAN.opts && document.body.classList.contains('tutoring') ? document.querySelector('#tutor .tu-fig') : null;
     if (fig) {
       const f = fig.getBoundingClientRect(), b = box.getBoundingClientRect(), at = f.left + 0.8 * f.width - b.left;
-      if (f.width > 0 && innerWidth > 760) { if (b.width - (PAN.side ? 342 : 0) - DOCKW - at >= 480) shift = Math.max(0, Math.round(at)); else cap = Math.max(96, Math.round(f.top + 0.127 * f.width - (b.top + 54))); }
+      if (f.width > 0 && innerWidth > 760) { if (b.width - (PAN.side ? 342 : 0) - DOCKW - at >= 480) shift = Math.max(0, Math.round(at)); else { const o1 = scr.querySelector('.opts'), r1 = o1 ? o1.getBoundingClientRect() : null, top1 = r1 && r1.height > 0 ? r1.top : b.top + 54; cap = Math.max(96, Math.round(f.top + 0.127 * f.width - top1)); } }   // from where the options begin, measured: the bar over the map may take two rows (v0.17.0)
     }
     if (shift) dock = true;
     scr.style.setProperty('--tush', shift + 'px'); scr.style.setProperty('--tumax', cap ? cap + 'px' : '9999px');
