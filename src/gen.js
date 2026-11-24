@@ -83,25 +83,35 @@
     const jx = i => CX[i] + (hash2(i, 7, seed) - 0.5) * R0 * 0.55, jy = i => CY[i] + (hash2(i, 13, seed) - 0.5) * R0 * 0.55;
     const up = new Int32Array(N).fill(-1);                       // the greatest stream flowing into each hex
     for (let i = 0; i < N; i++) { const d = to[i]; if (d >= 0 && kind[i] !== 2 && (up[d] < 0 || acc[i] > acc[up[d]])) up[d] = i; }
-    const heads = [];
+    const heads = [], lenOf = h => { let len = 0, w = h; while (w >= 0 && kind[w] !== 2 && len < 4000) { len++; w = to[w]; } return len; };
     for (let i = 0; i < N; i++) {
       if (kind[i] !== 0 || acc[i] < T || blocked.has(i)) continue;
       const u = up[i]; if (u >= 0 && acc[u] >= T) continue;      // not the top of its channel
-      let h = i, g = 0;                                          // climb to the spring: up the greatest feeder towards the high ground
+      let h = i, g = 0, lake = -1, src = '';                     // climb to the spring: up the greatest feeder towards the high ground
       while (g++ < 40) { const v = up[h]; if (v < 0 || kind[v] !== 0 || acc[v] < T * 0.3 || blocked.has(v)) break; h = v; if (o.isMt && o.isMt(h)) break; }
-      let len = 0, w = h; while (w >= 0 && kind[w] !== 2 && len < 4000) { len++; w = to[w]; }
-      heads.push([h, len]);
+      // Snow and ice count as a source as mountains do: meltwater. A river with no visible source looked unreal to the owner (v0.15.2): from where the water has gathered enough to draw,
+      // the line climbs on up the greatest feeder, a thin stream, to the mountain or the lake it comes from, when one is near.
+      if (o.isMt && o.isMt(h)) src = 'mt';
+      else { let x = h, k = 0; while (k++ < (o.climb || 8)) { const v = up[x]; if (v < 0 || blocked.has(v) || kind[v] === 2) break; if (kind[v] === 1) { src = 'lake'; lake = v; break; } x = v; if (o.isMt && o.isMt(x)) { src = 'mt'; break; } } if (src) h = x; }
+      heads.push([h, lenOf(h), lake, src]);
+    }
+    // every lake that spills over sends out a stream of its own, though the water it gathers is too little to draw by itself
+    if (o.lakeOut !== false) for (let lk = 0; lk < N; lk++) {
+      if (kind[lk] !== 1) continue; const ex = to[lk]; if (ex < 0 || kind[ex] !== 0 || blocked.has(ex) || acc[ex] >= T) continue;
+      if (o.arid && o.arid(ex)) continue;                        // a lake of the dry country keeps its water and turns to salt
+      heads.push([ex, lenOf(ex), lk, 'lake']);
     }
     heads.sort((a, b) => b[1] - a[1] || a[0] - b[0]);            // the longest first: it is the main stem, the rest join it
     const seen = new Uint8Array(N), out = [];
-    const emit = (pts, hexes, c) => {
-      if (pts.length < 2 || hexes.length < 2) return;
+    const emit = (pts, hexes, c, part) => {
+      if (pts.length < 2 || hexes.length < (part && part.src === 'lake' ? 1 : 2)) return;
       let dry = 0; for (const h of hexes) if (o.arid && o.arid(h)) dry++;
-      out.push({ kind: c === 0 && dry * 2 > hexes.length ? 'seasonal' : KIND[c], pts: pts.map(p => [Math.round(p[0] * 10) / 10, Math.round(p[1] * 10) / 10]), hexes });
+      out.push({ kind: c === 0 && dry * 2 > hexes.length ? 'seasonal' : KIND[c], pts: pts.map(p => [Math.round(p[0] * 10) / 10, Math.round(p[1] * 10) / 10]), hexes, head: !!(part && part.head), src: part ? part.src || '' : '' });
     };
-    for (const [head] of heads) {
+    for (const [head, , lake, src] of heads) {
       if (seen[head]) continue;
-      let cur = head, pts = [], hexes = [], c = cls(acc[cur]), total = 0;
+      let cur = head, pts = lake >= 0 ? [[CX[lake] + (CX[head] - CX[lake]) * 0.4, CY[lake] + (CY[head] - CY[lake]) * 0.4]] : [], hexes = [], c = cls(acc[cur]), total = 0;
+      const first = parts => { if (parts.length) { parts[0].src = src || ''; parts[0].head = true; } };
       const parts = [];
       for (;;) {
         seen[cur] = 1; pts.push([jx(cur), jy(cur)]); hexes.push(cur); total++;
@@ -125,8 +135,9 @@
         if (c2 > c) { pts.push([jx(nx), jy(nx)]); parts.push([pts, hexes, c]); pts = []; hexes = []; c = c2; }   // wider below a confluence
         cur = nx;
       }
-      if (total < (o.minLen || 3)) continue;
-      for (const [p, h, k] of parts) emit(p, h, k);
+      if (total < (o.minLen || (lake >= 0 ? 2 : 3))) continue;
+      first(parts);
+      for (const pt of parts) emit(pt[0], pt[1], pt[2], pt);
     }
     return out;
   }
@@ -159,9 +170,9 @@
     for (let i = 0; i < N; i++) if (kind[i] === 1) { let m = 9; for (let k = 0; k < 6; k++) { const v = L.NB[i * 6 + k]; if (v >= 0 && kind[v] === 0) m = Math.min(m, height[v]); } height[i] = Math.max(0.02, m - 0.02); }
     const dr = drainage(L, kind, height, rain);
     const T = [38, 22, 12][o.density == null ? 1 : o.density];
-    const all = traceRivers(L, kind, dr, { T, seed, blocked: o.blocked, isMt: i => cells[i] === 'M', arid: i => ARIDB.has(cells[i]), minLen: 3 });
+    const all = traceRivers(L, kind, dr, { T, seed, blocked: o.blocked, isMt: i => cells[i] === 'M' || cells[i] === 'n', arid: i => ARIDB.has(cells[i]), minLen: 3 });
     // where the land has mountains a river worth drawing comes down from them, or is long enough to have gathered on the plain
-    const rivers = all.filter(r => { if (!mts) return true; const h0 = r.hexes[0]; return h0 == null || dM[h0] <= 4 || r.kind !== 'stream' || r.hexes.length >= 6; });
+    const rivers = all.filter(r => { if (!mts || r.src) return true; const h0 = r.hexes[0]; return h0 == null || dM[h0] <= 4 || r.kind !== 'stream' || r.hexes.length >= 6; });
     return { rivers: rivers.slice(0, o.max || 900).map(r => ({ kind: r.kind, pts: r.pts })), why: '' };
   };
 
@@ -299,15 +310,25 @@
     const rain = new Float32Array(N); for (let i = 0; i < N; i++) if (!kind[i]) rain[i] = 0.12 + 1.5 * Math.max(0, sm[i]) + (isM[i] ? 0.4 : 0);
     const dr = drainage(L, kind, height, rain);
     // hollows the flood had to fill deep become lakes
-    const lakes = []; for (let i = 0; i < N; i++) if (!kind[i] && !isM[i] && dr.fill[i] - height[i] > 0.22 && dSea[i] >= 3 && sm[i] > 0.3) lakes.push(i);
+    const lakes = []; for (let i = 0; i < N; i++) if (!kind[i] && !isM[i] && dr.fill[i] - height[i] > 0.12 && dSea[i] >= 3 && sm[i] > 0.3) lakes.push(i);
     const cap = Math.round(land * 0.012); lakes.sort((a, b) => (dr.fill[b] - height[b]) - (dr.fill[a] - height[a]));
     for (const i of lakes.slice(0, cap)) { kind[i] = 1; cells[i] = 'L'; }
     for (let i = 0; i < N; i++) if (kind[i] === 1) { let m = 0; for (let k = 0; k < 6; k++) { const v = L.NB[i * 6 + k]; if (v >= 0 && kind[v] === 1) m++; } if (!m && hash2(i, 17, seed) < 0.5) { kind[i] = 0; cells[i] = temp[i] > 17 ? 'w' : 'm'; } }   // a lone hollow is a marsh as often as a lake
+    // Lakes of the high ground (v0.15.2): a tarn in a cirque beside a range, where a mountain river begins. Two or more mountain
+    // hexes about it, wet enough, set back from the sea, and none closer to another than nine hexes; about one a range of 45 hexes.
+    { let nMt = 0; for (let i = 0; i < N; i++) nMt += isM[i]; const want = Math.min(16, Math.round(nMt / 45)), cand = [], tarns = [], far = (9 * DX) * (9 * DX);
+      for (let i = 0; i < N; i++) { if (kind[i] || isM[i] || dM[i] !== 1 || dSea[i] < 4 || sm[i] < 0.25) continue; let m = 0; for (let k = 0; k < 6; k++) { const v = L.NB[i * 6 + k]; if (v >= 0 && isM[v]) m++; } if (m >= 2) cand.push([i, m + hash2(i, 31, seed)]); }
+      cand.sort((a, b) => b[1] - a[1]);
+      for (const [i] of cand) { if (tarns.length >= want) break; if (tarns.some(j => (L.CX[i] - L.CX[j]) ** 2 + (L.CY[i] - L.CY[j]) ** 2 < far)) continue; tarns.push(i); }
+      for (const i of tarns) { kind[i] = 1; cells[i] = 'L'; } }
     if (o.rivers !== -1) {
       for (let i = 0; i < N; i++) if (kind[i] === 1) height[i] = dr.fill[i];
       const dr2 = drainage(L, kind, height, rain), T = [44, 26, 14][o.rivers == null ? 1 : o.rivers];
-      const all = traceRivers(L, kind, dr2, { T, seed, isMt: i => isM[i] === 1, arid: i => ARIDB.has(cells[i]), minLen: 3 });
-      rivers = all.filter(r => { const h0 = r.hexes[0]; return h0 == null || dM[h0] <= 4 || r.kind !== 'stream' || r.hexes.length >= 6; }).map(r => ({ kind: r.kind, pts: r.pts }));
+      const all = traceRivers(L, kind, dr2, { T, seed, isMt: i => isM[i] === 1 || cells[i] === 'n', arid: i => ARIDB.has(cells[i]), minLen: 3 });
+      const kept = all.filter(r => { if (r.src) return true; const h0 = r.hexes[0]; return h0 == null || dM[h0] <= 4 || r.kind !== 'stream' || r.hexes.length >= 6; });
+      // a river of the plain that comes from no mountain and no lake rises from a spring in wet ground, a tundra river from a bog (v0.15.2)
+      for (const r of kept) { if (!r.head || r.src) continue; const h = r.hexes[0]; if (h == null || dM[h] <= 1 || !(cells[h] === 't' || ('gofsh'.includes(cells[h]) && temp[h] >= 0)) || hash2(h, 29, seed) > 0.7) continue; cells[h] = temp[h] > 17 ? 'w' : 'm'; }
+      rivers = kept.map(r => ({ kind: r.kind, pts: r.pts }));
       // wet ground where a river meets the sea
       for (const r of all) { if (r.kind === 'stream' || r.kind === 'seasonal') continue; const h = r.hexes[r.hexes.length - 1]; if (h != null && dSea[h] === 1 && 'gov'.includes(cells[h]) && hash2(h, 21, seed) < 0.6) cells[h] = temp[h] > 17 ? 'w' : 'm'; }
     }
