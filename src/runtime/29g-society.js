@@ -277,9 +277,10 @@ function fxPlan(E) {
 }
 const __ecSoc = econCompute;
 econCompute = function () {
-  POL = null; FXS = null; let E = __ecSoc();
-  const plan = polPlan(E), fx = fxPlan(E);
-  if (plan || fx) { POL = plan; FXS = fx; try { E = __ecSoc(); E.pol = plan; E.fx = fx; } finally { POL = null; FXS = null; } }
+  POL = null; FXS = null; HARVL = null; let E = __ecSoc();
+  const plan = polPlan(E), fx = fxPlan(E), lab = E.harvN && (plan || fx || harvMoved(E)) ? E.harvN : null;   // the hands on the land counted by class (v0.15.0) go into the second working
+  if (plan || fx || lab) { POL = plan; FXS = fx; HARVL = lab; try { E = __ecSoc(); E.pol = plan; E.fx = fx; E.harvL = lab; } finally { POL = null; FXS = null; HARVL = null; } }
+  else harvSettle(E);
   return E;
 };
 { const ap = ecoApply; ecoApply = function () { ap(); GBY.set('slaves', { id: 'slaves', name: 'ทาส', cat: 'labor' }); }; GBY.set('slaves', { id: 'slaves', name: 'ทาส', cat: 'labor' }); }
@@ -428,9 +429,13 @@ function classSplit(c, P) {                          // the city's money by clas
   const sur = P.surplus || 0; hi += sur * 0.5; mid += sur * 0.5; low -= sur;
   const adm = ADMIN[c.ki] * (P.rent + P.made) * (sys === 'soc' ? 1.5 : 1); mid += adm; hi -= adm * 0.5; low -= adm * 0.5;
   hi = Math.max(0, hi); mid = Math.max(0, mid); low = Math.max(0, low);
+  // Of each class, the share of its people who work the land (v0.15.0): read off what the land and the workshops make, before
+  // anyone takes a cut, since a landlord's or a state's share leaves the hands in the field as many as they were. The small
+  // holders against the officials, merchants and foremen of the middle; the hands in the fields against the hands at the benches.
+  const lr = Math.max(0, P.rent), mr = Math.max(0, P.made), land = { mid: lr > 0 ? clamp(0.3 * lr / (0.3 * lr + 0.15 * mr + 0.75 * Math.max(0, P.comm) + adm), 0, 1) : 0, low: lr > 0 ? clamp(0.7 * lr / (0.7 * lr + 0.85 * mr), 0, 1) : 0 };
   const tot = hi + mid + low || 1, a = clamp((TU('alms') + 0.3 * orgWell(c)) * clamp((P.poorFrac == null ? 0.08 : P.poorFrac) / 0.08, 0, 3), 0, 0.25), top = hi + mid;
   const w = top > 0 ? { hi: hi / tot - a * hi / top, mid: mid / tot - a * mid / top, low: low / tot, poor: a } : { hi: 0, mid: 0, low: low / tot - a, poor: a };
-  return { w };
+  return { w, land };
 }
 function classHeads(c, free, held, metB) {           // the free people by class, as shares of them
   const sys = c.sto ? c.sto.sys : '', reg = c.reg || 'shift', hi = HI_N[c.ki] * (HI_SYS[sys] || 1), mid = MID_N[c.ki] * (MID_SYS[sys] || 1), rest = Math.max(0, 1 - hi - mid);
@@ -460,7 +465,7 @@ function classApply(rows) {
     for (const q of ['hi', 'mid', 'low', 'poor']) { const n = free * H[q], x = inc * sp.w[q]; cls[q] = { n, inc: x, well: wellOf(x, n) }; }
     cls.poor.well = Math.min(cls.poor.well, 30);
     cls.slave = { n: held, inc: 0, well: held ? clamp(TU('slvBase') + TU('slvTop') * sp.w.hi, 0, 100) : 0 };
-    r.cls = cls; r.clsW = sp.w;
+    r.cls = cls; r.clsW = sp.w; r.clsLand = sp.land; r.rentSh = rent + made > 0 ? rent / (rent + made) : 1;
   });
   if (SOC) {                                         // each state's classes, and the whole map's
     const add = (G, r) => { for (const q in r.cls) { const a = G[q] || (G[q] = { n: 0, inc: 0, wn: 0 }); a.n += r.cls[q].n; a.inc += r.cls[q].inc; a.wn += r.cls[q].well * r.cls[q].n; } };

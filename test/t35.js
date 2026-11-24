@@ -8,7 +8,7 @@ const { chromium } = require('playwright');
   const ok = (name, v, extra) => { if (!v) bad++; console.log((v ? 'ok   ' : 'FAIL ') + name + (extra != null ? ' | ' + extra : '')); };
   const p = await ctx.newPage(); p.on('pageerror', e => errs.push('PAGEERR ' + e.message)); p.on('console', m => { if (m.type() === 'error' && !/fonts\.g|Failed to load resource/.test(m.text())) errs.push('CONSOLE ' + m.text().slice(0, 200)); });
   await p.goto('http://localhost:8765/index.html'); await p.waitForSelector('.mapcard[data-id="gresland"]', { timeout: 60000 });
-  ok('the version badge shows on the library', await p.evaluate(() => !document.getElementById('vtag').hidden && /v0\.14/.test(document.getElementById('vtag').textContent)));
+  ok('the version badge shows on the library', await p.evaluate(() => !document.getElementById('vtag').hidden && /v0\.1[4-9]/.test(document.getElementById('vtag').textContent)));
   await p.click('.mapcard[data-id="gresland"] [data-act="open"]');
   await p.waitForFunction(() => MME.shell.cur && MME.shell.cur.rt && MME.shell.cur.rt.state().editable && MME.shell.cur.rt.state().econ, null, { timeout: 90000 });
   const settle = async () => { for (let n = 0, last = -1; n < 40; n++) { await p.waitForTimeout(2000); const v = await p.evaluate(() => { const e = MME.shell.cur.rt.test.econ(); return e ? e.ver : -1; }); if (v === last && v >= 0) return; last = v; } };
@@ -16,7 +16,7 @@ const { chromium } = require('playwright');
   const G = () => p.evaluate(() => MME.shell.cur.rt.test.gdp());
   const SC = () => p.evaluate(() => MME.shell.cur.rt.test.soc());
   await settle();
-  ok('on the map the badge steps aside and the side panel carries the version at its foot', await p.evaluate(() => document.getElementById('vtag').hidden && /Bazaar Worldmaker v0\.14/.test(document.getElementById('vfoot').textContent)));
+  ok('on the map the badge steps aside and the side panel carries the version at its foot', await p.evaluate(() => document.getElementById('vtag').hidden && /Bazaar Worldmaker v0\.1[4-9]/.test(document.getElementById('vfoot').textContent)));
   // ---- 1 classes ----
   const g0 = await G();
   ok('every city\'s money falls into four classes that add up to it, and its people likewise with its slaves', g0.every(r => { const c = r.cls, inc = Math.max(0, r.inc), n = c.hi.n + c.mid.n + c.low.n + c.poor.n + c.slave.n, m = c.hi.inc + c.mid.inc + c.low.inc + c.poor.inc; return Math.abs(n - r.people) < 1 && Math.abs(m - inc) <= 1e-6 * inc + 1e-6 && Object.values(c).every(q => q.n >= 0 && q.inc >= 0 && q.well >= 0 && q.well <= 100); }));

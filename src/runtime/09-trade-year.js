@@ -39,6 +39,7 @@ function econCompute() {
     const H = Hs[k], cn = ECANON[c.id] || {};
     for (const g of EGOODS) { if (g.off) continue; let v = (g.f(H) + (g.far ? g.f(Ho[k]) : 0)) * (g.pct == null ? 1 : g.pct); if (!(v > 0.004)) continue; v *= (cn[g.cat] || 1) * orgProd(c, g.cat) * socRaw(c, g.cat); if (g.id === 'silver' && c.id === 'vidsaga') v *= 1.5; prod[k].set(g.id, v); }
   });
+  harvApply(cities, prod, own, dist);                     // how many hands work each hex: the yield of a hex rises and falls with them (v0.15.0)
   socRich(cities, prod);                            // how the city's money falls between its classes, and what its country brings up: what its people will want
   // what each city needs, before its workshops
   const need = cities.map(c => {
