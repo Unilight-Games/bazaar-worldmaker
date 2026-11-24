@@ -11,7 +11,7 @@ let fails = 0; const ok = (c, m) => { console.log((c ? 'ok   ' : 'FAIL ') + m); 
   ok(await N.evaluate(() => !MME_FIRE_FAKE._get('bw/admin')), 'nothing is written under admin/ in the database');
   ok(await N.evaluate(() => MME.hub.admin && !document.getElementById('hubAdminBtn').hidden), 'the account whose email the rules name sees the back office');
   ok(await F.evaluate(() => !MME.hub.admin && document.getElementById('hubAdminBtn').hidden), 'another Google account does not');
-  await N.click('#hubAdminBtn'); await N.waitForTimeout(600);
+  await N.click('#hubAdminBtn'); await N.waitForTimeout(600); await N.click('#hubBoTabs [data-v="on"]'); await N.waitForTimeout(600);
   ok(/ออนไลน์ตอนนี้ 2/.test(await N.textContent('#hubBo')), 'and the back office reads the people online');
   await N.click('#hubVeil [data-hub="close"]'); await N.click('#acctBtn'); await N.waitForTimeout(1500);
   ok(await N.evaluate(() => !MME.hub.admin && document.getElementById('hubAdminBtn').hidden), 'signed out, the back office goes away');

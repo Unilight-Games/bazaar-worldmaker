@@ -531,3 +531,33 @@ body:has(#mapscreen:not([hidden])) .uisize.fixed { display: none; }
 .sharerow { display: flex; gap: 6px; margin: 10px 0; }
 .sharerow input { flex: 1; min-width: 0; font-size: .92em; }
 .sharevia { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* v0.18.3: the statistics page, and what each account left with the owner */
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; margin-bottom: 6px; }
+.tile { background: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+.tile span { color: var(--muted); font-size: .8rem; }
+.tile b { font-size: 1.35rem; color: var(--text); font-variant-numeric: tabular-nums; }
+.tile small { color: var(--muted); font-size: .76rem; }
+h3.ch { font-size: .92rem; font-weight: 600; margin: 14px 0 4px; color: var(--text); }
+svg.chart { width: 100%; height: auto; display: block; }
+svg.chart .bar { fill: var(--brass); }
+svg.chart .hit { fill: transparent; }
+svg.chart .hit:hover { fill: rgba(255, 255, 255, .05); }
+svg.chart .grid { stroke: rgba(255, 255, 255, .07); stroke-width: 1; }
+svg.chart .base { stroke: var(--line); stroke-width: 1; }
+svg.chart .ax { fill: var(--muted); font-size: 10px; font-family: var(--body); }
+.hbars > div { display: grid; grid-template-columns: minmax(90px, 1.3fr) 3fr 70px; gap: 8px; align-items: center; padding: 3px 0; font-size: .86rem; }
+.hbars > div > span:last-child { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.hb, .quotabar, .minibar { display: block; background: rgba(255, 255, 255, .06); border-radius: 4px; height: 10px; overflow: hidden; }
+.hb i, .quotabar i, .minibar i { display: block; height: 100%; background: var(--brass); border-radius: 4px; }
+.minibar { display: inline-block; width: 60px; height: 7px; vertical-align: middle; }
+.quota { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 10px; font-size: .88rem; color: var(--muted); }
+.quotabar { height: 12px; }
+.quotabar.hot i { background: var(--warn); }
+.cloudfull { border: 1px solid var(--warn); background: rgba(226, 116, 138, .08); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+.cloudfull b { color: var(--warn); }
+.cloudfull p { margin: 4px 0 8px; font-size: .9rem; }
+.cloudt > div { grid-template-columns: 1.7fr 1.2fr .6fr 2.1fr; }
+.cloudt .lnk { white-space: nowrap; }
+b.warn { color: var(--warn); font-weight: 600; }
+.hubtip { position: fixed; z-index: 80; pointer-events: none; background: #0e1014; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font-size: .8rem; max-width: 280px; }

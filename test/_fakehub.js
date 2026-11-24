@@ -19,8 +19,8 @@ module.exports = function makeHubFake(opts) {
   addEventListener('pagehide', () => { for (const [p, v] of gone) bc.postMessage({ op: 'set', path: p, val: v }); });
   const isAdmin = () => get('bw/admin/' + uidNow()) === true || (!!user && !!opts.email && opts.email === opts.adminEmail);   // the rules name an admin by a verified email too
   const deny = what => { window.__hubDenied = (window.__hubDenied || []).concat([what]); const e = new Error('PERMISSION_DENIED ' + what); e.code = 'PERMISSION_DENIED'; return e; };
-  const ADMIN_READ = /^bw\/(who|log|users|mapix|maps|chatban)$/;
-  const mayRead = path => { if (ADMIN_READ.test(path) || /^bw\/(who|log|users)\//.test(path)) return isAdmin(); const m = /^bw\/(maps|mapix|admin|chatban)\/([^/]+)/.exec(path); if (m) return m[2] === uidNow() || (m[1] !== 'admin' && isAdmin()); return true; };
+  const ADMIN_READ = /^bw\/(who|log|users|mapix|maps|chatban|cloudban)$/;
+  const mayRead = path => { if (ADMIN_READ.test(path) || /^bw\/(who|log|users)\//.test(path)) return isAdmin(); const m = /^bw\/(maps|mapix|admin|chatban|cloudban)\/([^/]+)/.exec(path); if (m) return m[2] === uidNow() || (m[1] !== 'admin' && isAdmin()); return true; };
   const midnight = t => t - ((t + 25200000) % 86400000);
   const mayWrite = (path, val, all) => {
     const u = uidNow(); let m;
@@ -31,7 +31,8 @@ module.exports = function makeHubFake(opts) {
       return !!user && !old && val.u === u && get('bw/chatban/' + u) !== true && all && all['bw/chatlast/' + u] != null;
     }
     if ((m = /^bw\/chatlast\/([^/]+)$/.exec(path))) { const last = get(path); return m[1] === u && (last == null || last < Date.now() - 3000); }
-    if (/^bw\/chatban\//.test(path)) return isAdmin();
+    if (/^bw\/(chatban|cloudban)\//.test(path)) return isAdmin();
+    if ((m = /^bw\/(maps|mapix)\/([^/]+)\/[^/]+$/.exec(path)) && m[2] === u && val != null && get('bw/cloudban/' + u) === true) return false;   // v0.18.3: an account an admin stopped
     if ((m = /^bw\/(users|maps|mapix)\/([^/]+)/.exec(path))) return m[2] === u || (m[1] !== 'users' && val == null && isAdmin());
     if (/^bw\/log\/[^/]+\/[^/]+$/.test(path)) return val == null ? isAdmin() : !get(path) && val.u === u;
     if (path === 'bw/log') return isAdmin();

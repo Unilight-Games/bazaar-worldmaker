@@ -30,7 +30,7 @@ let fails = 0; const ok = (c, m) => { console.log((c ? 'ok   ' : 'FAIL ') + m); 
   // the back office
   ok(await A.evaluate(() => !document.getElementById('hubAdminBtn').hidden) && await B.evaluate(() => document.getElementById('hubAdminBtn').hidden), 'the back office button shows on the admin\'s page alone');
   ok(/uAdminAAA/.test(await t(A, 'acctId') || ''), 'a signed-in account sees its own id, to make itself the admin');
-  await A.click('#hubAdminBtn'); await A.waitForTimeout(600);
+  await A.click('#hubAdminBtn'); await A.waitForTimeout(600); await A.click('#hubBoTabs [data-v="on"]'); await A.waitForTimeout(600);
   const on1 = await t(A, 'hubBo');
   ok(/ออนไลน์ตอนนี้ 2/.test(on1) && /ผู้เยี่ยมชมไม่ระบุชื่อ/.test(on1) && /นน/.test(on1) && /หน้าเมนู/.test(on1), 'the back office lists who is online and where on the page');
   ok(await B.evaluate(async () => { try { await MME_FIRE_FAKE.hub.get('bw/who'); return false; } catch (e) { return true; } }), 'a visitor cannot read the back office lists');
