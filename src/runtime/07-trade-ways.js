@@ -111,9 +111,11 @@ function eLanes(cities) {
     }
   }
 }
+let RAIL_STEP = 0.3;                                  // one hex by rail, against 0.6 on a royal road and about 2.4 over open grass (mine)
 const CAR = { g: 2.4, s: 2.4, v: 2.4, h: 2.4, e: 2.4, p: 2.6, r: 2.5, y: 2.6, u: 4, c: 3, d: 4.2, t: 4.5, n: 6, f: 3.6, o: 3.4, k: 5, j: 6, w: 6, m: 5.5, a: 3.6, M: 9 };
 function caravanStep(u, k, v) {
   const x = EX[u * 6 + k];
+  if (RAILE.has(u * 6 + k)) return RAIL_STEP;     // a train: cheaper than the best road (v0.17.0)
   if (RDE.has(u * 6 + k)) { const lv = Math.min(RDH[u], RDH[v]); return lv >= 3 ? 0.6 : lv === 2 ? 0.75 : 0.95; }
   const b = eff(v); let c = (b === 'a' || ZO[v] === 'J') && !NEARC[v] ? 30 : CAR[b] || 3;
   return c + (x & 2 ? 3 : x & 1 ? 0.3 : 0);

@@ -8,7 +8,7 @@ let fails = 0; const ok = (c, m) => { console.log((c ? 'ok   ' : 'FAIL ') + m); 
   await p.waitForFunction(() => MME.shell.cur && MME.shell.cur.rt && MME.shell.cur.rt.state().editable && MME.shell.cur.rt.state().econ, null, { timeout: 90000 });
   const settle = async () => { for (let n = 0, last = -1; n < 40; n++) { await p.waitForTimeout(1200); const v = await p.evaluate(() => { const e = MME.shell.cur.rt.test.econ(); return e ? e.ver : -1; }); if (v === last && v >= 0) return; last = v; } };
   await settle();
-  ok(/0\.16\.[1-9]/.test(await p.evaluate(() => MME.VERSION)), 'version 0.16.1');
+  ok(/0\.1[6-9]\.\d/.test(await p.evaluate(() => MME.VERSION)), 'version 0.16.1');
   await p.click('#modes button[data-mode="terrain"]'); await p.waitForTimeout(300);
   ok(await p.evaluate(() => [...document.querySelectorAll('#featPal .sw')].some(b => /หมู่เกาะกลางทะเล/.test(b.textContent))), 'islands strewn over open sea are a kind of feature');
   // a user's own feature first: the rule leaves it alone

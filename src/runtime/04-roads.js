@@ -6,10 +6,13 @@ const RDC = {
   royal: { name: 'ถนนหลวง', w: 1.3, px: 2, line: '#efe3c4', edge: 'rgba(46,34,22,.92)' },
   laterite: { name: 'ถนนลูกรัง', w: 0.95, px: 1.5, line: '#cf7f48', edge: 'rgba(58,34,20,.72)' },
   cart: { name: 'ทางเกวียน', w: 0.65, px: 1.1, line: '#a07a50', dash: [1.6, 1.3], dpx: [3, 2.4] },
+  // v0.17.0, the owner's ask: a railway is laid by hand only. No city gets one by itself, and the button that joins the loose
+  // cities lays roads, never rails. It keeps to gentle ground, so it bridges and tunnels where a road would wind.
+  rail: { name: 'ทางรถไฟ', w: 1.1, px: 1.7, line: '#f2ece0', edge: 'rgba(22,18,16,.95)', rail: true },
 };
 const CIMP = { capital: 3, city: 3, fort: 2, town: 2, village: 1 };
 const autoCls = (ka, kb) => { const m = Math.min(CIMP[ka] || 2, CIMP[kb] || 2); return m >= 3 ? 'royal' : m >= 2 ? 'laterite' : 'cart'; };
-const showR = { royal: true, laterite: true, cart: true, water: true, caravan: true };
+const showR = { royal: true, laterite: true, cart: true, rail: true, water: true, caravan: true, pax: true };
 const shown = r => !!showR[r.cls];
 
 // rivers crossed on the way from a hex to a neighbour: 1 any river, 2 a big one (a bridge, or a long way round)
@@ -53,13 +56,17 @@ function buildNearC() {
   NEARC.fill(0);
   for (const c of visibleCities()) { const h = hexAt(c.x, c.y); if (h < 0) continue; let ring = [h]; NEARC[h] = 1; for (let r = 0; r < 3; r++) { const nx = []; for (const u of ring) for (let k = 0; k < 6; k++) { const v = NB[u * 6 + k]; if (v >= 0 && !NEARC[v]) { NEARC[v] = 1; nx.push(v); } } ring = nx; } }
 }
-const RDH = new Uint8Array(N), RDE = new Set();     // the best road on each hex (3 royal, 2 laterite, 1 cart) and the edges roads cross
+const RDH = new Uint8Array(N), RDE = new Set();     // the best road on each hex (4 railway, 3 royal, 2 laterite, 1 cart) and the edges roads cross
+const RAILE = new Set();                            // the edges a railway runs along
+// a railway's ground: flat land is cheap, every slope and soft ground is dear, a mountain is a tunnel and a big river a bridge
+const TCR = { g: 1, s: 1, v: 1, h: 1, e: 1.05, p: 1.1, r: 1.05, y: 1, u: 1.2, c: 1.1, d: 1.4, t: 1.7, n: 3.2, f: 1.6, o: 1.5, k: 2.2, j: 2.8, w: 3.6, m: 3.3, a: 2.4, M: 1 };
 function stepCost(mode, u, k, v) {
   const b = eff(v); if (isW(b)) return Infinity;
   const x = EX[u * 6 + k], wild = (b === 'a' || ZO[v] === 'J') && !NEARC[v];   // the Florans guard their jungle (the user's ruling of 19 Nov 2026)
+  if (mode === 'rail') return (b === 'M' ? 30 : wild ? 14 : TCR[b] || 1.5) + (x & 2 ? 9 : x & 1 ? 0.6 : 0);
   return (b === 'M' ? 22 : wild ? 14 : TC[b]) + (x & 2 ? 16 : x & 1 ? 0.8 : 0);
 }
-const HMIN = { road: 1 };
+const HMIN = { road: 1, rail: 1 };
 // A*, with a binary heap that may hold a hex more than once (the stale entries are skipped)
 const HP = new Int32Array(N * 7), HF = new Float64Array(N * 7);
 let HN = 0;
@@ -121,7 +128,7 @@ function endPoint(e) {
   if (Array.isArray(e) && Number.isFinite(e[0]) && Number.isFinite(e[1])) return { x: e[0], y: e[1], h: landHex(hexAt(e[0], e[1])) };
   return null;
 }
-const routeMode = () => 'road';
+const routeMode = r => r && r.cls === 'rail' ? 'rail' : 'road';
 function routeGeom(r) {
   const A = endPoint(r.a), B = endPoint(r.b);
   if (!A || !B) return null;                        // a city at an end is gone: the route is not shown
@@ -145,7 +152,7 @@ function routeGeom(r) {
     const u = hexes[i], v = hexes[i + 1], k = nbIndex(u, v);
     if (k >= 0 && EX[u * 6 + k] & 2) bridges.push(bridgeAt(q, u, v, k));
   }
-  if (mode === 'road') {                            // a tunnel: a run of mountain hexes the road passes through, not the one it starts or ends on
+  if (mode === 'road' || mode === 'rail') {         // a tunnel: a run of mountain hexes the road passes through, not the one it starts or ends on
     let i = 0;
     while (i < hexes.length) {
       if (eff(hexes[i]) !== 'M') { i++; continue; }
@@ -185,14 +192,14 @@ function ensureRoutes() {
   for (const r of vis) if (r.t === 'road') { const g = geoOf(r); keys.push(r.id + ':' + r.cls + ':' + (g && !g.fail ? g.hexes.length + ':' + g.hexes[0] + ':' + g.hexes[g.hexes.length - 1] + ':' + g.q.length : 'x')); }
   const key = keys.join('|');
   if (key !== ROAD_KEY) {                           // the roads changed: which hexes and edges they cover, for the caravans
-    ROAD_KEY = key; ROAD_VER++; RDH.fill(0); RDE.clear();
+    ROAD_KEY = key; ROAD_VER++; RDH.fill(0); RDE.clear(); RAILE.clear();
     for (const r of vis) {
       if (r.t !== 'road') continue;
       const g = RGEO.get(r.id) && RGEO.get(r.id).geo; if (!g || g.fail) continue;
-      const lv = r.cls === 'royal' ? 3 : r.cls === 'laterite' ? 2 : 1;
+      const lv = r.cls === 'rail' ? 4 : r.cls === 'royal' ? 3 : r.cls === 'laterite' ? 2 : 1;
       for (let i = 0; i < g.hexes.length; i++) {
         const h = g.hexes[i]; if (RDH[h] < lv) RDH[h] = lv;
-        if (i) { const u = g.hexes[i - 1], k = nbIndex(u, h); if (k >= 0) { RDE.add(u * 6 + k); RDE.add(h * 6 + REVK[k]); } }
+        if (i) { const u = g.hexes[i - 1], k = nbIndex(u, h); if (k >= 0) { RDE.add(u * 6 + k); RDE.add(h * 6 + REVK[k]); if (lv === 4) { RAILE.add(u * 6 + k); RAILE.add(h * 6 + REVK[k]); } } }
       }
     }
   }
@@ -230,6 +237,12 @@ function strokeRoad(c, px, cls, g, glow) {
   for (const u of runs) {
     linePath(c, u.q);
     if (u.t) { c.setLineDash([1.6 * w, 1.4 * w]); c.strokeStyle = 'rgba(36,30,26,.9)'; c.lineWidth = w * 0.95; c.stroke(); c.setLineDash([]); continue; }
+    if (st.rail) {                                   // a railway as old maps draw it: sleepers across a dark bed, a light line broken along it
+      c.lineCap = 'butt'; c.setLineDash([Math.max(0.35, 0.45 * w), Math.max(0.9, 1.1 * w)]); c.strokeStyle = st.edge; c.lineWidth = w * 2.3; c.stroke();
+      c.setLineDash([]); linePath(c, u.q); c.lineWidth = w * 1.05; c.stroke();
+      linePath(c, u.q); c.setLineDash([Math.max(1.2, 1.8 * w), Math.max(1.2, 1.8 * w)]); c.strokeStyle = st.line; c.lineWidth = w * 0.5; c.stroke(); c.setLineDash([]); c.lineCap = 'round';
+      continue;
+    }
     if (st.edge) { c.strokeStyle = st.edge; c.lineWidth = w + Math.max(0.6, 1.1 * px); c.stroke(); }
     c.strokeStyle = st.line; c.lineWidth = w; c.setLineDash(dashOf(st, px)); c.stroke(); c.setLineDash([]);
   }
@@ -266,7 +279,7 @@ function drawBridge(c, px, b, cls) {
 function drawRoutes(c, px, live) {
   const vis = ensureRoutes();
   const geo = r => live && live.id === r.id ? live.geo : RGEO.get(r.id) && RGEO.get(r.id).geo;
-  for (const cls of ['cart', 'laterite', 'royal']) for (const r of vis) if (r.t === 'road' && r.cls === cls && shown(r)) strokeRoad(c, px, cls, geo(r), c === ctx && r.id === rsel);
+  for (const cls of ['cart', 'laterite', 'royal', 'rail']) for (const r of vis) if (r.t === 'road' && r.cls === cls && shown(r)) strokeRoad(c, px, cls, geo(r), c === ctx && r.id === rsel);
   for (const r of vis) if (r.t === 'road' && shown(r)) { const g = geo(r); if (g && !g.fail) for (const b of g.bridges) drawBridge(c, px, b, r.cls); }
   if (live && live.id == null && live.geo) strokeRoad(c, px, live.cls, live.geo, true);   // a road being laid
 }

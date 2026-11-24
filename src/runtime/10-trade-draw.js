@@ -129,7 +129,7 @@ const fmtL = v => v >= 9.95 ? Math.round(v).toString() : v >= 0.095 ? v.toFixed(
 const topGoods = (m, n) => [...m].sort((a, b) => b[1] - a[1]).filter(([, v]) => v >= 0.05).slice(0, n).map(([id, v]) => `${esc(goodName(id))} ${fmtL(v)}`).join(' · ');
 const linkGoods = L => tcat ? new Map([...L.goods].filter(([g]) => catOf(g) === tcat)) : L.goods;
 const linkName = L => L.tier === 'main' ? 'เส้นหลัก' : L.tier === 'trunk' ? 'เส้นสายใหญ่' : L.tier === 'branch' ? 'เส้นสาขา' : L.tier === 'lore' || !editable ? 'เส้นประจำ' : 'เส้นที่วางเพิ่ม';
-const howText = L => (L.wet && L.dry ? `ทางน้ำ ${L.wet} ช่อง คาราวาน ${L.dry} ช่อง` : L.wet ? `ทางน้ำ ${L.wet} ช่อง` : `คาราวาน ${L.dry} ช่อง`) + (L.dry && L.road ? ` บนถนน ${L.road} ช่อง` : '');
+const howText = L => (L.wet && L.dry ? `ทางน้ำ ${L.wet} ช่อง คาราวาน ${L.dry} ช่อง` : L.wet ? `ทางน้ำ ${L.wet} ช่อง` : `คาราวาน ${L.dry} ช่อง`) + (L.dry && L.road ? ` บนถนน ${L.road} ช่อง` : '') + (L.dry && L.rail ? ` บนทางรถไฟ ${L.rail} ช่อง` : '');
 function linkTipHTML(L) {
   const v = linkVol(L);
   return `<b>${linkName(L)} ${esc(ECON.cities[L.ia].name)} กับ${esc(ECON.cities[L.ib].name)}</b><div class="m">${howText(L)}${v >= 0.03 ? ' · ขนส่ง ' + fmtL(v) + ' หน่วย' : ' · ยังไม่มีของวิ่ง'}</div>`

@@ -106,10 +106,10 @@ function eGeo(states, A, B) {                      // the drawn line: runs afloa
 function eLinkOf(L, cities, ia, ib, r) {
   const A = cities[ia], B = cities[ib];
   Object.assign(L, { ia, ib, states: r ? r.states : null, legs: r ? r.legs || [0] : [0], cost: r ? Math.max(0.05, r.cost) : Infinity, fail: !r,
-    vol: 0, fwd: 0, back: 0, goods: new Map(), cats: new Map(), cdir: new Map(), wet: 0, dry: 0, road: 0 });
+    vol: 0, fwd: 0, back: 0, goods: new Map(), cats: new Map(), cdir: new Map(), wet: 0, dry: 0, road: 0, rail: 0 });
   if (r) for (let i = 0; i < r.states.length - 1; i++) {
     const a = r.states[i], b = r.states[i + 1]; if ((a & 1) !== (b & 1)) continue;
-    if (a & 1) L.wet++; else { L.dry++; const k = nbIndex(a >> 1, b >> 1); if (k >= 0 && RDE.has((a >> 1) * 6 + k)) L.road++; }
+    if (a & 1) L.wet++; else { L.dry++; const k = nbIndex(a >> 1, b >> 1); if (k >= 0 && RAILE.has((a >> 1) * 6 + k)) L.rail++; else if (k >= 0 && RDE.has((a >> 1) * 6 + k)) L.road++; }
   }
   L.geo = r ? eGeo(r.states, A, B) : null;
   return L;

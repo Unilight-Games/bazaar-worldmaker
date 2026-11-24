@@ -74,7 +74,7 @@ $('rfDel').onclick = () => { if (rsel) deleteRoute(rsel); };
 $('rfDone').onclick = () => selectRoute(null);
 // which roads and which trade the map shows (and the saved picture), kept for this viewer in this browser, and how the trade moves
 const FXMODES = { off: 'ปิด', dots: 'ลูกไฟ', ships: 'เรือและเกวียน' };
-const LAYERS = [['royal', RDC.royal], ['laterite', RDC.laterite], ['cart', RDC.cart], ['water', TRD.water], ['caravan', TRD.caravan]];
+const LAYERS = [['royal', RDC.royal], ['laterite', RDC.laterite], ['cart', RDC.cart], ['rail', { name: RDC.rail.name, px: 2, line: '#2a2420' }], ['water', TRD.water], ['caravan', TRD.caravan], ['pax', { name: 'ผู้เดินทาง', px: 2, line: '#c9a2f0', dash: true }]];
 try { const sv = JSON.parse(localStorage.getItem('gresland-route-layers') || 'null'); if (sv) for (const k in showR) if (typeof sv[k] === 'boolean') showR[k] = sv[k]; } catch (err) { /* without storage the layers start all shown */ }
 $('layers').innerHTML = LAYERS.map(([k, st]) => `<label><input type="checkbox" data-k="${k}"${showR[k] ? ' checked' : ''}><i style="border-top:${Math.max(2, Math.round(st.px))}px ${st.dash ? 'dashed' : 'solid'} ${st.line}"></i>${esc(st.name)}</label>`).join('')
   + `<div class="fxrow"><span>การค้าเคลื่อนไหว</span><div class="seg" id="fxSeg">${Object.entries(FXMODES).map(([k, n]) => `<button type="button" data-m="${k}">${esc(n)}</button>`).join('')}</div></div>`;

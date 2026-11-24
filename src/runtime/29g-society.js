@@ -194,19 +194,22 @@ function socApply(rows) {
     return d.charm * (0.35 * r.tourWhy.att + 0.25 * r.tourWhy.hub + 0.2 * r.tourWhy.rich + 0.2 * r.tourWhy.org + 0.01) * (1 + polOn(c, 'tour') * TU('polTour')) * Math.sqrt(r.people);
   });
   const tin = new Float64Array(n), tout = new Float64Array(n), W = new Float64Array(n);
+  const tpairs = [];                                   // each journey of the visitors, for the travel below (v0.17.0)
   if (rate > 0 && n > 1) for (let i = 0; i < n; i++) {
     const r = rows[i], G = r.people * rate * clamp(r.rich, 0.2, 3) * r.well0 / 100; if (!(G >= 0.5)) continue;
     let sum = 0; for (let j = 0; j < n; j++) { W[j] = 0; if (j === i) continue; const t = E.NT[i][j]; if (!isFinite(t) || ecoRival(r.s, rows[j].s)) continue; sum += W[j] = score[j] * Math.exp(-t / far); }
     if (!(sum > 0)) continue; tout[i] = G;
-    for (let j = 0; j < n; j++) if (W[j] > 0) { const x = G * W[j] / sum; tin[j] += x; const A = r.s, B = rows[j].s; if (A !== B) { if (A) book(A).tourOut += x * spend; if (B) book(B).tourIn += x * spend; } }
+    for (let j = 0; j < n; j++) if (W[j] > 0) { const x = G * W[j] / sum; tin[j] += x; tpairs.push([i, j, x]); const A = r.s, B = rows[j].s; if (A !== B) { if (A) book(A).tourOut += x * spend; if (B) book(B).tourIn += x * spend; } }
   }
   rows.forEach((r, k) => { r.inc += (tin[k] - tout[k]) * spend; });
+  trvApply(E, rows, book, mean, tpairs);              // the other journeys: kin, pilgrims and business (29j)
   // a state deep in deficit lives worse
-  for (const b of books.values()) { const net = b.out + b.tourIn - b.inn - b.tourOut; b.net = net; b.def = b.gdp > 0 ? Math.max(0, -net) / b.gdp : 0; b.pen = clamp((b.def - TU('defFree')) * TU('defWell'), 0, TU('defMax')); b.stable = b.s.sys !== 'anar' && b.gdp > 0 && Math.abs(net) / b.gdp <= TU('balBand'); b.fx = ECON && ECON.fx ? ECON.fx.get(b.s.id) || 0 : 0; }
+  for (const b of books.values()) { const net = b.out + b.tourIn + (b.trvIn || 0) - b.inn - b.tourOut - (b.trvOut || 0); b.net = net; b.def = b.gdp > 0 ? Math.max(0, -net) / b.gdp : 0; b.pen = clamp((b.def - TU('defFree')) * TU('defWell'), 0, TU('defMax')); b.stable = b.s.sys !== 'anar' && b.gdp > 0 && Math.abs(net) / b.gdp <= TU('balBand'); b.fx = ECON && ECON.fx ? ECON.fx.get(b.s.id) || 0 : 0; }
   rows.forEach(r => {
     const b = r.s ? books.get(r.s.id) : null, pen = b ? b.pen : 0, bon = b && b.stable ? TU('balWell') : 0; r.wellPen = pen; r.stable = !!(b && b.stable);
     if (pen >= 0.5) r.wellWhy.push(['รัฐขาดดุลการค้าหนัก', -pen]); if (bon >= 0.5) r.wellWhy.push(['รัฐค้าสมดุล', bon]);
-    r.well = clamp(r.well0 - pen + bon, 0, 100);
+    const tw = r.trvWell || 0; if (tw >= 0.5) r.wellWhy.push(['เดินทางแสวงบุญได้สะดวก', tw]);
+    r.well = clamp(r.well0 - pen + bon + tw, 0, 100);
     r.sur = b && b.net > 0 && b.out > 0 ? b.net * r.exX / b.out : 0;                                 // the city's part of its state's surplus
   });
   // people on the move

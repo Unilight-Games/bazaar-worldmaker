@@ -371,10 +371,13 @@ const RDC = {
   royal: { name: 'ถนนหลวง', w: 1.3, px: 2, line: '#efe3c4', edge: 'rgba(46,34,22,.92)' },
   laterite: { name: 'ถนนลูกรัง', w: 0.95, px: 1.5, line: '#cf7f48', edge: 'rgba(58,34,20,.72)' },
   cart: { name: 'ทางเกวียน', w: 0.65, px: 1.1, line: '#a07a50', dash: [1.6, 1.3], dpx: [3, 2.4] },
+  // v0.17.0, the owner's ask: a railway is laid by hand only. No city gets one by itself, and the button that joins the loose
+  // cities lays roads, never rails. It keeps to gentle ground, so it bridges and tunnels where a road would wind.
+  rail: { name: 'ทางรถไฟ', w: 1.1, px: 1.7, line: '#f2ece0', edge: 'rgba(22,18,16,.95)', rail: true },
 };
 const CIMP = { capital: 3, city: 3, fort: 2, town: 2, village: 1 };
 const autoCls = (ka, kb) => { const m = Math.min(CIMP[ka] || 2, CIMP[kb] || 2); return m >= 3 ? 'royal' : m >= 2 ? 'laterite' : 'cart'; };
-const showR = { royal: true, laterite: true, cart: true, water: true, caravan: true };
+const showR = { royal: true, laterite: true, cart: true, rail: true, water: true, caravan: true, pax: true };
 const shown = r => !!showR[r.cls];
 
 // rivers crossed on the way from a hex to a neighbour: 1 any river, 2 a big one (a bridge, or a long way round)
@@ -418,13 +421,17 @@ function buildNearC() {
   NEARC.fill(0);
   for (const c of visibleCities()) { const h = hexAt(c.x, c.y); if (h < 0) continue; let ring = [h]; NEARC[h] = 1; for (let r = 0; r < 3; r++) { const nx = []; for (const u of ring) for (let k = 0; k < 6; k++) { const v = NB[u * 6 + k]; if (v >= 0 && !NEARC[v]) { NEARC[v] = 1; nx.push(v); } } ring = nx; } }
 }
-const RDH = new Uint8Array(N), RDE = new Set();     // the best road on each hex (3 royal, 2 laterite, 1 cart) and the edges roads cross
+const RDH = new Uint8Array(N), RDE = new Set();     // the best road on each hex (4 railway, 3 royal, 2 laterite, 1 cart) and the edges roads cross
+const RAILE = new Set();                            // the edges a railway runs along
+// a railway's ground: flat land is cheap, every slope and soft ground is dear, a mountain is a tunnel and a big river a bridge
+const TCR = { g: 1, s: 1, v: 1, h: 1, e: 1.05, p: 1.1, r: 1.05, y: 1, u: 1.2, c: 1.1, d: 1.4, t: 1.7, n: 3.2, f: 1.6, o: 1.5, k: 2.2, j: 2.8, w: 3.6, m: 3.3, a: 2.4, M: 1 };
 function stepCost(mode, u, k, v) {
   const b = eff(v); if (isW(b)) return Infinity;
   const x = EX[u * 6 + k], wild = (b === 'a' || ZO[v] === 'J') && !NEARC[v];   // the Florans guard their jungle (the user's ruling of 19 Nov 2026)
+  if (mode === 'rail') return (b === 'M' ? 30 : wild ? 14 : TCR[b] || 1.5) + (x & 2 ? 9 : x & 1 ? 0.6 : 0);
   return (b === 'M' ? 22 : wild ? 14 : TC[b]) + (x & 2 ? 16 : x & 1 ? 0.8 : 0);
 }
-const HMIN = { road: 1 };
+const HMIN = { road: 1, rail: 1 };
 // A*, with a binary heap that may hold a hex more than once (the stale entries are skipped)
 const HP = new Int32Array(N * 7), HF = new Float64Array(N * 7);
 let HN = 0;
@@ -486,7 +493,7 @@ function endPoint(e) {
   if (Array.isArray(e) && Number.isFinite(e[0]) && Number.isFinite(e[1])) return { x: e[0], y: e[1], h: landHex(hexAt(e[0], e[1])) };
   return null;
 }
-const routeMode = () => 'road';
+const routeMode = r => r && r.cls === 'rail' ? 'rail' : 'road';
 function routeGeom(r) {
   const A = endPoint(r.a), B = endPoint(r.b);
   if (!A || !B) return null;                        // a city at an end is gone: the route is not shown
@@ -510,7 +517,7 @@ function routeGeom(r) {
     const u = hexes[i], v = hexes[i + 1], k = nbIndex(u, v);
     if (k >= 0 && EX[u * 6 + k] & 2) bridges.push(bridgeAt(q, u, v, k));
   }
-  if (mode === 'road') {                            // a tunnel: a run of mountain hexes the road passes through, not the one it starts or ends on
+  if (mode === 'road' || mode === 'rail') {         // a tunnel: a run of mountain hexes the road passes through, not the one it starts or ends on
     let i = 0;
     while (i < hexes.length) {
       if (eff(hexes[i]) !== 'M') { i++; continue; }
@@ -550,14 +557,14 @@ function ensureRoutes() {
   for (const r of vis) if (r.t === 'road') { const g = geoOf(r); keys.push(r.id + ':' + r.cls + ':' + (g && !g.fail ? g.hexes.length + ':' + g.hexes[0] + ':' + g.hexes[g.hexes.length - 1] + ':' + g.q.length : 'x')); }
   const key = keys.join('|');
   if (key !== ROAD_KEY) {                           // the roads changed: which hexes and edges they cover, for the caravans
-    ROAD_KEY = key; ROAD_VER++; RDH.fill(0); RDE.clear();
+    ROAD_KEY = key; ROAD_VER++; RDH.fill(0); RDE.clear(); RAILE.clear();
     for (const r of vis) {
       if (r.t !== 'road') continue;
       const g = RGEO.get(r.id) && RGEO.get(r.id).geo; if (!g || g.fail) continue;
-      const lv = r.cls === 'royal' ? 3 : r.cls === 'laterite' ? 2 : 1;
+      const lv = r.cls === 'rail' ? 4 : r.cls === 'royal' ? 3 : r.cls === 'laterite' ? 2 : 1;
       for (let i = 0; i < g.hexes.length; i++) {
         const h = g.hexes[i]; if (RDH[h] < lv) RDH[h] = lv;
-        if (i) { const u = g.hexes[i - 1], k = nbIndex(u, h); if (k >= 0) { RDE.add(u * 6 + k); RDE.add(h * 6 + REVK[k]); } }
+        if (i) { const u = g.hexes[i - 1], k = nbIndex(u, h); if (k >= 0) { RDE.add(u * 6 + k); RDE.add(h * 6 + REVK[k]); if (lv === 4) { RAILE.add(u * 6 + k); RAILE.add(h * 6 + REVK[k]); } } }
       }
     }
   }
@@ -595,6 +602,12 @@ function strokeRoad(c, px, cls, g, glow) {
   for (const u of runs) {
     linePath(c, u.q);
     if (u.t) { c.setLineDash([1.6 * w, 1.4 * w]); c.strokeStyle = 'rgba(36,30,26,.9)'; c.lineWidth = w * 0.95; c.stroke(); c.setLineDash([]); continue; }
+    if (st.rail) {                                   // a railway as old maps draw it: sleepers across a dark bed, a light line broken along it
+      c.lineCap = 'butt'; c.setLineDash([Math.max(0.35, 0.45 * w), Math.max(0.9, 1.1 * w)]); c.strokeStyle = st.edge; c.lineWidth = w * 2.3; c.stroke();
+      c.setLineDash([]); linePath(c, u.q); c.lineWidth = w * 1.05; c.stroke();
+      linePath(c, u.q); c.setLineDash([Math.max(1.2, 1.8 * w), Math.max(1.2, 1.8 * w)]); c.strokeStyle = st.line; c.lineWidth = w * 0.5; c.stroke(); c.setLineDash([]); c.lineCap = 'round';
+      continue;
+    }
     if (st.edge) { c.strokeStyle = st.edge; c.lineWidth = w + Math.max(0.6, 1.1 * px); c.stroke(); }
     c.strokeStyle = st.line; c.lineWidth = w; c.setLineDash(dashOf(st, px)); c.stroke(); c.setLineDash([]);
   }
@@ -631,7 +644,7 @@ function drawBridge(c, px, b, cls) {
 function drawRoutes(c, px, live) {
   const vis = ensureRoutes();
   const geo = r => live && live.id === r.id ? live.geo : RGEO.get(r.id) && RGEO.get(r.id).geo;
-  for (const cls of ['cart', 'laterite', 'royal']) for (const r of vis) if (r.t === 'road' && r.cls === cls && shown(r)) strokeRoad(c, px, cls, geo(r), c === ctx && r.id === rsel);
+  for (const cls of ['cart', 'laterite', 'royal', 'rail']) for (const r of vis) if (r.t === 'road' && r.cls === cls && shown(r)) strokeRoad(c, px, cls, geo(r), c === ctx && r.id === rsel);
   for (const r of vis) if (r.t === 'road' && shown(r)) { const g = geo(r); if (g && !g.fail) for (const b of g.bridges) drawBridge(c, px, b, r.cls); }
   if (live && live.id == null && live.geo) strokeRoad(c, px, live.cls, live.geo, true);   // a road being laid
 }
@@ -1212,9 +1225,11 @@ function eLanes(cities) {
     }
   }
 }
+let RAIL_STEP = 0.3;                                  // one hex by rail, against 0.6 on a royal road and about 2.4 over open grass (mine)
 const CAR = { g: 2.4, s: 2.4, v: 2.4, h: 2.4, e: 2.4, p: 2.6, r: 2.5, y: 2.6, u: 4, c: 3, d: 4.2, t: 4.5, n: 6, f: 3.6, o: 3.4, k: 5, j: 6, w: 6, m: 5.5, a: 3.6, M: 9 };
 function caravanStep(u, k, v) {
   const x = EX[u * 6 + k];
+  if (RAILE.has(u * 6 + k)) return RAIL_STEP;     // a train: cheaper than the best road (v0.17.0)
   if (RDE.has(u * 6 + k)) { const lv = Math.min(RDH[u], RDH[v]); return lv >= 3 ? 0.6 : lv === 2 ? 0.75 : 0.95; }
   const b = eff(v); let c = (b === 'a' || ZO[v] === 'J') && !NEARC[v] ? 30 : CAR[b] || 3;
   return c + (x & 2 ? 3 : x & 1 ? 0.3 : 0);
@@ -1388,10 +1403,10 @@ function eGeo(states, A, B) {                      // the drawn line: runs afloa
 function eLinkOf(L, cities, ia, ib, r) {
   const A = cities[ia], B = cities[ib];
   Object.assign(L, { ia, ib, states: r ? r.states : null, legs: r ? r.legs || [0] : [0], cost: r ? Math.max(0.05, r.cost) : Infinity, fail: !r,
-    vol: 0, fwd: 0, back: 0, goods: new Map(), cats: new Map(), cdir: new Map(), wet: 0, dry: 0, road: 0 });
+    vol: 0, fwd: 0, back: 0, goods: new Map(), cats: new Map(), cdir: new Map(), wet: 0, dry: 0, road: 0, rail: 0 });
   if (r) for (let i = 0; i < r.states.length - 1; i++) {
     const a = r.states[i], b = r.states[i + 1]; if ((a & 1) !== (b & 1)) continue;
-    if (a & 1) L.wet++; else { L.dry++; const k = nbIndex(a >> 1, b >> 1); if (k >= 0 && RDE.has((a >> 1) * 6 + k)) L.road++; }
+    if (a & 1) L.wet++; else { L.dry++; const k = nbIndex(a >> 1, b >> 1); if (k >= 0 && RAILE.has((a >> 1) * 6 + k)) L.rail++; else if (k >= 0 && RDE.has((a >> 1) * 6 + k)) L.road++; }
   }
   L.geo = r ? eGeo(r.states, A, B) : null;
   return L;
@@ -1888,7 +1903,7 @@ const fmtL = v => v >= 9.95 ? Math.round(v).toString() : v >= 0.095 ? v.toFixed(
 const topGoods = (m, n) => [...m].sort((a, b) => b[1] - a[1]).filter(([, v]) => v >= 0.05).slice(0, n).map(([id, v]) => `${esc(goodName(id))} ${fmtL(v)}`).join(' · ');
 const linkGoods = L => tcat ? new Map([...L.goods].filter(([g]) => catOf(g) === tcat)) : L.goods;
 const linkName = L => L.tier === 'main' ? 'เส้นหลัก' : L.tier === 'trunk' ? 'เส้นสายใหญ่' : L.tier === 'branch' ? 'เส้นสาขา' : L.tier === 'lore' || !editable ? 'เส้นประจำ' : 'เส้นที่วางเพิ่ม';
-const howText = L => (L.wet && L.dry ? `ทางน้ำ ${L.wet} ช่อง คาราวาน ${L.dry} ช่อง` : L.wet ? `ทางน้ำ ${L.wet} ช่อง` : `คาราวาน ${L.dry} ช่อง`) + (L.dry && L.road ? ` บนถนน ${L.road} ช่อง` : '');
+const howText = L => (L.wet && L.dry ? `ทางน้ำ ${L.wet} ช่อง คาราวาน ${L.dry} ช่อง` : L.wet ? `ทางน้ำ ${L.wet} ช่อง` : `คาราวาน ${L.dry} ช่อง`) + (L.dry && L.road ? ` บนถนน ${L.road} ช่อง` : '') + (L.dry && L.rail ? ` บนทางรถไฟ ${L.rail} ช่อง` : '');
 function linkTipHTML(L) {
   const v = linkVol(L);
   return `<b>${linkName(L)} ${esc(ECON.cities[L.ia].name)} กับ${esc(ECON.cities[L.ib].name)}</b><div class="m">${howText(L)}${v >= 0.03 ? ' · ขนส่ง ' + fmtL(v) + ' หน่วย' : ' · ยังไม่มีของวิ่ง'}</div>`
@@ -2940,7 +2955,7 @@ function setRoadCls(k) {
   rcls = RDC[k] ? k : 'royal'; rpend = null; rprev = null;
   $('rtCls').innerHTML = Object.entries(RDC).map(([q, v]) => `<button type="button" data-k="${q}">${esc(v.name)}</button>`).join('');
   segPick('rtCls', 'k', rcls, setRoadCls);
-  $('rtHint').textContent = 'คลิกเมืองต้นทางแล้วคลิกเมืองปลายทาง ถนนจะหาทางที่สั้นที่สุดเอง เลี่ยงภูเขา แม่น้ำใหญ่ และป่าบรรพกาล ถ้าเลี่ยงไม่ได้จะมีอุโมงค์หรือสะพาน คลิกที่ว่างเพื่อเริ่มหรือจบที่จุดนั้น คลิกเส้นที่มีอยู่เพื่อเลือก แล้วลากเส้นเพื่อดัดทาง Esc ยกเลิก เมืองที่วางใหม่ยังไม่มีถนน กดปุ่มต่อถนนเพื่อต่อให้ คาราวานใช้ถนนที่วางไว้';
+  $('rtHint').textContent = 'คลิกเมืองต้นทางแล้วคลิกเมืองปลายทาง ถนนจะหาทางที่สั้นที่สุดเอง เลี่ยงภูเขา แม่น้ำใหญ่ และป่าบรรพกาล ถ้าเลี่ยงไม่ได้จะมีอุโมงค์หรือสะพาน คลิกที่ว่างเพื่อเริ่มหรือจบที่จุดนั้น คลิกเส้นที่มีอยู่เพื่อเลือก แล้วลากเส้นเพื่อดัดทาง Esc ยกเลิก เมืองที่วางใหม่ยังไม่มีถนน กดปุ่มต่อถนนเพื่อต่อให้ คาราวานใช้ถนนที่วางไว้' + (rcls === 'rail' ? ' ทางรถไฟวางเองเท่านั้น ไม่มีเมืองไหนได้ทางรถไฟอัตโนมัติ รถไฟขนของและผู้คนถูกกว่าถนนหลวงราวครึ่งหนึ่ง และเลี่ยงทางลาดชันจึงเจาะอุโมงค์และสร้างสะพานบ่อยกว่าถนน' : '');
   requestDraw();
 }
 function drawnLine(r, g) { return g.q; }
@@ -3544,7 +3559,7 @@ $('rfDel').onclick = () => { if (rsel) deleteRoute(rsel); };
 $('rfDone').onclick = () => selectRoute(null);
 // which roads and which trade the map shows (and the saved picture), kept for this viewer in this browser, and how the trade moves
 const FXMODES = { off: 'ปิด', dots: 'ลูกไฟ', ships: 'เรือและเกวียน' };
-const LAYERS = [['royal', RDC.royal], ['laterite', RDC.laterite], ['cart', RDC.cart], ['water', TRD.water], ['caravan', TRD.caravan]];
+const LAYERS = [['royal', RDC.royal], ['laterite', RDC.laterite], ['cart', RDC.cart], ['rail', { name: RDC.rail.name, px: 2, line: '#2a2420' }], ['water', TRD.water], ['caravan', TRD.caravan], ['pax', { name: 'ผู้เดินทาง', px: 2, line: '#c9a2f0', dash: true }]];
 try { const sv = JSON.parse(localStorage.getItem('gresland-route-layers') || 'null'); if (sv) for (const k in showR) if (typeof sv[k] === 'boolean') showR[k] = sv[k]; } catch (err) { /* without storage the layers start all shown */ }
 $('layers').innerHTML = LAYERS.map(([k, st]) => `<label><input type="checkbox" data-k="${k}"${showR[k] ? ' checked' : ''}><i style="border-top:${Math.max(2, Math.round(st.px))}px ${st.dash ? 'dashed' : 'solid'} ${st.line}"></i>${esc(st.name)}</label>`).join('')
   + `<div class="fxrow"><span>การค้าเคลื่อนไหว</span><div class="seg" id="fxSeg">${Object.entries(FXMODES).map(([k, n]) => `<button type="button" data-m="${k}">${esc(n)}</button>`).join('')}</div></div>`;
@@ -6076,19 +6091,22 @@ function socApply(rows) {
     return d.charm * (0.35 * r.tourWhy.att + 0.25 * r.tourWhy.hub + 0.2 * r.tourWhy.rich + 0.2 * r.tourWhy.org + 0.01) * (1 + polOn(c, 'tour') * TU('polTour')) * Math.sqrt(r.people);
   });
   const tin = new Float64Array(n), tout = new Float64Array(n), W = new Float64Array(n);
+  const tpairs = [];                                   // each journey of the visitors, for the travel below (v0.17.0)
   if (rate > 0 && n > 1) for (let i = 0; i < n; i++) {
     const r = rows[i], G = r.people * rate * clamp(r.rich, 0.2, 3) * r.well0 / 100; if (!(G >= 0.5)) continue;
     let sum = 0; for (let j = 0; j < n; j++) { W[j] = 0; if (j === i) continue; const t = E.NT[i][j]; if (!isFinite(t) || ecoRival(r.s, rows[j].s)) continue; sum += W[j] = score[j] * Math.exp(-t / far); }
     if (!(sum > 0)) continue; tout[i] = G;
-    for (let j = 0; j < n; j++) if (W[j] > 0) { const x = G * W[j] / sum; tin[j] += x; const A = r.s, B = rows[j].s; if (A !== B) { if (A) book(A).tourOut += x * spend; if (B) book(B).tourIn += x * spend; } }
+    for (let j = 0; j < n; j++) if (W[j] > 0) { const x = G * W[j] / sum; tin[j] += x; tpairs.push([i, j, x]); const A = r.s, B = rows[j].s; if (A !== B) { if (A) book(A).tourOut += x * spend; if (B) book(B).tourIn += x * spend; } }
   }
   rows.forEach((r, k) => { r.inc += (tin[k] - tout[k]) * spend; });
+  trvApply(E, rows, book, mean, tpairs);              // the other journeys: kin, pilgrims and business (29j)
   // a state deep in deficit lives worse
-  for (const b of books.values()) { const net = b.out + b.tourIn - b.inn - b.tourOut; b.net = net; b.def = b.gdp > 0 ? Math.max(0, -net) / b.gdp : 0; b.pen = clamp((b.def - TU('defFree')) * TU('defWell'), 0, TU('defMax')); b.stable = b.s.sys !== 'anar' && b.gdp > 0 && Math.abs(net) / b.gdp <= TU('balBand'); b.fx = ECON && ECON.fx ? ECON.fx.get(b.s.id) || 0 : 0; }
+  for (const b of books.values()) { const net = b.out + b.tourIn + (b.trvIn || 0) - b.inn - b.tourOut - (b.trvOut || 0); b.net = net; b.def = b.gdp > 0 ? Math.max(0, -net) / b.gdp : 0; b.pen = clamp((b.def - TU('defFree')) * TU('defWell'), 0, TU('defMax')); b.stable = b.s.sys !== 'anar' && b.gdp > 0 && Math.abs(net) / b.gdp <= TU('balBand'); b.fx = ECON && ECON.fx ? ECON.fx.get(b.s.id) || 0 : 0; }
   rows.forEach(r => {
     const b = r.s ? books.get(r.s.id) : null, pen = b ? b.pen : 0, bon = b && b.stable ? TU('balWell') : 0; r.wellPen = pen; r.stable = !!(b && b.stable);
     if (pen >= 0.5) r.wellWhy.push(['รัฐขาดดุลการค้าหนัก', -pen]); if (bon >= 0.5) r.wellWhy.push(['รัฐค้าสมดุล', bon]);
-    r.well = clamp(r.well0 - pen + bon, 0, 100);
+    const tw = r.trvWell || 0; if (tw >= 0.5) r.wellWhy.push(['เดินทางแสวงบุญได้สะดวก', tw]);
+    r.well = clamp(r.well0 - pen + bon + tw, 0, 100);
     r.sur = b && b.net > 0 && b.out > 0 ? b.net * r.exX / b.out : 0;                                 // the city's part of its state's surplus
   });
   // people on the move
@@ -6963,6 +6981,176 @@ function featAuto(amt, seed) {
   for (const [i, , c] of ch) ECO.feat[i] = c; pushOp({ k: 'ft', ch }); featChanged(false);
   const n = {}; for (const [, , c] of ch) n[c] = (n[c] || 0) + 1; const s = $('featAutoSay'); if (s) s.textContent = 'วางแล้ว ' + Object.entries(n).map(([c, k]) => `${FK[c].name} ${k}`).join(' · ');
 }; }
+// ---------- people on the move: kin, pilgrims and business (v0.17.0, the owner's ask) ----------
+// Goods were the only thing the lines carried. Now people ride them too, for four reasons:
+//   - sightseeing, the visitors of v0.13.0, unchanged, only now they are put on the lines they ride;
+//   - personal journeys: kin, errands, a wedding in the next town. Many short trips, mostly within the traveller's own state;
+//   - pilgrimage: to a holy city. Fewer trips, but pilgrims go far, and a city whose people can reach a holy place lives better;
+//   - business: merchants who follow the goods. The more two cities trade, the more of their people go between them.
+// Each journey goes the cheapest way the network has between the two cities, so a railway or a royal road draws travellers as it
+// draws caravans. Personal, pilgrim and business travellers spend in the city they go to, which counts as that city's income
+// and, across a border, in the two states' books. Every number here is mine, and each sits in the numbers tab.
+Object.assign(ETUNE, {
+  trvPer: [0.06, 0, 1, 0.005, 'จำนวนเที่ยวเดินทางส่วนตัว (เยี่ยมญาติ ธุระ งานบุญ) ต่อคนต่อปี ในเมืองที่รายได้และความเป็นอยู่เท่าค่าเฉลี่ย', 'การเดินทางของผู้คน'],
+  trvPerFar: [0.6, 0.1, 10, 0.1, 'ระยะที่การเดินทางส่วนตัวลดลงราวสองในสาม เป็นกี่เท่าของการเดินทางยาวปานกลางของแผนที่', 'การเดินทางของผู้คน'],
+  trvPerSpend: [0.01, 0, 1, 0.005, 'เงินที่ผู้เดินทางส่วนตัวหนึ่งคนใช้ในเมืองที่ไป เป็นส่วนของรายได้ต่อหัวเฉลี่ยของแผนที่ (ส่วนใหญ่พักกับญาติ)', 'การเดินทางของผู้คน'],
+  trvPilg: [0.015, 0, 1, 0.005, 'จำนวนเที่ยวแสวงบุญต่อคนต่อปี เมื่อมีเมืองศักดิ์สิทธิ์บนแผนที่', 'การเดินทางของผู้คน'],
+  trvPilgFar: [2, 0.1, 10, 0.1, 'ระยะที่การแสวงบุญลดลงราวสองในสาม เป็นกี่เท่าของการเดินทางยาวปานกลางของแผนที่ (ผู้แสวงบุญยอมไปไกล)', 'การเดินทางของผู้คน'],
+  trvPilgSpend: [0.02, 0, 1, 0.005, 'เงินที่ผู้แสวงบุญหนึ่งคนใช้ในเมืองศักดิ์สิทธิ์ เป็นส่วนของรายได้ต่อหัวเฉลี่ยของแผนที่', 'การเดินทางของผู้คน'],
+  trvPilgWell: [4, 0, 30, 0.5, 'ความเป็นอยู่ที่เพิ่มขึ้นเต็มที่ (แต้ม) ในเมืองที่ไปถึงที่ศักดิ์สิทธิ์ทุกแห่งได้ง่าย ลดตามระยะทาง', 'การเดินทางของผู้คน'],
+  trvBiz: [0.1, 0, 20, 0.01, 'การเดินทางติดต่อธุรกิจ: จำนวนเที่ยวต่อมูลค่าการค้าระหว่างสองเมืองเท่ารายได้ต่อหัวเฉลี่ยของแผนที่หนึ่งคน', 'การเดินทางของผู้คน'],
+  trvBizSpend: [0.04, 0, 1, 0.005, 'เงินที่นักธุรกิจหนึ่งคนใช้ในเมืองที่ไป เป็นส่วนของรายได้ต่อหัวเฉลี่ยของแผนที่ (โรงเตี๊ยม อาหาร นายหน้า)', 'การเดินทางของผู้คน'],
+  railStep: [0.3, 0.05, 2.4, 0.05, 'ค่าเดินทางหนึ่งช่องบนทางรถไฟ ทั้งของและคน (ถนนหลวง 0.6 ถนนลูกรัง 0.75 ทางเกวียน 0.95 ทุ่งหญ้าไม่มีถนน 2.4)', 'การเดินทางของผู้คน'],
+});
+const TRVK = {
+  tour: ['ท่องเที่ยว', '#f0c96a'],
+  per: ['ส่วนตัว', '#9fd0f0'],
+  pilg: ['แสวงบุญ', '#e9a0d8'],
+  biz: ['ธุรกิจ', '#a6e0a0'],
+};
+const HOLY = { 1: ['ศาลเจ้าท้องถิ่น', 1], 2: ['ศูนย์แสวงบุญของภูมิภาค', 3], 3: ['ศูนย์แสวงบุญใหญ่', 8] };
+ECO.holy = {};
+let TRV = null;
+{ const ec = econCompute; econCompute = function () { RAIL_STEP = TU('railStep'); return ec(); }; }
+
+// how holy a city is: the owner's mark, the houses of faiths in it, old stones nearby and the great peak in sight
+function trvHoly(c, pts, st) {
+  const why = []; let h = 0;
+  const own = HOLY[ECO.holy[c.id]]; if (own) { h += own[1]; why.push([own[0], own[1]]); }
+  let f = 0; for (const o of c.org || []) if (o.kind === 'faith') f++; if (f) { h += f; why.push(['บ้านขององค์กรศาสนา ' + f + ' แห่ง', f]); }
+  let near = 0; for (const p of pts) if (p.h >= 0 && (p.k === 'pillar' || p.k === 'ruin') && Math.hypot(CX[p.h] - c.x, CY[p.h] - c.y) <= 2.2 * DY) near += p.k === 'pillar' ? 0.5 : 0.25;
+  if (near) { h += near; why.push(['เสาหินหรือซากโบราณใกล้เมือง', near]); }
+  if (st >= 0 && Math.hypot(CX[st] - c.x, CY[st] - c.y) <= 3.2 * DY) { h += 2; why.push(['มองเห็นยอดเขาศักดิ์สิทธิ์', 2]); }
+  return { h, why };
+}
+function trvApply(E, rows, book, mean, tpairs) {
+  const n = rows.length; TRV = null; if (!E || !n) return;
+  const tRef = socTRef(E), per = ECO.central.per, NT = E.NT, NWAY = E.NWAY || null;
+  const pts = visiblePoints(), st = stPeak();
+  const out = {}, inn = {}, spendIn = new Float64Array(n), spendOut = new Float64Array(n), pairs = [];
+  for (const k of Object.keys(TRVK)) { out[k] = new Float64Array(n); inn[k] = new Float64Array(n); }
+  const add = (i, j, x, k) => { if (!(x > 0) || i === j) return; out[k][i] += x; inn[k][j] += x; pairs.push([i, j, x, k]); };
+  for (const [i, j, x] of tpairs) add(i, j, x, 'tour');
+  const relW = (A, B) => A === B ? 1 : A && B && (A.rel[B.id] === 'ally' || B.rel[A.id] === 'ally') ? 0.5 : 0.25;
+  // personal journeys: to the cities near and big, most within the state
+  const farP = Math.max(1e-6, TU('trvPerFar') * tRef), rateP = TU('trvPer'), W = new Float64Array(n);
+  if (rateP > 0 && n > 1) for (let i = 0; i < n; i++) {
+    const r = rows[i], G = r.people * rateP * Math.sqrt(clamp(r.rich, 0.2, 3)) * r.well0 / 100; if (!(G >= 0.5)) continue;
+    let sum = 0; for (let j = 0; j < n; j++) { W[j] = 0; if (j === i) continue; const t = NT[i][j]; if (!isFinite(t) || ecoRival(r.s, rows[j].s)) continue; sum += W[j] = rows[j].people * relW(r.s, rows[j].s) * Math.exp(-t / farP); }
+    if (sum > 0) for (let j = 0; j < n; j++) if (W[j] > 0) add(i, j, G * W[j] / sum, 'per');
+  }
+  // pilgrimage: to the holy cities, the holier and the nearer the more; a holy city's own people need not travel
+  const holy = rows.map(r => trvHoly(r.c, pts, st)), H = holy.map(x => x.h), Hsum = H.reduce((a, b) => a + b, 0);
+  const farG = Math.max(1e-6, TU('trvPilgFar') * tRef), rateG = TU('trvPilg'), wellG = TU('trvPilgWell');
+  rows.forEach((r, i) => { r.holy = holy[i]; r.trvWell = 0; r.pilgAccess = 0; });
+  if (Hsum > 0) for (let i = 0; i < n; i++) {
+    const r = rows[i]; let sum = H[i], away = 0;
+    for (let j = 0; j < n; j++) { W[j] = 0; if (j === i || !(H[j] > 0)) continue; const t = NT[i][j]; if (!isFinite(t) || ecoRival(r.s, rows[j].s)) continue; const e = Math.exp(-t / farG); W[j] = H[j] * e; sum += W[j]; away += W[j]; }
+    r.pilgAccess = sum / Hsum; r.trvWell = wellG * r.pilgAccess;
+    // the more holiness within reach, the more often people go: as often as the rate says when a regional centre (3) is at hand
+    const G = r.people * rateG * Math.pow(clamp(r.rich, 0.3, 2), 0.3) * Math.min(2, Math.sqrt(away / 3)) * (sum > 0 ? away / sum : 0); if (!(G >= 0.5) || !(away > 0)) continue;
+    sum = away;
+    for (let j = 0; j < n; j++) if (W[j] > 0) add(i, j, G * W[j] / sum, 'pilg');
+  }
+  // business: merchants follow the goods, half of them from the seller's side and half from the buyer's
+  const deal = TU('trvBiz') > 0 && mean > 0 ? mean / TU('trvBiz') : 0;
+  if (deal > 0) {
+    const val = new Map();
+    for (const f of E.flows) { if (f.cat === 'labor' || f.from === f.to) continue; const v = f.amt * ECAT[f.cat].v * (E.P1[f.to][f.cat] || 1) * per; if (!(v > 0)) continue; const a = Math.min(f.from, f.to), b = Math.max(f.from, f.to), key = a * n + b; val.set(key, (val.get(key) || 0) + v); }
+    for (const [key, v] of val) { const a = Math.floor(key / n), b = key % n, x = v / deal; add(a, b, x / 2, 'biz'); add(b, a, x / 2, 'biz'); }
+  }
+  // what they spend where they go
+  const sp = { per: TU('trvPerSpend') * mean, pilg: TU('trvPilgSpend') * mean, biz: TU('trvBizSpend') * mean };
+  for (const [i, j, x, k] of pairs) {
+    const m = sp[k]; if (!(m > 0)) continue; const v = x * m; spendIn[j] += v; spendOut[i] += v;
+    const A = rows[i].s, B = rows[j].s; if (A !== B) { if (A) { const b = book(A); b.trvOut = (b.trvOut || 0) + v; } if (B) { const b = book(B); b.trvIn = (b.trvIn || 0) + v; } }
+  }
+  rows.forEach((r, k) => { r.inc += spendIn[k] - spendOut[k]; r.trv = { out: Object.fromEntries(Object.keys(TRVK).map(q => [q, out[q][k]])), inn: Object.fromEntries(Object.keys(TRVK).map(q => [q, inn[q][k]])), spendIn: spendIn[k], spendOut: spendOut[k] }; });
+  // on the lines
+  for (const L of E.links) { L.pax = 0; L.paxBy = { tour: 0, per: 0, pilg: 0, biz: 0 }; }
+  let tot = 0, ride = 0, onRail = 0; const by = { tour: 0, per: 0, pilg: 0, biz: 0 };
+  for (const [i, j, x, k] of pairs) {
+    by[k] += x; tot += x; const way = NWAY ? NWAY[i][j] : null; if (!way || !way.length) continue;
+    let dry = 0, rl = 0; for (const [li] of way) { const L = E.links[li]; if (!L) continue; L.pax += x; L.paxBy[k] += x; dry += L.dry + L.wet; rl += L.rail || 0; }
+    ride += x; if (dry > 0) onRail += x * rl / dry;
+  }
+  let top = 0; for (const L of E.links) if (L.pax > top) top = L.pax;
+  TRV = { by, tot, ride, onRail, top, sp, pairs: pairs.length, holy: holy.map((x, k) => [k, x]).filter(x => x[1].h > 0) };
+  E.trv = TRV;
+}
+
+// ---- the document: the owner's holy cities ----
+{
+  const ld = ecoLoad, sr = ecoSerial;
+  ecoLoad = function (b) { ld(b); b = b || {}; ECO.holy = {}; for (const [id, v] of Object.entries(b.holy || {}).slice(0, 4000)) if (HOLY[v]) ECO.holy[ecoStr(id, 120)] = +v; };
+  ecoSerial = function () { const o = sr(); if (Object.keys(ECO.holy).length) o.holy = { ...ECO.holy }; return o; };
+}
+
+// ---- on the screen ----
+const trvList = o => Object.keys(TRVK).filter(k => o[k] >= 0.5).map(k => `${TRVK[k][0]} ${socN(o[k])}`).join(' · ');
+function trvCityHTML(k) {
+  const rows = ecoIncome(ecoGdp()), r = rows[k]; if (!r || !r.trv) return ''; const c = r.c, T = r.trv, coin = esc(ECO.central.name), dis = editable ? '' : ' disabled';
+  const sumO = o => Object.values(o).reduce((a, b) => a + b, 0), own = ECO.holy[c.id] || 0;
+  let h = `<h3>การเดินทางของผู้คน</h3>`
+    + `<div class="tr">มาเยือนเมืองนี้ <b>${socN(sumO(T.inn))}</b> คนต่อปี <span class="w">${trvList(T.inn) || 'ไม่มี'}</span></div>`
+    + `<div class="tr">คนของเมืองออกเดินทาง <b>${socN(sumO(T.out))}</b> คนต่อปี <span class="w">${trvList(T.out) || 'ไม่มี'}</span></div>`
+    + `<div class="tr">ผู้มาเยือนที่ไม่ใช่นักท่องเที่ยวใช้เงินในเมือง <b>${socN(T.spendIn)}</b> ${coin} <span class="w">คนของเมืองไปใช้ที่อื่น ${socN(T.spendOut)} ${coin}</span></div>`;
+  h += `<div class="optrow"><span class="lbl">ที่ศักดิ์สิทธิ์</span><select data-tv="holy"${dis}><option value="0">ไม่ได้ตั้ง</option>${Object.entries(HOLY).map(([q, z]) => `<option value="${q}"${+q === own ? ' selected' : ''}>${z[0]}</option>`).join('')}</select></div>`;
+  h += r.holy && r.holy.h > 0 ? `<div class="tr w">ความศักดิ์สิทธิ์ ${r.holy.h.toFixed(1)} จาก ${r.holy.why.map(x => x[0]).join(' · ')}</div>` : `<div class="tr w">เมืองนี้ยังไม่ใช่ที่แสวงบุญ ตั้งเองได้ที่ช่องด้านบน หรือเมืองจะศักดิ์สิทธิ์เองเมื่อมีบ้านขององค์กรศาสนา มีเสาหินหรือซากโบราณใกล้เมือง หรืออยู่ใกล้ยอดเขาศักดิ์สิทธิ์</div>`;
+  if (TRV && TRV.holy.length) h += `<div class="tr w">ไปถึงที่ศักดิ์สิทธิ์ได้ ${ecoPc(r.pilgAccess)}% ของทั้งแผนที่ ความเป็นอยู่ ${socPts(r.trvWell)} แต้ม ทางที่เร็วขึ้นไปเมืองศักดิ์สิทธิ์ เช่น ทางรถไฟ เพิ่มค่านี้ได้</div>`;
+  return h;
+}
+{
+  const t = tradeCityHTML; tradeCityHTML = function (k) { const h = t(k), add = trvCityHTML(k), at = h.indexOf('<!--prod-->'); return at >= 0 ? h.slice(0, at) + add + h.slice(at) : h + add; };
+  $('tradebody').addEventListener('change', e => {
+    const el = e.target; if (!el || !el.dataset || el.dataset.tv !== 'holy' || !editable || !tsel) return;
+    const v = +el.value; if (HOLY[v]) ECO.holy[tsel] = v; else delete ECO.holy[tsel];
+    ecoChanged(false); renderTradeCard();
+  });
+  const tl = tradeLinkHTML; tradeLinkHTML = function (L) {
+    let h = tl(L); if (!L || !(L.pax >= 0.5)) return h;
+    return h + `<div class="tr">ผู้เดินทางบนเส้นนี้ <b>${socN(L.pax)}</b> คนต่อปี <span class="w">${trvList(L.paxBy)}${L.rail ? ` · มีทางรถไฟ ${L.rail} ช่อง` : ''}</span></div>`;
+  };
+}
+function trvGdpHTML() {
+  if (!TRV || !(TRV.tot >= 0.5)) return '';
+  const rows = ecoIncome(ecoGdp()), coin = esc(ECO.central.name), sumO = o => Object.values(o).reduce((a, b) => a + b, 0);
+  const list = rows.filter(r => r.trv).sort((a, b) => sumO(b.trv.inn) - sumO(a.trv.inn)).slice(0, 30);
+  const holy = TRV.holy.map(([k, x]) => [rows[k], x]).filter(x => x[0]).sort((a, b) => b[1].h - a[1].h).slice(0, 12);
+  const open = GDPV.gtrv ? ' open' : '';
+  return `<details class="efold" data-fold="gtrv"${open}><summary>การเดินทางของผู้คน <small>${socN(TRV.tot)} คนต่อปี</small></summary>`
+    + `<div class="tr">${Object.keys(TRVK).map(k => `${TRVK[k][0]} <b>${socN(TRV.by[k])}</b>`).join(' · ')} คนต่อปี${TRV.onRail >= 0.5 ? ` <span class="w">ราว ${socN(TRV.onRail)} คนเดินทางด้วยรถไฟเป็นส่วนใหญ่ของทาง</span>` : ''}</div>`
+    + `<div class="etable g5"><div class="eth"><span>เมือง</span><span>มาเยือน</span><span>แสวงบุญ</span><span>ธุรกิจ</span><span>ใช้เงินในเมือง</span></div>`
+    + list.map(r => `<div class="etr"><span>${r.s ? `<i class="sdot" style="background:${r.s.color}"></i>` : ''}${esc(r.c.name)}${r.holy && r.holy.h > 0 ? ' <em>ที่ศักดิ์สิทธิ์</em>' : ''}</span><span>${socN(sumO(r.trv.inn))}</span><span>${socN(r.trv.inn.pilg)}</span><span>${socN(r.trv.inn.biz)}</span><span>${socN(r.trv.spendIn)}</span></div>`).join('') + `</div>`
+    + (holy.length ? `<div class="tr">ที่ศักดิ์สิทธิ์ <span class="w">${holy.map(([r, x]) => `${esc(r.c.name)} ${x.h.toFixed(1)}`).join(' · ')}</span></div>` : `<div class="tr w">แผนที่นี้ยังไม่มีที่ศักดิ์สิทธิ์ จึงยังไม่มีผู้แสวงบุญ ตั้งเมืองศักดิ์สิทธิ์ได้ในการ์ดของเมือง</div>`)
+    + `<p class="note">ผู้เดินทางทุกคนไปทางที่ถูกที่สุดของเครือข่าย ทางรถไฟและถนนจึงดึงคนเหมือนดึงคาราวาน การเดินทางส่วนตัวส่วนใหญ่อยู่ในรัฐ ผู้แสวงบุญยอมไปไกล นักธุรกิจตามมูลค่าการค้าระหว่างสองเมือง เงินที่ผู้เดินทางส่วนตัว ผู้แสวงบุญ และนักธุรกิจใช้นับเป็นรายได้ของเมืองที่ไป ข้ามเขตรัฐนับในดุลของรัฐด้วย (ราว ${ecoNumF(TRV.sp.per)} ${ecoNumF(TRV.sp.pilg)} และ ${ecoNumF(TRV.sp.biz)} ${coin} ต่อคน) ตัวเลขทั้งหมดอยู่ในแท็บตัวเลข หมวดการเดินทางของผู้คน</p></details>`;
+}
+{ const g = ecoGdpHTML; ecoGdpHTML = function () { return g() + trvGdpHTML(); }; }
+// on the map: a dotted line beside the trade, as wide as the people on it
+function drawTravel(c, px) {
+  if (!showR.pax || !ECON || !TRV || !(TRV.top > 0) || !ECON.bundles) return;
+  c.save(); c.lineJoin = 'round'; c.lineCap = 'round';
+  for (const ch of ECON.bundles) {
+    let p = 0; for (const li of ch.ls) p += ECON.links[li].pax || 0; if (!(p >= 1)) continue;
+    const w = Math.max(0.5, (0.5 + 2.2 * Math.sqrt(p / TRV.top)) * px);
+    linePath(c, ch.q); c.setLineDash([Math.max(0.6, w * 0.4), Math.max(1.4, w * 2.2)]); c.strokeStyle = 'rgba(34,18,48,.7)'; c.lineWidth = w + Math.max(0.4, 0.8 * px); c.stroke();
+    linePath(c, ch.q); c.strokeStyle = 'rgba(214,176,255,.95)'; c.lineWidth = w; c.stroke();
+  }
+  c.setLineDash([]); c.restore();
+}
+{ const t = drawTrade; drawTrade = function (c, px, live) { t(c, px, live); drawTravel(c, px); }; }
+function trvTest() {
+  if (!ECON) return null; const rows = ecoIncome(ecoGdp()); if (!TRV) return null;
+  return { by: { ...TRV.by }, tot: TRV.tot, ride: TRV.ride, onRail: TRV.onRail, holy: TRV.holy.map(([k, x]) => [ECON.cities[k].id, +x.h.toFixed(2)]),
+    rows: rows.map(r => ({ id: r.c.id, name: r.c.name, inn: r.trv ? r.trv.inn : null, out: r.trv ? r.trv.out : null, spendIn: r.trv ? r.trv.spendIn : 0, well: r.trvWell || 0, access: r.pilgAccess || 0 })),
+    links: ECON.links.map(L => ({ a: ECON.cities[L.ia].id, b: ECON.cities[L.ib].id, pax: L.pax || 0, by: L.paxBy || null, rail: L.rail || 0, road: L.road || 0, dry: L.dry })),
+    books: SOC ? [...SOC.books.values()].map(b => ({ id: b.s.id, trvIn: b.trvIn || 0, trvOut: b.trvOut || 0, net: b.net })) : [] };
+}
+function railTest() {
+  ensureRoutes(); const out = [];
+  for (const r of visibleRoutes()) if (r.cls === 'rail') { const g = geoOf(r); out.push({ id: r.id, ok: !!(g && !g.fail), len: g && !g.fail ? g.len : 0, tunnels: g && !g.fail ? g.tunnels : 0, bridges: g && !g.fail ? g.bridges.length : 0, hexes: g && !g.fail ? g.hexes : [] }); }
+  return { rails: out, edges: RAILE.size, step: RAIL_STEP };
+}
 return {
   destroy() { __dead = true; for (const f of __offs) f(); cancelAnimationFrame(rq); cancelAnimationFrame(fxRaf); cancelAnimationFrame(panRaf); },
   async flush() { for (const k of Object.keys(DOCS)) { clearTimeout(saveT[k]); if (dirty[k] && !saving[k]) await save(k); } await ecoFlush(); },
@@ -6978,7 +7166,7 @@ return {
   },
   recalc: () => scheduleEcon(150),
   refit,
-  test: { reach: () => REACH ? { n: REACH.n, cells: REACH.cells.length, all: REACH.all, tint: REACH.tint } : null, tip: () => ({ shown: tip.shown, fold: TIP.fold, x: TIP.x, y: TIP.y, text: tipBody.textContent }), avoid: v => { AVOID_ON = !!v; scheduleEcon(50); }, cities: () => ECON ? ECON.cities.map((c, k) => ({ id: c.id, name: c.name, kind: c.kind, h: c.h, st: c.st, rank: c.rank, pop: c.pop, through: c.through, seat: ECOX.seat[k], short: c.short ? Object.keys(c.short).length : 0 })) : [], econ: () => ECON ? { ms: Math.round(ECON.ms), ver: ECON.ver, rounds: ECON.rounds, flows: ECON.flows.length, vol: ECON.flows.reduce((x, f) => x + f.amt, 0), goods: ECON.flows.reduce((x, f) => x + (f.cat === 'labor' ? 0 : f.amt), 0), gflows: ECON.flows.filter(f => f.cat !== 'labor').length, val: ECON.flows.reduce((x, f) => x + f.amt * ECAT[f.cat].v, 0), via: ECON.flows.filter(f => f.via).length, broker: ECON.flows.filter(f => f.broker >= 0).length, hub: ECON.flows.filter(f => f.hub).length, links: ECON.links.length, hostile: ECON.links.filter(L => L.hostile > 0).length, bad: ECON.flows.filter(f => !isFinite(f.amt) || !isFinite(f.cost)).length, cross: ECON.flows.filter(f => ECON.cities[f.from].st !== ECON.cities[f.to].st).length, rivals: ECON.flows.filter(f => { const a = ECON.cities[f.from].sto, b = ECON.cities[f.to].sto; return a && b && a !== b && (a.rel[b.id] === 'rival' || b.rel[a.id] === 'rival'); }).length } : null, gdp: () => ecoIncome(ecoGdp()).map(r => ({ id: r.c.id, name: r.c.name, st: r.s ? r.s.id : '.', gdp: r.gdp, inc: r.inc, people: r.people, well: r.well, well0: r.well0, met: r.met, rich: r.rich, reg: r.c.reg, lab: r.c.lab, reach: r.c.reach, lack: r.c.land ? r.c.land.lack : 0, att: r.c.att, work: r.c.work, cls: r.cls, clsW: r.clsW, metB: r.metB, metO: r.metO, rich0: r.c.rich0, stable: r.stable, sur: r.sur, why: r.wellWhy, made: r.made, tw: (() => { const A = climEnsure(); return A && A.tw ? A.tw[r.c.h] : null; })(), demo: r.demo, tourWhy: r.tourWhy, pol: r.c.pol ? { k: r.c.pol.k, tools: [...r.c.pol.tools], top: [...r.c.pol.top], def1: r.c.pol.def1 } : null })), soc: () => { ecoIncome(ecoGdp()); return SOC ? { mean: SOC.mean, tot: SOC.tot, cs: SOC.cls ? clsSum(SOC.cls) : null, fx: ECON && ECON.fx ? [...ECON.fx] : [], books: [...SOC.books.values()].map(b => ({ id: b.s.id, out: b.out, inn: b.inn, gdp: b.gdp, def: b.def, pen: b.pen, net: b.net, lost: b.lost, won: b.won, tourIn: b.tourIn, tourOut: b.tourOut, stable: b.stable, fx: b.fx, cs: b.cls ? clsSum(b.cls) : null, plan: b.plan ? { k: b.plan.k, tools: [...b.plan.tools], top: [...b.plan.top], def1: b.plan.def1 } : null })) } : null; }, grid: () => ({ N, COLS, ROWS }), labor: () => { const rows = ecoIncome(ecoGdp()); return SLAVE ? { tot: SLAVE.tot, price: SLAVE.price, mean: SLAVE.mean, flows: SLAVE.flows.map(f => ({ a: ECON.cities[f.a].id, b: ECON.cities[f.b].id, n: f.n, t: f.t, h: f.h, by: f.by, legs: f.way.length, mids: f.mids.map(k => ECON.cities[k].id) })), rows: rows.map(r => ({ id: r.c.id, st: r.c.st, people: r.people, inc: r.inc, held: r.slave ? r.slave.held : 0, out: r.slave ? r.slave.out : 0, bought: r.slave ? r.slave.bought : 0 })) } : null; }, fieldsOf: id => { if (!ECON || !ECON.land) return null; const k = ECON.cities.findIndex(c => c.id === id), L = ECON.land; let a = 0, b = 0; for (let i = 0; i < N; i++) if (L.own[i] === k && L.use[i] >= 1 && L.use[i] !== 5) { b++; if (ECON.hin[i] === k) a++; } return [a, b]; }, crossBasic: () => { if (!ECON) return null; let x = 0, all = 0; for (const f of ECON.flows) { if (!SOC_BASIC.has(f.cat)) continue; all += f.amt; const a = ECON.cities[f.from].sto, b = ECON.cities[f.to].sto; if (a !== b) x += f.amt; } return { cross: x, all }; }, reachOf: id => { if (!ECON || !ECON.hin) return null; const k = ECON.cities.findIndex(c => c.id === id); if (k < 0) return null; const P = reachOf(k); return { ni: P.ni, no: P.no, reach: ECON.cities[k].reach, sel: reachSel() }; }, cityBook: id => { if (!ECON) return null; const k = ECON.cities.findIndex(c => c.id === id); if (k < 0) return null; const o = {}; for (const cat of ECATS) { const b = ECON.MK[k][cat]; if (b && (b[0] || b[1])) o[cat] = Array.from(b, v => +v.toFixed(2)); } const c = ECON.cities[k]; return { o, foodCut: c.foodCut, land: c.land, pop: c.pop, unit: ECO.unit, cm: c.cm, ki: c.ki, kind: c.kind, goods: Object.fromEntries([...ECON.prod[k]].map(([g, v]) => [g, +v.toFixed(3)])), need: Object.fromEntries(Object.entries(ECON.need[k]).map(([g, v]) => [g, +v.toFixed(2)])) }; }, ptOwners: () => visiblePoints().map(p => { const h = p.h != null ? p.h : hexAt(p.x, p.y), k = ECON && ECON.hin && h >= 0 ? ECON.hin[h] : -1; return [p.k, p.name || '', h, h >= 0 ? eff(h) : '', k >= 0 ? ECON.cities[k].name : null]; }), climTw: () => { const A = climEnsure(); return Array.from(A.tw, v => Math.round(v)); }, ground: () => groundNow().join(''), harv: id => { if (!ECON) return null; const c = ECON.cities.find(c => c.id === id); return c && c.harv ? JSON.parse(JSON.stringify(c.harv)) : null; }, harvAll: () => ECON ? ECON.cities.map(c => c.harv ? [c.id, c.harv.L, c.harv.hexes, c.harv.d, c.harv.eff.grain, c.harv.est, c.pop] : null).filter(Boolean) : [], harvPasses: () => ECON ? !!ECON.harvL : null, worldBook: () => { if (!ECON) return null; const o = {}; for (const cat of ECATS) { const t = [0, 0, 0, 0]; for (let k = 0; k < ECON.cities.length; k++) { const b = ECON.MK[k][cat]; if (b) for (let q = 0; q < 4; q++) t[q] += b[q]; } if (t[0] || t[1]) o[cat] = t.map(v => +v.toFixed(1)); } return o; }, needOf: (id, cat) => { if (!ECON) return null; const k = ECON.cities.findIndex(c => c.id === id); return k < 0 ? null : ECON.need[k][cat]; }, market: id => { if (!ECON) return null; const k = ECON.cities.findIndex(c => c.id === id); if (k < 0) return null; const o = {}; for (const cat of ECATS) { const b = ECON.MK[k][cat]; if (b) o[cat] = Array.from(b); } return { book: o, prod: ECON.prod[k].size, price: Object.assign({}, ECON.P1[k]) }; }, nt: (a, b) => { if (!ECON) return null; const i = ECON.cities.findIndex(c => c.id === a), j = ECON.cities.findIndex(c => c.id === b); return i < 0 || j < 0 ? null : ECON.NT[i][j]; }, lines: () => ECON ? ECON.links.filter(L => !L.fail).map(L => ({ a: ECON.cities[L.ia].id, b: ECON.cities[L.ib].id, wet: L.wet, dry: L.dry })) : [], bridges: () => { const r = cv.getBoundingClientRect(), out = []; for (const rt of visibleRoutes()) { if (rt.t !== 'road') continue; const g = geoOf(rt); if (!g || g.fail) continue; for (const b of g.bridges) { let d = Infinity; for (let i = 0; i + 1 < g.q.length; i++) { const px = g.q[i][0], py = g.q[i][1], dx = g.q[i + 1][0] - px, dy = g.q[i + 1][1] - py, l2 = dx * dx + dy * dy, w = l2 > 0 ? Math.max(0, Math.min(1, ((b.x - px) * dx + (b.y - py) * dy) / l2)) : 0; d = Math.min(d, Math.hypot(px + dx * w - b.x, py + dy * w - b.y)); } out.push({ x: r.left + view.x + b.x * view.s, y: r.top + view.y + b.y * view.s, off: d, a: b.a }); } } return out; }, linkCard: li => { const d = document.createElement('div'); d.innerHTML = tradeLinkHTML(ECON.links[li]); return d.textContent; }, cityCard: k => { const d = document.createElement('div'); d.innerHTML = tradeCityHTML(k); return d.textContent; }, drawOrder: () => { const seq = {}; let n = 0; const g = drawOverGround, r = drawRoutes, t = drawTrade, m = drawNames; drawOverGround = function () { seq.ground = ++n; return g.apply(this, arguments); }; drawRoutes = function () { seq.routes = ++n; return r.apply(this, arguments); }; drawTrade = function () { seq.trade = ++n; return t.apply(this, arguments); }; drawNames = function () { seq.names = ++n; return m.apply(this, arguments); }; try { draw(); } finally { drawOverGround = g; drawRoutes = r; drawTrade = t; drawNames = m; } return seq; }, landSheet: () => { const cvs = landSheet(); return { on: !!cvs, any: landAny, key: landKey, w: cvs ? cvs.width : 0, ms: Math.round(landMs) }; }, landPx: i => { if (!landSheet()) return null; return Array.from(LLC.getImageData(Math.round(CX[i] * LS), Math.round(CY[i] * LS), 1, 1).data); }, landUse: () => { landCompute(); return LAND ? { use: Array.from(LAND.use), own: Array.from(LAND.own) } : null; }, slaveLoad: () => { if (!ECON) return null; const S = slaveNow().S; return S ? { links: [...S.load].map(([li, x]) => ({ li, fwd: x[0], back: x[1], a: ECON.links[li].ia, b: ECON.links[li].ib })), tRef: S.tRef, haul: S.tot.haul } : null; }, land: () => { landCompute(); return LAND ? { tot: LAND.tot, total: LAND.total, crop: LAND.crop, haHex: LAND.haHex, short: LAND.short, rows: LAND.rows.map((r, k) => ({ id: ECON.cities[k].id, people: Math.round(ECON.cities[k].pop * ECO.unit), ...r })) } : null; }, eco: () => JSON.parse(JSON.stringify(ecoSerial())), ecoSet: b => { ecoLoad(b); ecoChanged(true); ecoRender(); }, orgs: () => [...orgValues(ecoIncome(ecoGdp()))].map(([id, v]) => ({ id, ...v })), cityXY: id => { const c = visibleCities().find(x => x.id === id), r = cv.getBoundingClientRect(); return c ? [r.left + view.x + c.x * view.s, r.top + view.y + c.y * view.s] : null; }, hexXY: i => { const r = cv.getBoundingClientRect(); return [r.left + view.x + CX[i] * view.s, r.top + view.y + CY[i] * view.s]; }, flowsOf: () => ECON ? ECON.flows.map(f => ({ a: ECON.cities[f.from].id, b: ECON.cities[f.to].id, cat: f.cat, amt: f.amt, org: f.org || null, broker: f.broker })) : [], tune: () => ({ ...ECO.tune }), pt: (fx, fy) => { const r = cv.getBoundingClientRect(); return [r.left + view.x + fx * G.w * view.s, r.top + view.y + fy * G.h * view.s]; }, way: (a, b) => { const C = ECON.cities, i = C.findIndex(c => c.name === a), j = C.findIndex(c => c.name === b); if (i < 0 || j < 0 || !ECOX.on) return null; const w = ecoWay(i, j); return [a, ...(w.mids || []).map(k => C[k].name), b].join('>') + ' t=' + w.t.toFixed(1) + ' direct=' + ECOX.NT[i][j].toFixed(1); }, linkAt: k => { const L = ECON && ECON.links[k]; if (!L || !L.states) return null; const t = L.states[L.states.length >> 1], h = t >> 1, r = cv.getBoundingClientRect(); return [r.left + view.x + (t & 1 && NAVR[h] ? NPX[h] : CX[h]) * view.s, r.top + view.y + (t & 1 && NAVR[h] ? NPY[h] : CY[h]) * view.s, L.id, L.danger, L.dauto ? L.dauto.lv : -1]; } },
+  test: { trv: () => trvTest(), rail: () => railTest(), reach: () => REACH ? { n: REACH.n, cells: REACH.cells.length, all: REACH.all, tint: REACH.tint } : null, tip: () => ({ shown: tip.shown, fold: TIP.fold, x: TIP.x, y: TIP.y, text: tipBody.textContent }), avoid: v => { AVOID_ON = !!v; scheduleEcon(50); }, cities: () => ECON ? ECON.cities.map((c, k) => ({ id: c.id, name: c.name, kind: c.kind, h: c.h, st: c.st, rank: c.rank, pop: c.pop, through: c.through, seat: ECOX.seat[k], short: c.short ? Object.keys(c.short).length : 0 })) : [], econ: () => ECON ? { ms: Math.round(ECON.ms), ver: ECON.ver, rounds: ECON.rounds, flows: ECON.flows.length, vol: ECON.flows.reduce((x, f) => x + f.amt, 0), goods: ECON.flows.reduce((x, f) => x + (f.cat === 'labor' ? 0 : f.amt), 0), gflows: ECON.flows.filter(f => f.cat !== 'labor').length, val: ECON.flows.reduce((x, f) => x + f.amt * ECAT[f.cat].v, 0), via: ECON.flows.filter(f => f.via).length, broker: ECON.flows.filter(f => f.broker >= 0).length, hub: ECON.flows.filter(f => f.hub).length, links: ECON.links.length, hostile: ECON.links.filter(L => L.hostile > 0).length, bad: ECON.flows.filter(f => !isFinite(f.amt) || !isFinite(f.cost)).length, cross: ECON.flows.filter(f => ECON.cities[f.from].st !== ECON.cities[f.to].st).length, rivals: ECON.flows.filter(f => { const a = ECON.cities[f.from].sto, b = ECON.cities[f.to].sto; return a && b && a !== b && (a.rel[b.id] === 'rival' || b.rel[a.id] === 'rival'); }).length } : null, gdp: () => ecoIncome(ecoGdp()).map(r => ({ id: r.c.id, name: r.c.name, st: r.s ? r.s.id : '.', gdp: r.gdp, inc: r.inc, people: r.people, well: r.well, well0: r.well0, trvWell: r.trvWell || 0, met: r.met, rich: r.rich, reg: r.c.reg, lab: r.c.lab, reach: r.c.reach, lack: r.c.land ? r.c.land.lack : 0, att: r.c.att, work: r.c.work, cls: r.cls, clsW: r.clsW, metB: r.metB, metO: r.metO, rich0: r.c.rich0, stable: r.stable, sur: r.sur, why: r.wellWhy, made: r.made, tw: (() => { const A = climEnsure(); return A && A.tw ? A.tw[r.c.h] : null; })(), demo: r.demo, tourWhy: r.tourWhy, pol: r.c.pol ? { k: r.c.pol.k, tools: [...r.c.pol.tools], top: [...r.c.pol.top], def1: r.c.pol.def1 } : null })), soc: () => { ecoIncome(ecoGdp()); return SOC ? { mean: SOC.mean, tot: SOC.tot, cs: SOC.cls ? clsSum(SOC.cls) : null, fx: ECON && ECON.fx ? [...ECON.fx] : [], books: [...SOC.books.values()].map(b => ({ id: b.s.id, out: b.out, inn: b.inn, gdp: b.gdp, def: b.def, pen: b.pen, net: b.net, lost: b.lost, won: b.won, tourIn: b.tourIn, tourOut: b.tourOut, stable: b.stable, fx: b.fx, cs: b.cls ? clsSum(b.cls) : null, plan: b.plan ? { k: b.plan.k, tools: [...b.plan.tools], top: [...b.plan.top], def1: b.plan.def1 } : null })) } : null; }, grid: () => ({ N, COLS, ROWS }), labor: () => { const rows = ecoIncome(ecoGdp()); return SLAVE ? { tot: SLAVE.tot, price: SLAVE.price, mean: SLAVE.mean, flows: SLAVE.flows.map(f => ({ a: ECON.cities[f.a].id, b: ECON.cities[f.b].id, n: f.n, t: f.t, h: f.h, by: f.by, legs: f.way.length, mids: f.mids.map(k => ECON.cities[k].id) })), rows: rows.map(r => ({ id: r.c.id, st: r.c.st, people: r.people, inc: r.inc, held: r.slave ? r.slave.held : 0, out: r.slave ? r.slave.out : 0, bought: r.slave ? r.slave.bought : 0 })) } : null; }, fieldsOf: id => { if (!ECON || !ECON.land) return null; const k = ECON.cities.findIndex(c => c.id === id), L = ECON.land; let a = 0, b = 0; for (let i = 0; i < N; i++) if (L.own[i] === k && L.use[i] >= 1 && L.use[i] !== 5) { b++; if (ECON.hin[i] === k) a++; } return [a, b]; }, crossBasic: () => { if (!ECON) return null; let x = 0, all = 0; for (const f of ECON.flows) { if (!SOC_BASIC.has(f.cat)) continue; all += f.amt; const a = ECON.cities[f.from].sto, b = ECON.cities[f.to].sto; if (a !== b) x += f.amt; } return { cross: x, all }; }, reachOf: id => { if (!ECON || !ECON.hin) return null; const k = ECON.cities.findIndex(c => c.id === id); if (k < 0) return null; const P = reachOf(k); return { ni: P.ni, no: P.no, reach: ECON.cities[k].reach, sel: reachSel() }; }, cityBook: id => { if (!ECON) return null; const k = ECON.cities.findIndex(c => c.id === id); if (k < 0) return null; const o = {}; for (const cat of ECATS) { const b = ECON.MK[k][cat]; if (b && (b[0] || b[1])) o[cat] = Array.from(b, v => +v.toFixed(2)); } const c = ECON.cities[k]; return { o, foodCut: c.foodCut, land: c.land, pop: c.pop, unit: ECO.unit, cm: c.cm, ki: c.ki, kind: c.kind, goods: Object.fromEntries([...ECON.prod[k]].map(([g, v]) => [g, +v.toFixed(3)])), need: Object.fromEntries(Object.entries(ECON.need[k]).map(([g, v]) => [g, +v.toFixed(2)])) }; }, ptOwners: () => visiblePoints().map(p => { const h = p.h != null ? p.h : hexAt(p.x, p.y), k = ECON && ECON.hin && h >= 0 ? ECON.hin[h] : -1; return [p.k, p.name || '', h, h >= 0 ? eff(h) : '', k >= 0 ? ECON.cities[k].name : null]; }), climTw: () => { const A = climEnsure(); return Array.from(A.tw, v => Math.round(v)); }, ground: () => groundNow().join(''), harv: id => { if (!ECON) return null; const c = ECON.cities.find(c => c.id === id); return c && c.harv ? JSON.parse(JSON.stringify(c.harv)) : null; }, harvAll: () => ECON ? ECON.cities.map(c => c.harv ? [c.id, c.harv.L, c.harv.hexes, c.harv.d, c.harv.eff.grain, c.harv.est, c.pop] : null).filter(Boolean) : [], harvPasses: () => ECON ? !!ECON.harvL : null, worldBook: () => { if (!ECON) return null; const o = {}; for (const cat of ECATS) { const t = [0, 0, 0, 0]; for (let k = 0; k < ECON.cities.length; k++) { const b = ECON.MK[k][cat]; if (b) for (let q = 0; q < 4; q++) t[q] += b[q]; } if (t[0] || t[1]) o[cat] = t.map(v => +v.toFixed(1)); } return o; }, needOf: (id, cat) => { if (!ECON) return null; const k = ECON.cities.findIndex(c => c.id === id); return k < 0 ? null : ECON.need[k][cat]; }, market: id => { if (!ECON) return null; const k = ECON.cities.findIndex(c => c.id === id); if (k < 0) return null; const o = {}; for (const cat of ECATS) { const b = ECON.MK[k][cat]; if (b) o[cat] = Array.from(b); } return { book: o, prod: ECON.prod[k].size, price: Object.assign({}, ECON.P1[k]) }; }, nt: (a, b) => { if (!ECON) return null; const i = ECON.cities.findIndex(c => c.id === a), j = ECON.cities.findIndex(c => c.id === b); return i < 0 || j < 0 ? null : ECON.NT[i][j]; }, lines: () => ECON ? ECON.links.filter(L => !L.fail).map(L => ({ a: ECON.cities[L.ia].id, b: ECON.cities[L.ib].id, wet: L.wet, dry: L.dry })) : [], bridges: () => { const r = cv.getBoundingClientRect(), out = []; for (const rt of visibleRoutes()) { if (rt.t !== 'road') continue; const g = geoOf(rt); if (!g || g.fail) continue; for (const b of g.bridges) { let d = Infinity; for (let i = 0; i + 1 < g.q.length; i++) { const px = g.q[i][0], py = g.q[i][1], dx = g.q[i + 1][0] - px, dy = g.q[i + 1][1] - py, l2 = dx * dx + dy * dy, w = l2 > 0 ? Math.max(0, Math.min(1, ((b.x - px) * dx + (b.y - py) * dy) / l2)) : 0; d = Math.min(d, Math.hypot(px + dx * w - b.x, py + dy * w - b.y)); } out.push({ x: r.left + view.x + b.x * view.s, y: r.top + view.y + b.y * view.s, off: d, a: b.a }); } } return out; }, linkCard: li => { const d = document.createElement('div'); d.innerHTML = tradeLinkHTML(ECON.links[li]); return d.textContent; }, cityCard: k => { const d = document.createElement('div'); d.innerHTML = tradeCityHTML(k); return d.textContent; }, drawOrder: () => { const seq = {}; let n = 0; const g = drawOverGround, r = drawRoutes, t = drawTrade, m = drawNames; drawOverGround = function () { seq.ground = ++n; return g.apply(this, arguments); }; drawRoutes = function () { seq.routes = ++n; return r.apply(this, arguments); }; drawTrade = function () { seq.trade = ++n; return t.apply(this, arguments); }; drawNames = function () { seq.names = ++n; return m.apply(this, arguments); }; try { draw(); } finally { drawOverGround = g; drawRoutes = r; drawTrade = t; drawNames = m; } return seq; }, landSheet: () => { const cvs = landSheet(); return { on: !!cvs, any: landAny, key: landKey, w: cvs ? cvs.width : 0, ms: Math.round(landMs) }; }, landPx: i => { if (!landSheet()) return null; return Array.from(LLC.getImageData(Math.round(CX[i] * LS), Math.round(CY[i] * LS), 1, 1).data); }, landUse: () => { landCompute(); return LAND ? { use: Array.from(LAND.use), own: Array.from(LAND.own) } : null; }, slaveLoad: () => { if (!ECON) return null; const S = slaveNow().S; return S ? { links: [...S.load].map(([li, x]) => ({ li, fwd: x[0], back: x[1], a: ECON.links[li].ia, b: ECON.links[li].ib })), tRef: S.tRef, haul: S.tot.haul } : null; }, land: () => { landCompute(); return LAND ? { tot: LAND.tot, total: LAND.total, crop: LAND.crop, haHex: LAND.haHex, short: LAND.short, rows: LAND.rows.map((r, k) => ({ id: ECON.cities[k].id, people: Math.round(ECON.cities[k].pop * ECO.unit), ...r })) } : null; }, eco: () => JSON.parse(JSON.stringify(ecoSerial())), ecoSet: b => { ecoLoad(b); ecoChanged(true); ecoRender(); }, orgs: () => [...orgValues(ecoIncome(ecoGdp()))].map(([id, v]) => ({ id, ...v })), cityXY: id => { const c = visibleCities().find(x => x.id === id), r = cv.getBoundingClientRect(); return c ? [r.left + view.x + c.x * view.s, r.top + view.y + c.y * view.s] : null; }, hexXY: i => { const r = cv.getBoundingClientRect(); return [r.left + view.x + CX[i] * view.s, r.top + view.y + CY[i] * view.s]; }, flowsOf: () => ECON ? ECON.flows.map(f => ({ a: ECON.cities[f.from].id, b: ECON.cities[f.to].id, cat: f.cat, amt: f.amt, org: f.org || null, broker: f.broker })) : [], tune: () => ({ ...ECO.tune }), pt: (fx, fy) => { const r = cv.getBoundingClientRect(); return [r.left + view.x + fx * G.w * view.s, r.top + view.y + fy * G.h * view.s]; }, way: (a, b) => { const C = ECON.cities, i = C.findIndex(c => c.name === a), j = C.findIndex(c => c.name === b); if (i < 0 || j < 0 || !ECOX.on) return null; const w = ecoWay(i, j); return [a, ...(w.mids || []).map(k => C[k].name), b].join('>') + ' t=' + w.t.toFixed(1) + ' direct=' + ECOX.NT[i][j].toFixed(1); }, linkAt: k => { const L = ECON && ECON.links[k]; if (!L || !L.states) return null; const t = L.states[L.states.length >> 1], h = t >> 1, r = cv.getBoundingClientRect(); return [r.left + view.x + (t & 1 && NAVR[h] ? NPX[h] : CX[h]) * view.s, r.top + view.y + (t & 1 && NAVR[h] ? NPY[h] : CY[h]) * view.s, L.id, L.danger, L.dauto ? L.dauto.lv : -1]; } },
   clim: () => { const A = climEnsure(), land = []; for (let i = 0; i < N; i++) if (!isNaN(A.h[i])) land.push(i); const mean = f => land.reduce((a, i) => a + f(i), 0) / (land.length || 1), band = (f, lo, hi) => { const q = land.filter(i => CY[i] / G.h >= lo && CY[i] / G.h < hi); return q.length ? q.reduce((a, i) => a + f(i), 0) / q.length : null; };
     return { seasons: A.seas ? A.seas.map((s, k) => ({ id: s.id, name: s.name, t: mean(i => A.S[k].t[i]), p: mean(i => A.S[k].p[i]), north: band(i => A.S[k].t[i], 0, 0.33), south: band(i => A.S[k].t[i], 0.67, 1.01), wind: clWindOf(s) })) : null, p: mean(i => A.p[i]), ai: mean(i => Math.min(5, A.ai[i])), f: mean(i => A.f[i]), grow: A.grow ? mean(i => A.grow[i]) : null, lat: [clLat0(), clLat1()], land: land.length, bad: land.filter(i => !isFinite(A.ts[i]) || !isFinite(A.tw[i]) || !isFinite(A.p[i]) || !isFinite(A.f[i])).length, sum: A.S ? mean(i => Math.abs(A.S.reduce((a, S) => a + S.p[i], 0) - A.p[i])) : 0 }; },
   climHex: i => { const A = climEnsure(); return isNaN(A.h[i]) ? null : { h: A.h[i], ts: A.ts[i], tw: A.tw[i], p: A.p[i], ai: A.ai[i], f: A.f[i], grow: A.grow ? A.grow[i] : null, s: A.S ? A.S.map(S => [Math.round(S.t[i] * 10) / 10, Math.round(S.p[i])]) : null }; },

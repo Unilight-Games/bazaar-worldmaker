@@ -83,7 +83,7 @@ const { chromium } = require('playwright');
   const lab = await p.evaluate(() => { const x = MME.shell.cur.rt.test, L = x.labor(), all = x.flowList ? x.flowList() : null; return { opt: !!document.querySelector('#tdCat option[value="labor"]'), n: L.flows.length, cat: x.cats ? x.cats() : null }; });
   ok('slaves are a class of goods in the trade view', lab.opt && lab.n > 0 && s0.econ.flows > lab.n);
   const def = s0.books.C;
-  ok('a state deep in deficit lives worse', def.def > 0.01 && def.pen > 0 && s0.g.filter(r => r.st === 'C').every(r => Math.abs((r.well0 - r.well) - Math.min(def.pen, r.well0)) < 0.01) && s0.books.B.pen === 0, `the small state: deficit ${(100 * def.def).toFixed(1)}% of GDP, well-being down ${def.pen.toFixed(1)}`);
+  ok('a state deep in deficit lives worse', def.def > 0.01 && def.pen > 0 && s0.g.filter(r => r.st === 'C').every(r => Math.abs((r.well0 + (r.trvWell || 0) - r.well) - Math.min(def.pen, r.well0)) < 0.01) && s0.books.B.pen === 0, `the small state: deficit ${(100 * def.def).toFixed(1)}% of GDP, well-being down ${def.pen.toFixed(1)}`);
   ok('a greater state squeezes the price of a smaller one beside it', s0.books.A.won > 0 && s0.books.B.lost > 0 && Math.abs(s0.books.A.won + s0.books.B.won - s0.books.B.lost - s0.books.C.lost) < 1 && s0.books.A.lost === 0, `the great state gains ${Math.round(s0.books.A.won)}`);
   await mk({ A: { pol: [], rel: { B: 'ally' } }, B: { pol: [] }, C: { pol: [] } });
   const sAl = await S(); ok('but not an ally', sAl.books.A.won === 0 && sAl.books.B.lost <= sAl.books.C.won + 1e-6 + sAl.books.B.lost * 0 && !(sAl.books.B.lost > 0 && sAl.books.C.won === 0 && sAl.books.A.won > 0));
