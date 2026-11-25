@@ -438,6 +438,31 @@ function deleteLabel() {
   flash('ลบชื่อแล้ว กดย้อนเพื่อเอาคืน');
 }
 function newLabelId() { let id; do id = uid('n'); while (baseLabel(id) || ED.labels.has(id)); return id; }
+// v0.19.5: every community on the map at once (the owner, 25 Nov 2026), with the roads, trade links, centres and parents that
+// hang on them, as one step back. The button asks for a second press.
+function deleteAllCities() {
+  if (!editable) return 0;
+  commitCityEdit(); selectCity(null);
+  const ids = new Set(visibleCities().map(c => c.id)), ops = [];
+  if (!ids.size) return 0;
+  for (const [rid, r] of ED.routes) if (!baseRoad(rid) && (ids.has(r.a) || ids.has(r.b))) ops.push({ k: 'rt', id: rid, a: { ...r }, b: null });
+  for (const [lid, o] of ED.tlinks) if (ids.has(o.a) || ids.has(o.b)) ops.push({ k: 'tl', id: lid, a: { ...o }, b: null });
+  for (const [id, v] of ED.hubs) if (ids.has(id)) ops.push({ k: 'hub', id, a: v, b: null });
+  for (const [cid, pid] of ED.tparent) if (ids.has(cid) || ids.has(pid)) ops.push({ k: 'tpar', id: cid, a: pid, b: null });
+  for (let at = ED.cities.length - 1; at >= 0; at--) ops.push({ k: 'c-', c: { ...ED.cities[at] }, at });
+  for (const b of D.cities) if (!ED.bhid.has(b.id)) ops.push({ k: 'bh+', id: b.id });
+  doOp({ k: 'm', ops });
+  flash(`ลบเมืองทั้งหมด ${ids.size.toLocaleString('en-US')} แห่งแล้ว กดย้อนเพื่อเอาคืน`);
+  return ids.size;
+}
+{ let arm = 0; const b = $('cityDelAll');
+  if (b) b.onclick = () => {
+    if (!editable) return;
+    if (!arm) { b.textContent = 'กดอีกครั้งเพื่อลบทุกเมือง'; arm = setTimeout(() => { arm = 0; b.textContent = 'ลบเมืองทั้งหมด'; }, 4000); return; }
+    clearTimeout(arm); arm = 0; b.textContent = 'ลบเมืองทั้งหมด';
+    if (!deleteAllCities()) flash('ไม่มีเมืองให้ลบ');
+  };
+}
 function deleteCity() {
   if (!sel || !editable) return;
   commitCityEdit();

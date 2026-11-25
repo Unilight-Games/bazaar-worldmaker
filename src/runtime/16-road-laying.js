@@ -35,6 +35,29 @@ function changeRoute(id, patch) {                   // one step of undo: the rou
   doOp({ k: 'rt', id, a: own ? { ...own } : null, b: { ...plainRoute(r), ...patch } });
   refreshRouteForm();
 }
+// v0.19.5: every road on the map at once, of every class the road tool lays (railways too), as one step back (the owner,
+// 25 Nov 2026). The button asks for a second press.
+function deleteAllRoads() {
+  if (!editable) return 0;
+  const ops = []; let n = 0;
+  for (const r of visibleRoutes()) {
+    if (r.t !== 'road') continue; n++;
+    const own = ED.routes.get(r.id); if (own) ops.push({ k: 'rt', id: r.id, a: { ...own }, b: null });
+    if (baseRoad(r.id)) ops.push({ k: 'rth+', id: r.id });
+  }
+  if (!ops.length) return 0;
+  selectRoute(null); doOp({ k: 'm', ops });
+  flash(`ลบถนนทั้งหมด ${n.toLocaleString('en-US')} เส้นแล้ว กดย้อนเพื่อเอาคืน`);
+  return n;
+}
+{ let arm = 0; const b = $('rtDelAll');
+  if (b) b.onclick = () => {
+    if (!editable) return;
+    if (!arm) { b.textContent = 'กดอีกครั้งเพื่อลบทุกเส้น'; arm = setTimeout(() => { arm = 0; b.textContent = 'ลบถนนทั้งหมด'; }, 4000); return; }
+    clearTimeout(arm); arm = 0; b.textContent = 'ลบถนนทั้งหมด';
+    if (!deleteAllRoads()) flash('ไม่มีถนนให้ลบ');
+  };
+}
 function deleteRoute(id) {
   const own = ED.routes.get(id), ops = [];
   if (own) ops.push({ k: 'rt', id, a: { ...own }, b: null });

@@ -117,7 +117,11 @@ function bhazeSheet() {
 // The owner (25 Nov 2026, after trying it): no bar of figures along the foot of the map; the world's name and the sound and music
 // switches sit at the top right; the small map sits in the bottom right corner of the map.
 const opt = document.createElement('div'); opt.className = 'mapopt'; $('mapbox').appendChild(opt);
-const mini = document.createElement('canvas'); mini.className = 'minimap'; mini.width = 200; mini.height = Math.max(60, Math.round(200 * G.h / G.w)); mini.title = 'คลิกหรือลากเพื่อเลื่อนแผนที่ (กด H เพื่อซ่อน)'; $('mapbox').appendChild(mini);
+const mini = document.createElement('canvas'); mini.className = 'minimap'; mini.width = 200; mini.height = Math.max(60, Math.round(200 * G.h / G.w)); mini.title = 'คลิกหรือลากเพื่อเลื่อนแผนที่ (กด H เพื่อพับเก็บ)'; $('mapbox').appendChild(mini);
+// v0.19.5: the small map folds away with a button of its own (the owner, 25 Nov 2026: it sometimes covers the map). Folded, the
+// button stays in the corner to open it again; the H key does the same
+const miniTog = document.createElement('button'); miniTog.type = 'button'; miniTog.className = 'btn minitog'; $('mapbox').appendChild(miniTog);
+miniTog.onclick = () => { GAME.mini = !GAME.mini; gameSave(); hudRender(); miniDraw(); };
 let optLast = '';
 function uiTop() {                                    // the lowest edge of the controls along the top of the map, in the map box
   const br = box.getBoundingClientRect(); let b = 46;
@@ -127,6 +131,7 @@ function uiTop() {                                    // the lowest edge of the 
 function hudRender() {
   // the options take the top right corner itself (the owner, 25 Nov 2026); the zoom buttons step down below them
   mini.hidden = !GAME.mini; mini.style.right = (padR() + 10) + 'px'; opt.style.right = (padR() + 10) + 'px';
+  miniTog.textContent = GAME.mini ? '▾' : 'แผนที่ย่อ ▴'; miniTog.title = GAME.mini ? 'พับแผนที่ย่อเก็บ (H)' : 'กางแผนที่ย่อ (H)'; miniTog.classList.toggle('open', GAME.mini);
   { const mw = Math.round(clamp((box.clientWidth - padR()) * 0.17, 110, 200)); if (mini.style.width !== mw + 'px') { mini.style.width = mw + 'px'; mini.style.height = 'auto'; } }   // v0.19.2: the small map shrinks with a small window
   { const ctl = document.querySelector('#mapbox .ctl'), br = box.getBoundingClientRect(); let top = 10;
     // the row of map buttons wraps short of the corner, so the options keep it; only on a very narrow map do they step below the row
@@ -136,7 +141,8 @@ function hudRender() {
     // v0.19.2: what opens under the top controls (the journey and crop windows, a card popped out) starts below them all, and
     // the short messages at the foot of the map rise over the small map
     box.style.setProperty('--uitop', (uiTop() + 8) + 'px');
-    const mb = GAME.mini && !mini.hidden ? mini.offsetHeight + 22 : 14;
+    miniTog.style.right = (padR() + (GAME.mini ? 14 : 10)) + 'px'; miniTog.style.bottom = (GAME.mini ? 10 + mini.offsetHeight - miniTog.offsetHeight - 4 : 10) + 'px';
+    const mb = GAME.mini && !mini.hidden ? mini.offsetHeight + 22 : (miniTog.offsetHeight || 26) + 18;
     box.style.setProperty('--toastb', mb + 'px'); box.style.setProperty('--minib', (mb + 4) + 'px');
     box.style.setProperty('--toastx', Math.round((box.clientWidth - padR() + padL()) / 2) + 'px'); }
   // during a lesson the scale sits at the top of the map, where the row of map buttons may now reach: it goes below them
@@ -237,7 +243,7 @@ __on(window, 'keydown', e => { if (e.key === 'Escape') ring.hidden = true; });
 // ---- keys, shown on the mode buttons at the top ----
 const HOTK = [['1', 'view', 'ดู'], ['2', 'terrain', 'ภูมิประเทศ'], ['3', 'river', 'แม่น้ำ'], ['4', 'city', 'ชุมชน'], ['5', 'label', 'ชื่อ'], ['6', 'route', 'ถนน'], ['7', 'trade', 'การค้า'], ['8', 'climate', 'ภูมิอากาศ'], ['9', 'econ', 'เศรษฐกิจ'], ['0', 'info', 'ข้อมูล']];
 for (const [k, m] of HOTK) { const b = document.querySelector(`#modes button[data-mode="${m}"]`); if (!b || b.querySelector('kbd')) continue; const kb = document.createElement('kbd'); kb.className = 'modekey'; kb.textContent = k; b.appendChild(kb); b.title = (b.title ? b.title + ' ' : '') + '(กด ' + k + ')'; }
-const KEYS = [['1 ถึง 0', 'เปลี่ยนโหมด ตามเลขบนปุ่มโหมดด้านบน'], ['[ และ ]', 'แปรงเล็กลงและใหญ่ขึ้น'], ['Q / Shift+Q', 'ฤดูถัดไปและฤดูก่อน'], ['M', 'ตลาดสินค้ากลาง'], ['R', 'วัดระยะ'], ['T', 'วางแผนเดินทาง'], ['L', 'ชั้นวัฒนธรรม ศาสนา และการปกครอง'], ['N', 'ชื่อสถานที่'], ['H', 'ซ่อนหรือแสดงแผนที่ย่อ'], ['U', 'ซ่อนหรือแสดงเครื่องมือทั้งหมดบนแผนที่'], ['Ctrl+Z / Ctrl+Y', 'ย้อนและทำซ้ำ'], ['คลิกขวา', 'เมนูวงล้อ'], ['Esc', 'ปิดหน้าต่างหรือเลิกเครื่องมือ']];
+const KEYS = [['1 ถึง 0', 'เปลี่ยนโหมด ตามเลขบนปุ่มโหมดด้านบน'], ['[ และ ]', 'แปรงเล็กลงและใหญ่ขึ้น'], ['Q / Shift+Q', 'ฤดูถัดไปและฤดูก่อน'], ['M', 'ตลาดสินค้ากลาง'], ['R', 'วัดระยะ'], ['T', 'วางแผนเดินทาง'], ['L', 'ชั้นวัฒนธรรม ศาสนา และการปกครอง'], ['N', 'ชื่อสถานที่'], ['H', 'พับหรือกางแผนที่ย่อ (ปุ่ม ▾ ที่มุมแผนที่ย่อก็ได้)'], ['U', 'ซ่อนหรือแสดงเครื่องมือทั้งหมดบนแผนที่'], ['Ctrl+Z / Ctrl+Y', 'ย้อนและทำซ้ำ'], ['คลิกขวา', 'เมนูวงล้อ'], ['Esc', 'ปิดหน้าต่างหรือเลิกเครื่องมือ']];
 // v0.19.2: the keys open as a small card under the "?" button, where nothing else sits, in place of a long line over the map
 const keysEl = document.createElement('div'); keysEl.className = 'keyspanel'; keysEl.hidden = true; $('mapbox').appendChild(keysEl);
 for (const ev of ['pointerdown', 'wheel']) keysEl.addEventListener(ev, e => e.stopPropagation());

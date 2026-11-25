@@ -5,7 +5,7 @@
 // from it by the numbers in COMK; a mark's numbers are in COMT. The marks are kept in the economy's document, ECO.tr, by the
 // community's id, so they ride its undo, its saving and its room like the head counts and holy places do.
 //
-// What each number does (every one of them chosen by Claude, for the owner to tune):
+// What each number does (chosen by Claude, for the owner to tune; the head counts of the kinds are argued above COMK):
 //   pop    the head count a community has when the owner has not counted it, times this
 //   rank   the lowest level it holds as a hub of the trade network; rank3 makes it a hub of the first level; portRank lifts a
 //          community with a quay one level
@@ -15,11 +15,16 @@
 //   ind    workshops per head, times this; arms: weapons made, times this; books: books made, added
 //   reach  hexes more of land worked
 //   lab    how much cheaper a day's work is (crowded quarters); mid: a larger middle class, as a share of the free people
+// v0.19.5: the head counts came down (the owner, 25 Nov 2026: a hamlet, a way station, a monastery and a camp should not start
+// with as many people as a village). Against a village of 6 to 60 households, 30 to 300 people, a hamlet is under six households
+// (Medieval Settlement Research Group; Jones 2010), so about a seventh of a middling village; an English religious house held
+// about 20 religious with lay servants, a typical abbey about 100 souls in all, so about a fifth; a camp of herders a quarter and
+// a way station's keepers, grooms and guards a sixteenth are Claude's own guesses. They were 0.4, 0.5, 0.7 and 0.35.
 const COMK = {
-  hamlet: { pop: 0.4 },
-  monastery: { pop: 0.5, holy: 2, att: 0.15, books: 0.4, well: 2 },
-  camp: { pop: 0.7, reach: 1, ind: 0.5 },
-  waystation: { pop: 0.35, rankMin: 1, att: 0.1 },
+  hamlet: { pop: 0.15 },
+  monastery: { pop: 0.2, holy: 2, att: 0.15, books: 0.4, well: 2 },
+  camp: { pop: 0.25, reach: 1, ind: 0.5 },
+  waystation: { pop: 0.06, rankMin: 1, att: 0.1 },
 };
 const COMT = {
   port: { name: 'เมืองท่าสำคัญ', pop: 1.1, portRank: 1, mid: 0.03, why: 'ศูนย์การค้าขึ้นหนึ่งระดับถ้ามีท่าเรือ คนเพิ่ม 10% ชนชั้นกลางมากขึ้น' },
@@ -30,10 +35,10 @@ const COMT = {
   slum: { name: 'มีย่านแออัด', pop: 1.25, well: -6, lab: 0.04, why: 'คนเพิ่ม 25% ค่าแรงถูกลง ความเป็นอยู่แย่ลง คนจนมากขึ้น' },
 };
 const COMKWHY = {
-  hamlet: 'คนน้อยกว่าหมู่บ้านราวครึ่งหนึ่ง',
-  monastery: 'คนน้อย ศักดิ์สิทธิ์ มีคนมาแสวงบุญและเที่ยวชม คัดลอกหนังสือ และช่วยให้คนรอบ ๆ อยู่ดีขึ้นเล็กน้อย',
-  camp: 'เลี้ยงสัตว์ไปไกลกว่าหมู่บ้านหนึ่งช่อง แต่งานช่างน้อยกว่าครึ่ง',
-  waystation: 'คนน้อยมาก แต่เป็นจุดพักของเส้นการค้าเสมอ และมีคนผ่านมาเที่ยวชม',
+  hamlet: 'คนราวหนึ่งในเจ็ดของหมู่บ้าน',
+  monastery: 'คนราวหนึ่งในห้าของหมู่บ้าน ศักดิ์สิทธิ์ มีคนมาแสวงบุญและเที่ยวชม คัดลอกหนังสือ และช่วยให้คนรอบ ๆ อยู่ดีขึ้นเล็กน้อย',
+  camp: 'คนราวหนึ่งในสี่ของหมู่บ้าน เลี้ยงสัตว์ไปไกลกว่าหมู่บ้านหนึ่งช่อง แต่งานช่างน้อยกว่าครึ่ง',
+  waystation: 'มีแค่คนดูแลที่พัก คนเลี้ยงสัตว์ และยาม ราวหนึ่งในสิบหกของหมู่บ้าน แต่เป็นจุดพักของเส้นการค้าเสมอ และมีคนผ่านมาเที่ยวชม',
 };
 ECO.tr = {};
 const comTr = id => (ECO.tr[id] || []).filter(k => COMT[k]);

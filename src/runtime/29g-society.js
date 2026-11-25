@@ -574,7 +574,7 @@ function stateChips(s, cnt) {
 }
 ecoStatesHTML = function () {
   if (ECON) ecoIncome(ecoGdp());
-  let h = `<div class="btns" style="margin:0 0 8px"><button type="button" class="btn" data-a="snew"${ECO.states.length >= 52 ? ' disabled' : ''}>เพิ่มรัฐ</button>${ECO.states.length > 1 ? `<button type="button" class="btn" data-a="stfold" data-v="0">พับทุกรัฐ</button><button type="button" class="btn" data-a="stfold" data-v="1">กางทุกรัฐ</button>` : ''}</div>`;
+  let h = `<div class="btns" style="margin:0 0 8px"><button type="button" class="btn" data-a="snew"${ECO.states.length >= 52 ? ' disabled' : ''}>เพิ่มรัฐ</button>${ECO.states.length > 1 ? `<button type="button" class="btn" data-a="stfold" data-v="0">พับทุกรัฐ</button><button type="button" class="btn" data-a="stfold" data-v="1">กางทุกรัฐ</button>` : ''}${ECO.states.length ? `<button type="button" class="btn warn" data-a="sdelall">${sdelArm ? 'กดอีกครั้งเพื่อลบทุกรัฐ' : 'ลบรัฐทั้งหมด'}</button>` : ''}</div>`;
   if (!ECO.states.length) return h + `<p class="note">ยังไม่มีรัฐ กดเพิ่มรัฐ แล้วกดปุ่มระบายเขตในการ์ดของรัฐเพื่อระบายเขตลงบนแผนที่ ระบายลงทะเลได้เพื่อกำหนดน่านน้ำ เมืองขึ้นกับรัฐของช่องที่ตั้งอยู่</p>`;
   const cnt = {}; for (const z of ECO.cells) if (z !== '.') cnt[z] = (cnt[z] || 0) + 1;
   const dis = editable ? '' : ' disabled', sel = (f, table, cur, extra) => `<select data-f="${f}"${extra || ''}${dis}>${Object.entries(table).map(([k, v]) => `<option value="${k}"${k === cur ? ' selected' : ''}>${v[0]}</option>`).join('')}</select>`;

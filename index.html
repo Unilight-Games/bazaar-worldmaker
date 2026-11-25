@@ -259,6 +259,12 @@ aside .card h2 { position: relative; }
 .barechip { position: absolute; z-index: 7; top: 10px; right: calc(var(--barer, 10px)); font-size: .8rem; padding: 4px 10px; opacity: .85; }
 .barechip:hover { opacity: 1; }
 
+/* v0.19.5: the small map's fold button, in its top right corner, or alone in the map's corner when folded */
+.minitog { position: absolute; z-index: 5; font-size: .78rem; padding: 3px 9px; opacity: .88; }
+.minitog.open { padding: 0 7px; line-height: 1.5; opacity: .75; }
+.minitog:hover { opacity: 1; }
+#mapbox.bare .minitog { display: none !important; }
+
 /* ---------- Bazaar Worldmaker: the menu, the library and the room, in the map's own ink and brass ---------- */
 :root { --good: #7cc47f; --warn: #e2748a; --panel2: #262a33; }
 body { min-height: 100vh; }
@@ -1085,6 +1091,7 @@ b.warn { color: var(--warn); font-weight: 600; }
           <div id="cityNew">
             <div class="optrow" style="margin-top:0"><span class="lbl">ชนิดของชุมชนใหม่</span><div class="seg" id="ckind"></div></div>
             <p class="hint">คลิกที่ว่างเพื่อวางเมือง พิมพ์ชื่อแล้วกด Enter คลิกเมืองเพื่อแก้ชื่อและบันทึก ลากตัวเมืองหรือชื่อเมืองเพื่อย้าย ชื่อสถานที่กับภูเขาสแตนเทอร์ก็ลากย้ายได้ ลากที่ว่างเพื่อเลื่อนแผนที่ เมืองที่มากับแผนที่ก็ย้าย แก้ และลบได้เหมือนกัน</p>
+            <div class="btns" style="margin:6px 0 0"><button type="button" class="btn warn" id="cityDelAll">ลบเมืองทั้งหมด</button></div>
           </div>
           <div id="cityForm" class="cf pane-off">
             <div class="optrow" style="margin-top:0">
@@ -1096,6 +1103,7 @@ b.warn { color: var(--warn); font-weight: 600; }
             <label class="full">บันทึก <textarea id="cfNote" rows="2" maxlength="600"></textarea></label>
             <div class="optrow"><label>ประชากร <input id="cfPop" type="number" min="0" step="100" style="width:8em" autocomplete="off"> คน</label><span class="lbl">เว้นว่างเพื่อใช้ค่าตามชนิดของชุมชนและคุณลักษณะ ประชากรกำหนดความต้องการ กำลังผลิตของโรงงาน และลำดับที่พ่อค้าเลือกมาขาย</span></div>
             <div class="optrow"><label>ภาษี <input id="cfTax" type="number" min="0" max="90" step="1" style="width:5em" autocomplete="off"> %</label><span class="lbl" id="cfTaxNote"></span></div><div class="optrow traits" id="cfTraits"></div>
+            <div class="optrow"><label>ขึ้นตรงต่อ <select id="cfUp"></select></label><span class="lbl" id="cfUpNote"></span></div>
             <p class="hint" id="cfFx" hidden></p>
             <p class="hint" id="cfHint"></p>
           </div>
@@ -1126,6 +1134,7 @@ b.warn { color: var(--warn); font-weight: 600; }
             <div class="optrow" style="margin-top:0">
               <div class="seg" id="rtCls"></div>
               <button type="button" class="btn" id="rtLoose">ต่อถนนให้เมืองที่ยังไม่มีถนน</button>
+              <button type="button" class="btn warn" id="rtDelAll">ลบถนนทั้งหมด</button>
             </div>
             <p class="hint" id="rtHint"></p>
           </div>
@@ -1216,18 +1225,18 @@ b.warn { color: var(--warn); font-weight: 600; }
 <section class="method"><div class="card" id="method"></div></section>
 </template>
 <script>window.MME_BUILD = "web"; window.MME_NO_GRESLAND = true;</script>
-<script src="firebase-config.js?v=0.19.4"></script>
-<script src="engine/gen.js?v=0.19.4"></script>
-<script src="engine/store.js?v=0.19.4"></script>
-<script src="engine/backup.js?v=0.19.4"></script>
-<script src="engine/net.js?v=0.19.4"></script>
-<script src="engine/fire.js?v=0.19.4"></script>
-<script src="engine/defaults.js?v=0.19.4"></script>
-<script src="engine/runtime.js?v=0.19.4"></script>
-<script src="engine/shell.js?v=0.19.4"></script>
-<script src="engine/hub.js?v=0.19.4"></script>
-<script src="engine/policy.js?v=0.19.4"></script>
-<script src="engine/tutor-lines.js?v=0.19.4"></script>
-<script src="engine/tutor.js?v=0.19.4"></script>
+<script src="firebase-config.js?v=0.19.5"></script>
+<script src="engine/gen.js?v=0.19.5"></script>
+<script src="engine/store.js?v=0.19.5"></script>
+<script src="engine/backup.js?v=0.19.5"></script>
+<script src="engine/net.js?v=0.19.5"></script>
+<script src="engine/fire.js?v=0.19.5"></script>
+<script src="engine/defaults.js?v=0.19.5"></script>
+<script src="engine/runtime.js?v=0.19.5"></script>
+<script src="engine/shell.js?v=0.19.5"></script>
+<script src="engine/hub.js?v=0.19.5"></script>
+<script src="engine/policy.js?v=0.19.5"></script>
+<script src="engine/tutor-lines.js?v=0.19.5"></script>
+<script src="engine/tutor.js?v=0.19.5"></script>
 </body>
 </html>

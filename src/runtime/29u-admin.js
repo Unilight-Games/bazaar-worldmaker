@@ -270,3 +270,68 @@ function admFocus(u) { const hs = admIndex().hexes.get(u.id) || []; if (!hs.leng
     const at = h.indexOf('<div class="erow"><label>ชื่อ'); return at >= 0 ? h.slice(0, at) + line + h.slice(at) : h;
   };
 }
+
+// ---- v0.19.5: a community put under another, from the community's own form ----
+// The owner asked why he could not simply say which city answers to which (25 Nov 2026). The units hold land, so a community
+// answers to whoever holds the unit it heads. Its own unit is the highest it is the seat of; a community that heads nothing is
+// given its own hex as a manor of its own, carved from the manor it stood in. Putting A under B:
+//   - B's unit ranks above A's: A's unit goes straight into it (a tier may be skipped, as it may by hand).
+//   - Otherwise B is given a unit one tier above A's, seated at B and named after it, set between B's unit and whatever held
+//     B's unit; A's unit goes into that.
+// A state not yet divided is divided first, as its own button would. A duchy's seat answers only to its state, and a community
+// answers only within its own state: moving land between states is the state's own brush.
+function admOwnUnit(cid, carve) {
+  const X = admIndex(), seats = ECO.adm.filter(u => u.seat === cid);
+  if (seats.length) return seats.reduce((a, b) => (b.t > a.t ? b : a));
+  const v = visibleCities().find(c => c.id === cid), h = v ? hexAt(v.x, v.y) : -1, m = h >= 0 ? X.by.get(ECO.admc[h] || '') : null;
+  if (!m || m.t !== 0) return null;
+  if (!m.seat) { if (carve) m.seat = cid; return m; }
+  if (!carve) return m;
+  const u = { id: admNewId(), t: 0, name: v.name || '', up: m.up, type: '', seat: cid }; ECO.adm.push(u); ECO.admc[h] = u.id;
+  ADM.stamp++; ADM.idx = null; return u;
+}
+function admUpCity(cid) {                            // what the form shows: the community, the unit or the state it answers to
+  const v = visibleCities().find(c => c.id === cid), h = v ? hexAt(v.x, v.y) : -1, st = h >= 0 ? ECO.cells[h] : '.';
+  if (!st || st === '.') return { st: '' };
+  const u = admOwnUnit(cid, false); if (!u) return { st, none: true };
+  const p = admIndex().upOf(u); return { st, u, p };
+}
+function admPutUnder(a, b) {
+  const va = visibleCities().find(c => c.id === a), vb = visibleCities().find(c => c.id === b); if (!va || !vb) return 'ไม่พบชุมชน';
+  const ha = hexAt(va.x, va.y), hb = hexAt(vb.x, vb.y), sa = ha >= 0 ? ECO.cells[ha] : '.', sb = hb >= 0 ? ECO.cells[hb] : '.';
+  if (!sa || sa === '.') return `${va.name || 'ชุมชนนี้'} อยู่นอกรัฐ ระบายเขตรัฐให้ก่อน`;
+  if (sa !== sb) return `${vb.name || 'ชุมชนนั้น'} อยู่คนละรัฐ ขึ้นตรงต่อกันได้เฉพาะในรัฐเดียวกัน`;
+  let msg = '';
+  admDo(() => {
+    const s = ECO.states.find(x => x.id === sa);
+    if (s && !ECO.adm.some(u => u.t === 0 && (ECO.admc[ha] === u.id || ECO.admc[hb] === u.id))) { admBuild(s); ADM.stamp++; ADM.idx = null; }
+    const ua = admOwnUnit(a, true), ub = admOwnUnit(b, true); if (!ua || !ub) { msg = 'แบ่งหน่วยการปกครองของรัฐนี้ไม่ได้'; return; }
+    ADM.stamp++; ADM.idx = null; const X = admIndex();
+    for (let x = ub; x; x = X.upOf(x)) if (x === ua) { msg = `${vb.name} ขึ้นกับ ${va.name} อยู่ ให้ ${vb.name} ขึ้นกับที่อื่นก่อน`; return; }
+    if (ub.t > ua.t) { ua.up = ub.id; return; }
+    const T = ua.t + 1; if (T > 2) { msg = `${va.name} เป็นที่ตั้งของ${ECO.admn[2]} ขึ้นตรงต่อรัฐได้อย่างเดียว`; return; }
+    let p = X.upOf(ub); while (p && p.t <= T) p = X.upOf(p);
+    const c = { id: admNewId(), t: T, name: vb.name || '', up: p ? p.id : '', type: '', seat: b }; ECO.adm.push(c);
+    ub.up = c.id; ua.up = c.id;
+  });
+  return msg;
+}
+function admCityForm() {
+  const sl = $('cfUp'); if (!sl || !sel) return; const r = admUpCity(sel), note = $('cfUpNote');
+  if (!r.st) { sl.innerHTML = '<option>อยู่นอกรัฐ</option>'; sl.disabled = true; note.textContent = 'ระบายเขตรัฐให้ชุมชนนี้ก่อน'; return; }
+  const vc = visibleCities(), mine = vc.filter(c => c.id !== sel && ECO.cells[hexAt(c.x, c.y)] === r.st).sort((x, y) => (KIX[x.kind] != null ? KIX[x.kind] : 1) - (KIX[y.kind] != null ? KIX[y.kind] : 1) || (x.name || '').localeCompare(y.name || '', 'th')).slice(0, 400);
+  const s = ECO.states.find(x => x.id === r.st), boss = r.u && r.u.seat && r.u.seat !== sel ? r.u : r.p, cur = boss ? (boss.seat && boss.seat !== sel ? boss.seat : 'u:' + boss.id) : '';   // a community that heads nothing answers to its manor's seat
+  let h = `<option value="">${esc(ECO.admn[3])} ${esc(s ? s.name : '')} โดยตรง</option>`;
+  if (cur.startsWith('u:')) h += `<option value="${cur}">${esc(admTitle(boss))}</option>`;
+  h += mine.map(c => `<option value="${esc(c.id)}">${esc(c.name || 'ไม่มีชื่อ')} · ${esc((CK[c.kind] || CK.city).name)}</option>`).join('');
+  sl.innerHTML = h; sl.value = cur; sl.disabled = !editable;
+  note.textContent = r.none ? 'รัฐนี้ยังไม่ได้แบ่งหน่วยการปกครอง เลือกแล้วระบบจะแบ่งให้ก่อน' : r.u && r.u.seat === sel ? `ในฐานะที่ตั้งของ${admTier(r.u)}${r.u.name ? ' ' + r.u.name : ''}` : r.u ? `อยู่ใน${admTitle(r.u)}` : '';
+}
+$('cfUp').onchange = () => {
+  if (!sel || !editable) return; const v = $('cfUp').value;
+  if (v.startsWith('u:')) return;
+  if (!v) { admDo(() => { const u = admOwnUnit(sel, true); if (u) u.up = ''; }); flash('ขึ้นตรงต่อรัฐโดยตรงแล้ว กดย้อนเพื่อเอาคืน'); }
+  else { const m = admPutUnder(sel, v); const vb = visibleCities().find(c => c.id === v); flash(m || `ขึ้นตรงต่อ${vb ? ' ' + vb.name : ''}แล้ว กดย้อนเพื่อเอาคืน`); }
+  admCityForm(); requestDraw();
+};
+{ const rf = refreshForm; refreshForm = function () { rf(); admCityForm(); }; }

@@ -66,6 +66,7 @@
           <div id="cityNew">
             <div class="optrow" style="margin-top:0"><span class="lbl">ชนิดของชุมชนใหม่</span><div class="seg" id="ckind"></div></div>
             <p class="hint">คลิกที่ว่างเพื่อวางเมือง พิมพ์ชื่อแล้วกด Enter คลิกเมืองเพื่อแก้ชื่อและบันทึก ลากตัวเมืองหรือชื่อเมืองเพื่อย้าย ชื่อสถานที่กับภูเขาสแตนเทอร์ก็ลากย้ายได้ ลากที่ว่างเพื่อเลื่อนแผนที่ เมืองที่มากับแผนที่ก็ย้าย แก้ และลบได้เหมือนกัน</p>
+            <div class="btns" style="margin:6px 0 0"><button type="button" class="btn warn" id="cityDelAll">ลบเมืองทั้งหมด</button></div>
           </div>
           <div id="cityForm" class="cf pane-off">
             <div class="optrow" style="margin-top:0">
@@ -77,6 +78,7 @@
             <label class="full">บันทึก <textarea id="cfNote" rows="2" maxlength="600"></textarea></label>
             <div class="optrow"><label>ประชากร <input id="cfPop" type="number" min="0" step="100" style="width:8em" autocomplete="off"> คน</label><span class="lbl">เว้นว่างเพื่อใช้ค่าตามชนิดของชุมชนและคุณลักษณะ ประชากรกำหนดความต้องการ กำลังผลิตของโรงงาน และลำดับที่พ่อค้าเลือกมาขาย</span></div>
             <div class="optrow"><label>ภาษี <input id="cfTax" type="number" min="0" max="90" step="1" style="width:5em" autocomplete="off"> %</label><span class="lbl" id="cfTaxNote"></span></div><div class="optrow traits" id="cfTraits"></div>
+            <div class="optrow"><label>ขึ้นตรงต่อ <select id="cfUp"></select></label><span class="lbl" id="cfUpNote"></span></div>
             <p class="hint" id="cfFx" hidden></p>
             <p class="hint" id="cfHint"></p>
           </div>
@@ -107,6 +109,7 @@
             <div class="optrow" style="margin-top:0">
               <div class="seg" id="rtCls"></div>
               <button type="button" class="btn" id="rtLoose">ต่อถนนให้เมืองที่ยังไม่มีถนน</button>
+              <button type="button" class="btn warn" id="rtDelAll">ลบถนนทั้งหมด</button>
             </div>
             <p class="hint" id="rtHint"></p>
           </div>

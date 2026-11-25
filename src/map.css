@@ -248,3 +248,9 @@ aside .card h2 { position: relative; }
 #mapbox.bare .ctl, #mapbox.bare .mapopt, #mapbox.bare .minimap, #mapbox.bare > .tip, #mapbox.bare .zoom, #mapbox.bare .layers, #mapbox.bare .nsize, #mapbox.bare .keyspanel, #mapbox.bare .peek, #mapbox.bare .peekring { display: none !important; }
 .barechip { position: absolute; z-index: 7; top: 10px; right: calc(var(--barer, 10px)); font-size: .8rem; padding: 4px 10px; opacity: .85; }
 .barechip:hover { opacity: 1; }
+
+/* v0.19.5: the small map's fold button, in its top right corner, or alone in the map's corner when folded */
+.minitog { position: absolute; z-index: 5; font-size: .78rem; padding: 3px 9px; opacity: .88; }
+.minitog.open { padding: 0 7px; line-height: 1.5; opacity: .75; }
+.minitog:hover { opacity: 1; }
+#mapbox.bare .minitog { display: none !important; }

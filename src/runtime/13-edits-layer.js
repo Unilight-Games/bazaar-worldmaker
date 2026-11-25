@@ -28,7 +28,10 @@ function fillOf(i, b) {
 }
 const hits = (bb, x0, y0, x1, y1) => bb[2] > x0 && bb[0] < x1 && bb[3] > y0 && bb[1] < y1;
 function rebuild(x0, y0, x1, y1) {
-  x0 = Math.max(0, x0); y0 = Math.max(0, y0); x1 = Math.min(G.w, x1); y1 = Math.min(G.h, y1);
+  // v0.19.5: the patch's edges lie on whole pixels of the layer. An edge through the middle of a pixel cleared it only in part
+  // and painted it back only in part, so the pixel was left half see-through and the dark sea under a blank map showed as thin
+  // straight lines along the edges of every patch the brush had repainted (the owner's report, 25 Nov 2026)
+  x0 = Math.max(0, Math.floor(x0 * LS) / LS); y0 = Math.max(0, Math.floor(y0 * LS) / LS); x1 = Math.min(layer.width / LS, Math.ceil(x1 * LS) / LS); y1 = Math.min(layer.height / LS, Math.ceil(y1 * LS) / LS);
   if (x1 <= x0 || y1 <= y0) return;
   const c = LC;
   c.save(); c.setTransform(LS, 0, 0, LS, 0, 0);

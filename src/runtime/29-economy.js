@@ -306,6 +306,15 @@ function ecoLoad(b) {
 let ecoSerial = () => ({ v: 2, noSlave: ECO.noSlave, tier: ECO.tier, total: ECO.tier === 'own' ? ECO.total : 0, orgs: ECO.orgs, goods: ECO.goods, custom: ECO.custom, cats: ECO.cats, ucats: ECO.ucats, tune: ECO.tune, work: ECO.work, pop: ECO.pop, danger: ECO.danger, auto: ECO.auto, states: ECO.states, cells: ECO.cells.join(''), unit: ECO.unit, central: ECO.central });
 async function ecoSaveNow() { if (!ENV.db || !ecoLoaded || !ecoDirty || ecoSaving) return; ecoSaving = true; ecoDirty = false; try { await ENV.db.doc('map/economy').set(ecoSerial()); } catch (err) { ecoDirty = true; } ecoSaving = false; if (ecoDirty) ecoSaveNow(); }
 async function ecoFlush() { clearTimeout(ecoT); await ecoSaveNow(); }
+let sdelArm = 0, gresArm = 0;
+// every state, its land and the units it was divided into (manors, counties, duchies), as one step on the map's own undo
+function deleteAllStates() {
+  const n = ECO.states.length; if (!n) return 0;
+  admDo(() => { ECO.states = []; for (let i = 0; i < N; i++) ECO.cells[i] = '.'; ECO.adm = []; ECO.admc = new Array(N).fill(''); });
+  ecoPaint = null;
+  flash(`ลบรัฐทั้งหมด ${n} รัฐแล้ว กดย้อนเพื่อเอาคืน`);
+  return n;
+}
 function ecoChanged(tables) {                      // the owner changed something: the tables, the year, the card, the save
   if (tables) ecoApply();
   ecoStamp++; ecoDirty = true; clearTimeout(ecoT); ecoT = setTimeout(ecoSaveNow, ENV.saveDelay || 500);
@@ -378,7 +387,8 @@ function ecoTermHTML(t, k) {
   return h + '</div>';
 }
 function ecoGoodsHTML() {
-  let h = `<div class="btns" style="margin:0 0 8px"><button type="button" class="btn" data-a="gnew">เพิ่มสินค้าใหม่</button></div>`;
+  const edited = Object.keys(ECO.goods).filter(id => ecoGood(id)).length;
+  let h = `<div class="btns" style="margin:0 0 8px"><button type="button" class="btn" data-a="gnew">เพิ่มสินค้าใหม่</button>${edited ? `<button type="button" class="btn warn" data-a="gresetall">${gresArm ? 'กดอีกครั้งเพื่อคืนค่าเดิม' : `คืนค่าสินค้าเดิมทั้งหมด (${edited})`}</button>` : ''}</div>`;
   const g = ecoSel && ecoGood(ecoSel);
   if (g) {
     const yields = ECON ? ECON.prod.reduce((a, m) => a + (m.get(g.id) || 0), 0) : 0;
@@ -437,7 +447,7 @@ function ecoCapHTML(s) {                            // the city a socialist stat
   return ecoIn('เมืองศูนย์กลางของรัฐ', `<select data-f="scap"><option value="">ให้ระบบเลือก${now && !cs.some(c => c.id === s.cap) ? ' (ตอนนี้ ' + esc(now) + ')' : ''}</option>${cs.map(c => `<option value="${esc(c.id)}"${c.id === s.cap ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}</select>`);
 }
 function ecoStatesHTML() {
-  let h = `<div class="btns" style="margin:0 0 8px"><button type="button" class="btn" data-a="snew"${ECO.states.length >= 52 ? ' disabled' : ''}>เพิ่มรัฐ</button>${ECO.states.length > 1 ? `<button type="button" class="btn" data-a="stfold" data-v="0">พับทุกรัฐ</button><button type="button" class="btn" data-a="stfold" data-v="1">กางทุกรัฐ</button>` : ''}</div>`;
+  let h = `<div class="btns" style="margin:0 0 8px"><button type="button" class="btn" data-a="snew"${ECO.states.length >= 52 ? ' disabled' : ''}>เพิ่มรัฐ</button>${ECO.states.length > 1 ? `<button type="button" class="btn" data-a="stfold" data-v="0">พับทุกรัฐ</button><button type="button" class="btn" data-a="stfold" data-v="1">กางทุกรัฐ</button>` : ''}${ECO.states.length ? `<button type="button" class="btn warn" data-a="sdelall">${sdelArm ? 'กดอีกครั้งเพื่อลบทุกรัฐ' : 'ลบรัฐทั้งหมด'}</button>` : ''}</div>`;
   if (!ECO.states.length) return h + `<p class="note">ยังไม่มีรัฐ เพิ่มรัฐแล้วเลือกชื่อรัฐในแถบเครื่องมือเพื่อระบายเขตลงบนแผนที่ ระบายลงทะเลได้เพื่อกำหนดน่านน้ำ เมืองขึ้นกับรัฐของช่องที่ตั้งอยู่</p>`;
   const cnt = {}; for (const z of ECO.cells) if (z !== '.') cnt[z] = (cnt[z] || 0) + 1;
   for (const s of ECO.states) {
@@ -520,6 +530,11 @@ $('ecobody').addEventListener('click', e => {
   if (a === 'gnew') { const id = uid('x'); ECO.custom.push({ id, name: 'สินค้าใหม่', cat: 'luxury', pct: 1, off: 0, far: 0, terms: [{ on: 'g', rate: 0.02 }] }); ecoSel = id; }
   else if (a === 'gdel' && g && g.custom) { ECO.custom = ECO.custom.filter(x => x.id !== g.id); ecoSel = null; }
   else if (a === 'greset' && g) { delete ECO.goods[g.id]; }
+  else if (a === 'gresetall') {                   // v0.19.5: every built-in good back to how it ships (the owner, 25 Nov 2026); the goods he added stay
+    if (!gresArm) { gresArm = setTimeout(() => { gresArm = 0; ecoRender(); }, 4000); ecoRender(); return; }
+    clearTimeout(gresArm); gresArm = 0; const n = Object.keys(ECO.goods).length; ECO.goods = {}; if (ecoSel && !(ECO.custom.some(x => x.id === ecoSel))) ecoSel = null;
+    flash(`คืนค่าสินค้าเดิม ${n} ชนิดแล้ว สินค้าที่เพิ่มเองยังอยู่ กดย้อนเพื่อเอาคืน`);
+  }
   else if (a === 'tadd' && g && g.terms) { const ts = ecoTermsOf(g); if (ts.length < 8) ts.push({ on: 'g', rate: 0.02 }); }
   else if (a === 'tdel' && g && g.terms) { ecoTermsOf(g).splice(+b.closest('.eterm').dataset.k, 1); }
   else if (a === 'code' && g && g.terms) { const t = ecoTermsOf(g)[+b.closest('.eterm').dataset.k], ch = b.dataset.b; t.on = t.on.includes(ch) ? t.on.replace(ch, '') || ch : t.on + ch; }
@@ -531,6 +546,10 @@ $('ecobody').addEventListener('click', e => {
   else if (a === 'unew') { if (ECO.ucats.length >= 24) return; ECO.ucats.push({ id: 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name: 'ประเภทใหม่', col: SCOLS[(ECO.ucats.length + 3) % SCOLS.length], v: 3, bulk: 0.5, need: 0.05 }); }
   else if (a === 'udel') { const id = b.closest('[data-u]').dataset.u; ECO.ucats = ECO.ucats.filter(u => u.id !== id); }
   else if (a === 'snew') { const id = [...SKEYS].find(k => !ECO.states.some(s => s.id === k)); if (!id) return; ECO.states.push({ id, name: 'รัฐที่ ' + (ECO.states.length + 1), color: SCOLS[ECO.states.length % SCOLS.length], sys: 'merc', cur: '', rate: 1, rel: {} }); ecoPaint = id; }
+  else if (a === 'sdelall') {                     // v0.19.5: every state at once, a second press to be sure, one step back on the map's own undo
+    if (!sdelArm) { sdelArm = setTimeout(() => { sdelArm = 0; ecoRender(); }, 4000); ecoRender(); return; }
+    clearTimeout(sdelArm); sdelArm = 0; deleteAllStates(); ecoRender(); return;
+  }
   else if (a === 'sdel') { const id = b.closest('[data-s]').dataset.s; ECO.states = ECO.states.filter(s => s.id !== id); for (const s of ECO.states) delete s.rel[id]; for (let i = 0; i < N; i++) if (ECO.cells[i] === id) ECO.cells[i] = '.'; if (ecoPaint === id) ecoPaint = null; }
   else return;
   ecoChanged(true); ecoRender();
