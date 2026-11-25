@@ -19,9 +19,31 @@
     climate: { map: ['e', 'p', 't', 'st', 'sp'], byId: ['seasons'], whole: ['v', 'set'] }
   };
   const J = v => JSON.stringify(v === undefined ? null : v);
+  // v0.19.6: the fields the schema above does not name. The economy grew many after the schema was written (the units of
+  // government, organisations, marks of communities, features, beliefs, armies and more), and none of them travelled: a
+  // friend's change to them never reached the room, and when someone else changed a named field at the same moment the
+  // merged document carried the old values back (the owner's report, 26 Nov 2026). Each such field now travels by its shape:
+  // a list of things with an id as such a list, a plain object key by key, a long string of the same length letter by letter,
+  // anything else whole. A field that goes away travels as null.
+  const named = k => { const S = SCHEMA[k], o = new Set(); for (const g of ['str', 'byId', 'set', 'map', 'whole']) for (const f of S[g] || []) o.add(f); return o; };
+  const NAMED = {}; for (const k in SCHEMA) NAMED[k] = named(k);
+  const isIdList = v => Array.isArray(v) && v.length > 0 && v.every(o => o && typeof o === 'object' && !Array.isArray(o) && typeof o.id === 'string');
+  const isPlain = v => v != null && typeof v === 'object' && !Array.isArray(v);
+  function shapeOf(k, a, b) {
+    const S = SCHEMA[k], ext = { str: [], byId: [], map: [], whole: [] };
+    const keys = new Set([...Object.keys(a || {}), ...Object.keys(b || {})]);
+    for (const f of keys) {
+      if (NAMED[k].has(f)) continue; const x = a ? a[f] : undefined, y = b ? b[f] : undefined, v = y !== undefined ? y : x;
+      if (typeof x === 'string' && typeof y === 'string' && x.length === y.length && y.length > 64) ext.str.push(f);
+      else if ((isIdList(y) || (Array.isArray(y) && !y.length)) && (x === undefined || x === null || isIdList(x) || (Array.isArray(x) && !x.length)) && (isIdList(x) || isIdList(y))) ext.byId.push(f);
+      else if (isPlain(v) && (x == null || isPlain(x)) && (y == null || isPlain(y))) ext.map.push(f);
+      else ext.whole.push(f);
+    }
+    return { str: (S.str || []).concat(ext.str), byId: (S.byId || []).concat(ext.byId), set: S.set || [], map: (S.map || []).concat(ext.map), whole: (S.whole || []).concat(ext.whole) };
+  }
   const sync = {
     diff(k, a, b) {
-      const S = SCHEMA[k], d = {}; a = a || {}; b = b || {};
+      const S = shapeOf(k, a, b), d = {}; a = a || {}; b = b || {};
       for (const f of S.str || []) {
         const x = a[f] || '', y = b[f] || '';
         if (x.length !== y.length) { if (x !== y) (d.w = d.w || {})[f] = y; continue; }
@@ -50,6 +72,7 @@
         if (add.length || del.length) (d.e = d.e || {})[f] = [add, del];
       }
       for (const f of S.map || []) {
+        if (!NAMED[k].has(f) && (b[f] === undefined || b[f] === null) !== (a[f] === undefined || a[f] === null)) { (d.w = d.w || {})[f] = b[f] === undefined ? null : b[f]; continue; }
         const A = a[f] || {}, B = b[f] || {}, set = {}, del = [];
         for (const key of Object.keys(B)) if (J(A[key]) !== J(B[key])) set[key] = B[key];
         for (const key of Object.keys(A)) if (!(key in B)) del.push(key);
@@ -87,6 +110,9 @@
       for (const f of S.set || []) parts.push([...(doc[f] || [])].sort().join('|'));
       for (const f of S.map || []) parts.push(canon(doc[f] || {}));
       for (const f of S.whole || []) if (f !== 'v') parts.push(canon(doc[f] === undefined ? null : doc[f]));
+      for (const f of Object.keys(doc).filter(f => !NAMED[k].has(f) && doc[f] != null).sort()) {   // v0.19.6: the fields the schema does not name
+        const v = doc[f]; parts.push(f + '=' + (isIdList(v) ? v.map(canon).sort().join('|') : canon(v)));
+      }
       const s = parts.join('\u0001'); let h = 2166136261;
       for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
       return (h >>> 0).toString(36);

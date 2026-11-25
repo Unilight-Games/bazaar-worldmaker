@@ -161,7 +161,10 @@ opt.addEventListener('click', e => {
 });
 for (const ev of ['pointerdown', 'wheel']) { opt.addEventListener(ev, e => e.stopPropagation()); mini.addEventListener(ev, e => e.stopPropagation()); }
 if ($('worldLine')) $('worldLine').style.display = 'none';
-setInterval(() => { if (document.hidden) return; hudRender(); }, 700);
+// v0.19.6: the beat stops with the map. It ran on after the map was left, and the old map's beat measured the new map's row of
+// buttons against its own options box, long gone, and set the row's width back and forth with the new one's: the group of
+// settings buttons flickered after leaving a room and coming back (the owner, 26 Nov 2026)
+{ const beat = setInterval(() => { if (__dead || document.hidden) return; hudRender(); }, 700); __offs.push(() => clearInterval(beat)); }
 let miniKey = '';
 function miniDraw() {
   if (mini.hidden) return; const c = mini.getContext('2d'), W = mini.width, H = mini.height, sc = W / G.w;

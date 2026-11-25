@@ -15,8 +15,8 @@ let fails = 0; const ok = (c, m) => { console.log((c ? 'ok   ' : 'FAIL ') + m); 
   await T(() => { const t = MME.shell.cur.rt.test, d = t.eco(), g = t.grid(); let cells = ''; for (let i = 0; i < g.N; i++) cells += (i % g.COLS) < g.COLS / 2 ? 'A' : 'B'; d.states = [{ id: 'A', name: 'ตะวันตก', color: '#aa3333', sys: 'feud', rel: { B: 'rival' } }, { id: 'B', name: 'ตะวันออก', color: '#3355aa', sys: 'merc', rel: { A: 'rival' } }]; d.cells = cells; t.ecoSet(d); });
   await settle();
   await p.click('#modes button[data-mode="econ"]'); await p.click('#ecoTab button[data-t="adm"]'); await p.waitForTimeout(400);
-  await p.click('[data-afold="A"] summary'); await p.click('[data-aa="build"][data-s="A"]'); await p.waitForTimeout(500);
-  await p.click('[data-afold="B"] summary').catch(() => {}); await p.click('[data-aa="build"][data-s="B"]'); await settle();
+  await p.evaluate(() => { const d = document.querySelector('[data-afold="A"]'); if (d) d.open = true; }); await p.click('[data-aa="build"][data-s="A"]');   /* v0.19.6: a state not yet divided is open already */ await p.waitForTimeout(500);
+  await p.evaluate(() => { const d = document.querySelector('[data-afold="B"]'); if (d) d.open = true; }); await p.click('[data-aa="build"][data-s="B"]'); await settle();
   let a = await A(); const by = t => a.units.filter(u => u.t === t);
   ok(by(0).length > 10 && by(1).length >= 2, 'both states divided: ' + by(0).length + ' manors, ' + by(1).length + ' counties, ' + by(2).length + ' duchies');
   ok(by(0).every(u => u.hexes > 0), 'every manor has land');
@@ -40,7 +40,7 @@ let fails = 0; const ok = (c, m) => { console.log((c ? 'ok   ' : 'FAIL ') + m); 
     await p.keyboard.press('Control+z'); await p.waitForTimeout(300); a = await A(); ok(a.units.find(u => u.id === pick[1].c).up === pick[1].u, 'undo gives it back');
   }
   // names
-  await p.evaluate(() => { const d = [...document.querySelectorAll('#ecobody details')].find(x => x.textContent.includes('ชื่อของระดับ')); if (d) d.open = true; }); await p.click('[data-aa="namesTh"]'); await p.waitForTimeout(200); a = await A(); ok(a.names[2] === 'มณฑล' && a.names.princ === 'ประเทศราช', 'the Thai names of the tiers');
+  await p.evaluate(() => { const d = [...document.querySelectorAll('#ecobody details')].find(x => x.textContent.includes('ชื่อของระดับ')); if (d) d.open = true; }); await p.click('[data-aa="namesTh"]'); await p.waitForTimeout(200); a = await A(); ok(a.names[2] === 'อาณาจักร' && a.names[1] === 'มณฑล' && a.names.princ === 'ประเทศราช', 'the Thai names of the tiers');   /* v0.20.0: county, duchy, kingdom */
   // join east into west, keeping it as a principality
   await p.evaluate(() => { document.querySelector('[data-afold="B"]').open = true; }); await p.waitForTimeout(200);
   await p.click('[data-aa="join"][data-s="B"]'); await settle();

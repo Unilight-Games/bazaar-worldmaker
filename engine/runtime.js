@@ -699,7 +699,13 @@ if (BLANK) { ECAT.mana.name = 'น้ำมันดิบ'; ECAT.mana.v = ECAT.
 const ECATS = Object.keys(ECAT), ERAW = ECATS.filter(c => !ECAT[c].made && !ECAT[c].people), EMADEC = ECATS.filter(c => ECAT[c].made);
 const KIX = { capital: 0, city: 1, town: 2, fort: 3, village: 4, hamlet: 4, monastery: 4, camp: 4, waystation: 4 };   // the level each kind works at (v0.18.5: the four new kinds at a village's)
 const EPOP = [12, 7, 4, 3, 1.6];                   // heads of a capital, a city, a town, a fort, a village
-const EREACH = [7, 6, 5, 4, 4];                    // how far out each works the land, in hexes of open ground
+// how far out each works the land, in hexes of open ground. v0.19.7: the owner found communities harvesting far too much
+// ground (26 Nov 2026). Counting the reach in kilometres was tried and measured: the yields of a hex are set for the hex, not
+// for its area, so Gresland's harvest fell by more than half (its GDP from 78 to 35 million, well-being from 71 to 35). The
+// reach stays in hexes; the numbers tab scales it (reachMul), and a community with a specialty works a narrower ring (29z).
+const EREACH_HEX = [7, 6, 5, 4, 4];
+const kmHexNow = () => (ENV.meta && +ENV.meta.kmPerHex) || 34;
+const EREACH = new Proxy([], { get: (t, k) => { const i = +k; return Number.isInteger(i) && i >= 0 && i < 5 ? Math.max(1, EREACH_HEX[i] * (ETUNE.reachMul ? TU('reachMul') : 1)) : t[k]; } });
 const EIND = [1, 0.8, 0.4, 0.35, 0.1];             // workshops per head
 const ENEED = {                                    // loads a head needs a year, capital, city, town, fort, village
   grain: [1, 1, 1, 1, 1], protein: [0.5, 0.45, 0.4, 0.5, 0.35], salt: [0.09, 0.08, 0.08, 0.08, 0.07], herbs: [0.08, 0.06, 0.04, 0.03, 0.02],
@@ -1557,7 +1563,7 @@ function econCompute() {
     return { id: c.id, name: c.name || 'เมืองไม่มีชื่อ', kind: c.kind, ki, x: c.x, y: c.y, h, zone: h >= 0 ? ZO[h] : '.', pop: ecoPop(c.id, ki0) * comPop(c.id, c.kind), lk: KIK[ki], st: h >= 0 ? ECO.cells[h] : '.', fx: comFx(c.id, c.kind) };
   }).filter(c => c.h >= 0);
   const LP = landPlan(cities);                       // the land each city takes for its people: how far its fields reach, and how short it falls
-  cities.forEach((c, k) => { c.land = LP.rows[k]; c.people = c.pop * ECO.unit; c.reach = Math.max(EREACH[c.ki] + c.fx.reach, Math.min(LAND_REACH, c.land.ring + 1)); });
+  cities.forEach((c, k) => { c.land = LP.rows[k]; c.people = c.pop * ECO.unit; c.reach = Math.max(EREACH[c.ki] * (1 + c.fx.reach), Math.min(landReachHex(), c.land.ring + 1)); });
   { const ps = cities.map(c => c.pop).sort((a, b) => a - b), med = ps.length ? ps[ps.length >> 1] : 1; for (const c of cities) c.claim = clamp(Math.pow(c.pop / Math.max(1e-9, med), TU('claimPow')), 0.6, 2.5); }   // how hard a city presses on its neighbours' land
   socPrep(cities);
   PORTZ.fill(0);
@@ -5744,6 +5750,17 @@ renderTradeCard = function () {
 // None of this changes the year's trade: it is the picture of what the people need, and a count of where the land falls short.
 const LAND_GARDEN = 0.3, LAND_TERRACE = 0.25, LAND_WOODY = 0.5, LAND_HILLY = 0.3;
 const LAND_TILL = 0.45, LAND_REACH = 16, LAND_MINE = 1e5, LAND_OPEN = new Set(['g', 's', 'v', 'h', 'e', 'm', 'c', 'y']), LAND_FARM = new Set(['p', 'r']);
+// v0.19.7: how far fields may spread before the land is farmed harder (below). A cap in kilometres was tried and measured: the
+// fields also widen the ground a populous community harvests, so a crowded map of 5 km a hex lost half its GDP. It stays 16
+// hexes, and the numbers tab sets it.
+const landReachHex = () => Math.max(1, Math.round(TU('landReach')));
+const LAND_INT = 2.5;                                 // how much more a hex yields at the hardest farming (Claude's number)
+Object.assign(ETUNE, {
+  reachMul: [1, 0.25, 2, 0.05, 'ระยะที่ชุมชนเก็บเกี่ยว คูณจากค่าตั้งต้น (หมู่บ้าน 4 ช่อง ถึงเมืองหลวง 7 ช่อง) ลดลงแล้วผลผลิตลดด้วย เพราะผลผลิตตั้งไว้ต่อช่อง', 'ประชากรและแรงงาน'],
+  landReach: [LAND_REACH, 1, 30, 1, 'ไร่นาของชุมชนแผ่ออกไกลสุดกี่ช่อง ก่อนจะทำนาเข้มข้นขึ้นแทน (ไร่ที่แผ่ไกลก็ขยายพื้นที่เก็บเกี่ยวของชุมชนด้วย)', 'ประชากรและแรงงาน'],
+  intMax: [LAND_INT, 1, 5, 0.1, 'ทำนาเข้มข้นได้มากสุดกี่เท่าของผลผลิตปกติต่อช่อง ก่อนที่อาหารจะเริ่มขาด (ทดน้ำ ปลูกสองรอบ ใส่ปุ๋ยคอก)', 'ประชากรและแรงงาน'],
+  intWell: [3, 0, 20, 0.5, 'ความเป็นอยู่ที่ลดลงต่อการทำนาเข้มข้นขึ้นหนึ่งเท่า (งานหนักขึ้น)', 'ประชากรและแรงงาน'],
+});
 function ecoCrop(total) { return total < 5e8 ? 0.45 : total < 5e9 ? 0.3 : 0.15; }
 let LAND = null, landOn = (() => { try { return localStorage.getItem('mme-land') !== '0'; } catch (err) { return true; } })();
 // The land is worked out with the year itself (v0.13.0): the year asks it how far each city's fields reach, to work the ground
@@ -5759,7 +5776,7 @@ function landPlan(cities) {
   for (const k of E.cities.map((c, i) => i).sort((a, b) => E.cities[b].pop - E.cities[a].pop)) {   // the largest city takes its land first
     const c = E.cities[k], r = rows[k], P = c.pop * ECO.unit; r.need = P * crop / 100;             // square kilometres of ploughland
     if (c.h < 0) continue;
-    let nF = Math.round(P * crop / (haHex * LAND_TILL)), nW = Math.round(P * wood / (haHex * 0.8)), nM = P >= LAND_MINE ? Math.min(12, 1 + Math.floor((P - LAND_MINE) / 2.5e5)) : 0;
+    let nF = Math.round(P * crop / (haHex * LAND_TILL)), nW = Math.round(P * wood / (haHex * 0.8)), nM = P >= LAND_MINE ? Math.min(12, 1 + Math.floor((P - LAND_MINE) / 2.5e5)) : specMine(c) ? 1 : 0;   // v0.19.7: a mining village opens its mine whatever its size
     r.want = nF; r.wantW = nW; r.wantM = nM; if (!nF && !nW && !nM) continue;
     // what kind of country the city stands in, read off the land within two hexes of it
     let nl = 0, nf = 0, nm = 0; { let rg = [c.h]; const sn = new Set(rg); for (let d = 0; d <= 2; d++) { const nx = []; for (const u of rg) { const b = eff(u); if (!isW(b)) { nl++; if (FOREST.has(b)) nf++; else if (b === 'M') nm++; } for (let j = 0; j < 6; j++) { const v = NB[u * 6 + j]; if (v >= 0 && !sn.has(v)) { sn.add(v); nx.push(v); } } } rg = nx; } }
@@ -5770,7 +5787,7 @@ function landPlan(cities) {
     const woody = wf >= LAND_WOODY, hilly = wm >= LAND_HILLY;
     r.kind = woody && hilly ? 'both' : woody ? 'forest' : hilly ? 'mount' : '';
     let ring = [c.h]; const seen = new Set(ring);
-    for (let d = 0; d <= LAND_REACH && (nF >= 0.5 || nW > 0 || nM > 0) && ring.length; d++) {
+    for (let d = 0, dMax = landReachHex(); d <= dMax && (nF >= 0.5 || nW > 0 || nM > 0) && ring.length; d++) {
       const trees = [], hills = [], d0 = r.farm + r.cleared + r.logged + r.mine + r.terrace + r.garden + tot.was;
       for (const u of ring) {
         if (use[u]) continue; const b = eff(u);
@@ -5788,6 +5805,14 @@ function landPlan(cities) {
       }
       if (r.farm + r.cleared + r.logged + r.mine + r.terrace + r.garden + tot.was > d0) r.ring = d;
       const nx = []; for (const u of ring) for (let j = 0; j < 6; j++) { const v = NB[u * 6 + j]; if (v >= 0 && !seen.has(v)) { seen.add(v); nx.push(v); } } ring = nx;
+    }
+    // v0.19.7: short of ground, a community farms what it has harder before it goes short of food (the owner found the
+    // people's weight on the land too harsh, 26 Nov 2026): the yield of its fields rises up to intMax times, as Boserup argued
+    // farming grows denser as people press on the land, and only what is still missing after that is short
+    r.intens = 1;
+    if (nF >= 0.5 && r.want > 0) {
+      const got = r.want - nF, cap = Math.max(1, TU('intMax'));
+      if (got > 0) { r.intens = clamp(r.want / got, 1, cap); nF = Math.max(0, r.want - got * r.intens); } else nF = r.want;
     }
     r.short = Math.max(0, Math.round(nF)); r.lack = r.want > 0 ? clamp(Math.max(0, nF) / r.want, 0, 1) : 0; short += r.short; tot.farm += r.farm; tot.cleared += r.cleared; tot.logged += r.logged; tot.mine += r.mine; tot.terrace += r.terrace; tot.garden += r.garden;
   }
@@ -6223,7 +6248,7 @@ Object.assign(ETUNE, {
   labCheap: [0.3, 0, 0.8, 0.01, 'ค่าแรงถูกลงได้มากสุดเป็นส่วนเท่านี้ เมื่อเมืองมีคนเป็นพันเท่าของค่ากลาง', 'ประชากรและแรงงาน'],
   labMake: [0.5, 0, 2, 0.05, 'โรงงานผลิตเพิ่มเป็นกี่เท่าของส่วนที่ค่าแรงถูกลง', 'ประชากรและแรงงาน'],
   labHaul: [1, 0, 2, 0.05, 'ค่าคาราวานของเส้นที่ต่อกับเมืองถูกลงเป็นกี่เท่าของส่วนที่ค่าแรงถูกลง นับเฉพาะช่วงทางบก', 'ประชากรและแรงงาน'],
-  landFood: [1, 0, 1, 0.05, 'เมื่อที่ดินไม่พอ เมืองผลิตอาหารขาดไปเป็นส่วนเท่านี้ของส่วนที่ดินที่ขาด (1 คือขาดที่ดินเท่าไรก็ผลิตอาหารขาดเท่านั้น ส่วนที่ขาดต้องซื้อเข้า)', 'ประชากรและแรงงาน'],
+  landFood: [0.5, 0, 1, 0.05, 'เมื่อที่ดินไม่พอ เมืองผลิตอาหารขาดไปเป็นส่วนเท่านี้ของส่วนที่ดินที่ขาด (1 คือขาดที่ดินเท่าไรก็ผลิตอาหารขาดเท่านั้น ส่วนที่ขาดต้องซื้อเข้า)', 'ประชากรและแรงงาน'],
   regHomeOut: [0.85, 0.3, 1.5, 0.01, 'งานช่างตามบ้าน: ผลผลิตโรงงานเทียบกับโรงงานกะเดียว', 'ระเบียบงาน'],
   regHomeVal: [0.08, 0, 1, 0.01, 'งานช่างตามบ้าน: มูลค่าสินค้าโรงงานที่เพิ่มขึ้น', 'ระเบียบงาน'],
   regSweatOut: [1.25, 0.5, 2.5, 0.01, 'โรงงานเร่งผลิต: ผลผลิตโรงงานเทียบกับโรงงานกะเดียว', 'ระเบียบงาน'],
@@ -6385,6 +6410,7 @@ function socApply(rows) {
     let w = 100; const add = (t, v) => { if (Math.abs(v) >= 0.5) { w += v; why.push([t, v]); } };
     r.metB = socMet(E, k, SOC_BASIC, true); r.metO = socMet(E, k, SOC_BASIC, false);
     add('ของพื้นฐานที่ยังขาด', -TU('basicWell') * (1 - r.metB)); add('ของอื่นที่ยังขาด', -TU('otherWell') * (1 - r.metO));
+    add('ทำนาเข้มข้นเพราะที่ดินไม่พอ', -TU('intWell') * (((c.land && c.land.intens) || 1) - 1));   // v0.19.7
     add('รายได้ต่อหัวเทียบค่าเฉลี่ย', 8 * clamp(Math.log2(Math.max(0.01, r.rich)), -1, 1));
     add('องค์กรในเมือง', Math.min(15, 100 * orgWell(c)));
     add(EREG[c.reg][0], c.reg === 'sweat' ? -TU('regSweatWell') : c.reg === 'home' || c.reg === 'care' ? TU('regWell') : 0);
@@ -6577,6 +6603,7 @@ function socCityHTML(k) {
     + `<div class="tr">นักท่องเที่ยว <b>${socN(D.tour)}</b> คนต่อปี <span class="w">คนของเมืองออกไปเที่ยว ${socN(D.tourOut)} · สิ่งดึงดูด ${ecoPc(r.tourWhy.att)}% ชุมทาง ${ecoPc(r.tourWhy.hub)}% มั่งคั่ง ${ecoPc(r.tourWhy.rich)}% องค์กร ${ecoPc(r.tourWhy.org)}%</span></div>`
     + `<div class="tr">ความเป็นอยู่ <b>${Math.round(r.well)}</b> จาก 100 <span class="w">${r.wellWhy.filter(x => Math.abs(x[1]) >= 0.5).map(x => `${x[0]} ${socPts(x[1])}`).join(' · ') || 'ความต้องการครบ'}</span></div>`
     + `<div class="tr">ค่าแรง <b>${c.lab >= 0.005 ? 'ถูกกว่าค่ากลาง ' + ecoPc(c.lab) + '%' : c.lab <= -0.005 ? 'แพงกว่าค่ากลาง ' + ecoPc(-c.lab) + '%' : 'ค่ากลาง'}</b> <span class="w">โรงงานผลิต ×${c.work.toFixed(2)} · เก็บเกี่ยวรอบเมืองได้ไกล ${c.reach} ช่อง</span></div>`;
+  if (c.land && c.land.intens > 1.01) h += `<div class="tr">ทำนาเข้มข้น <b>×${c.land.intens.toFixed(2)}</b> <span class="w">ที่ดินรอบเมืองไม่พอ จึงทดน้ำ ปลูกหลายรอบ และใส่ปุ๋ยมากขึ้น ความเป็นอยู่ลดลงเล็กน้อย</span></div>`;
   if (c.land && c.land.lack >= 0.01) h += `<div class="tr">ที่ดินไม่พอ <b>${ecoPc(c.land.lack)}%</b> <span class="w">เมืองจึงผลิตอาหารได้ ${ecoPc(c.foodCut)}% ของที่ผืนดินให้ ส่วนที่ขาดต้องซื้อเข้า</span></div>`;
   h += `<div class="optrow"><span class="lbl">ระเบียบงานของโรงงาน</span><select data-sf="reg"${dis}>${socOpt(EREG, own, 'ตามรัฐ' + (c.sto && c.sto.reg ? ' (' + EREG[c.sto.reg][0] + ')' : ' (โรงงานกะเดียว)'))}</select></div><div class="tr w">${EREG[c.reg][1]}</div>`
     + `<div class="optrow soclot"><label title="ส่วนของคนในเมืองที่ตั้งรกรากและไม่ย้าย">ดั้งเดิม <input type="number" data-sf="nat" min="30" max="99" step="1" value="${Math.round(d.nat * 100)}"${dis}>%</label><label title="คนที่ไม่ได้ตั้งรกรากพร้อมย้ายแค่ไหน 1 คือค่ากลาง">พร้อมย้าย <input type="number" data-sf="mob" min="0" max="3" step="0.1" value="${d.mob.toFixed(1)}"${dis}></label><label title="เสน่ห์ของเมืองต่อนักท่องเที่ยว 1 คือค่ากลาง">เสน่ห์ <input type="number" data-sf="charm" min="0" max="5" step="0.1" value="${d.charm.toFixed(1)}"${dis}></label><button type="button" class="btn" data-sf="dice"${dis}>สุ่มใหม่</button></div>`
@@ -7758,6 +7785,7 @@ function taxApply(rows, book) {
       const k = g.ks[j], m = ECO.cmul[r.c.id] != null ? ECO.cmul[r.c.id] : 1, made = Math.max(0, r.made || 0);
       const parts = { poll: F.poll * mean * r.people, land: F.land * Math.max(0, r.gdp - made), corp: F.corp * made, vat: F.vat * Math.max(0, r.inc), lic: F.lic * Math.max(0, r.exX || 0), imp: imp[k] };
       let T = 0; for (const x of Object.keys(parts)) { parts[x] *= m; T += parts[x]; }
+      { const ch0 = typeof admCity === 'function' && ECO.adm.length ? admCity(r.c.id)[0] : null, ic = ch0 && ch0.inc && typeof ADMINC !== 'undefined' ? ADMINC[ch0.inc] : null; if (ic) { T *= ic[1]; for (const x of Object.keys(parts)) parts[x] *= ic[1]; r.incKind = ch0.inc; } else r.incKind = ''; }   // v0.20.0: land not folded in pays less
       const cap = 0.8 * Math.max(0, r.inc); if (T > cap && T > 0) { const q = cap / T; for (const x of Object.keys(parts)) parts[x] *= q; T = cap; }
       r.inc -= T; r.tax = T; r.taxParts = parts; for (const x of Object.keys(parts)) S.rev[x] += parts[x]; S.total += T; S.gdp += r.gdp;
       // stability of the community, which its units sum
@@ -7766,7 +7794,7 @@ function taxApply(rows, book) {
       add('ความต้องการพื้นฐาน', 40 * ((r.metB == null ? 1 : r.metB) - 0.8)); add('ความมั่งคั่ง', 8 * clamp(Math.log2(Math.max(0.05, mean > 0 ? Math.max(0, r.inc + T) / r.people / mean : 1)), -1.5, 1.5));
       if (mc && bb.cul && bb.cul !== mc) add('วัฒนธรรมต่างจากคนส่วนใหญ่ของรัฐ', -12); if (mr && bb.rel && bb.rel !== mr) add('ศาสนาต่างจากคนส่วนใหญ่ของรัฐ', -8);
       const burden = r.inc + T > 0 ? T / (r.inc + T) : 0; add('ภาระภาษี', -60 * burden); add('งบสวัสดิการ', 20 * F.bud.wel); add('งบกลาโหม', 15 * F.bud.mil);
-      const ch = typeof admCity === 'function' && ECO.adm.length ? admCity(r.c.id) : null; if (ch && ch[2] && ch[2].type === 'princ') add('ปกครองตนเอง', 5); if (ch && ch[2] && ch[2].type === 'march') add('เขตชายแดน', -3);
+      const ch = typeof admCity === 'function' && ECO.adm.length ? admCity(r.c.id) : null; if (r.incKind && typeof ADMINC !== 'undefined') add(ADMINC[r.incKind][0], ADMINC[r.incKind][2]); if (ch && ch[2] && ch[2].type === 'princ') add('ปกครองตนเอง', 5); if (ch && ch[2] && ch[2].type === 'march') add('เขตชายแดน', -3);
       const h = r.c.h != null ? r.c.h : hexAt(r.c.x, r.c.y), z = h >= 0 && typeof szAt === 'function' ? szAt(h) : null; if (z) add(z.name, { war: -25, unrest: -15, bandit: -8 }[z.kind] || -5);
       r.stab = clamp(st, 0, 100); r.stabWhy = why; r.taxWhy.push(['ภาษี', -TU('taxWell') * burden]);
       if (r.stab < TU('stabLow')) r.taxWhy.push(['เสถียรภาพต่ำ', -5]);
@@ -8910,8 +8938,17 @@ $('ecobody').addEventListener('change', e => {
 // What a tier does today: a March makes the arms of its communities and keeps watch on its border; a Principality runs its own
 // affairs and its people live a little better for it. The public purse (batch 4) collects up these tiers.
 // The starting names follow the owner's own; the Thai set beside them is Claude's offer.
-const ADMN0 = { 0: 'แมเนอร์', 1: 'เคาน์ตี', 2: 'ดัชชี', march: 'มาร์ช', princ: 'ราชรัฐ', 3: 'รัฐอธิปไตย' };
-const ADMN_TH = { 0: 'ตำบล', 1: 'เมือง', 2: 'มณฑล', march: 'หัวเมืองชายแดน', princ: 'ประเทศราช', 3: 'ราชอาณาจักร' };
+// v0.20.0: the tiers as Crusader Kings III has them (the owner chose it, 26 Nov 2026): the county is the smallest piece of land,
+// the communities in it are its baronies, counties make a duchy and duchies a kingdom; the state over them is the realm that
+// holds them in fact. The three land tiers keep their places (0, 1, 2), so a map divided before keeps its units under the new
+// names: what was a manor reads as a county, and so on up.
+const ADMN0 = { 0: 'เคาน์ตี', 1: 'ดัชชี', 2: 'คิงดอม', march: 'มาร์ช', princ: 'ราชรัฐ', 3: 'รัฐอธิปไตย' };
+const ADMN_TH = { 0: 'เมือง', 1: 'มณฑล', 2: 'อาณาจักร', march: 'หัวเมืองชายแดน', princ: 'ประเทศราช', 3: 'ราชอาณาจักร' };
+const ADMN_OLD = [{ 0: 'แมเนอร์', 1: 'เคาน์ตี', 2: 'ดัชชี', march: 'มาร์ช', princ: 'ราชรัฐ', 3: 'รัฐอธิปไตย' }, { 0: 'ตำบล', 1: 'เมือง', 2: 'มณฑล', march: 'หัวเมืองชายแดน', princ: 'ประเทศราช', 3: 'ราชอาณาจักร' }];
+const ADM_HOLD = 0.51;                                // a state holds a duchy or a kingdom when it has this share of its counties (CK3's 51%)
+// v0.20.0, from Victoria 3: how fully a county is folded into its state. Unincorporated land pays half its taxes and is a
+// little less settled; a colony pays a fifth and is less settled again. The shares are Claude's, for the owner to tune.
+const ADMINC = { '': ['ผนวกเต็ม', 1, 0], part: ['ไม่ผนวก (ชายขอบ)', 0.5, -3], col: ['อาณานิคม', 0.2, -8] };
 const ADMFX = { march: { arms: 1.25, well: -1 }, princ: { well: 2 } };
 ECO.adm = []; ECO.admc = new Array(N).fill(''); ECO.admn = { ...ADMN0 };
 const ADM = { stamp: 0, idx: null, lv: 2, sel: null, paint: false, cityKey: -1, city: new Map() };
@@ -8960,10 +8997,11 @@ function admCity(id) {
     ld(b); b = b || {}; ECO.adm = [];
     for (const u of (Array.isArray(b.adm) ? b.adm : []).slice(0, 6000)) {
       if (!u || typeof u.id !== 'string' || !/^[a-z0-9]{1,16}$/.test(u.id) || ECO.adm.some(x => x.id === u.id) || ![0, 1, 2].includes(u.t)) continue;
-      ECO.adm.push({ id: u.id, t: u.t, name: ecoStr(u.name, 60), up: ecoStr(u.up, 16), type: u.t === 2 && ADMFX[u.type] ? u.type : '', seat: ecoStr(u.seat, 120) });
+      ECO.adm.push({ id: u.id, t: u.t, name: ecoStr(u.name, 60), up: ecoStr(u.up, 16), type: u.t === 2 && ADMFX[u.type] ? u.type : '', seat: ecoStr(u.seat, 120), ...(u.t === 0 && ADMINC[u.inc] && u.inc ? { inc: u.inc } : {}) });
     }
     ECO.admc = new Array(N).fill(''); if (b.admc && typeof b.admc === 'object') for (const [id, list] of Object.entries(b.admc)) { const u = admById(id); if (!u || u.t !== 0 || !Array.isArray(list)) continue; for (const i of list.slice(0, N)) if (Number.isInteger(i) && i >= 0 && i < N) ECO.admc[i] = id; }
     ECO.admn = { ...ADMN0 }; if (b.admn && typeof b.admn === 'object') for (const k of Object.keys(ADMN0)) if (typeof b.admn[k] === 'string' && b.admn[k].trim()) ECO.admn[k] = b.admn[k].slice(0, 30);
+    { const j = JSON.stringify(ECO.admn); if (ADMN_OLD.some(o => JSON.stringify(o) === j)) ECO.admn = { ...(JSON.stringify(ADMN_OLD[1]) === j ? ADMN_TH : ADMN0) }; }   // the old stock names give way to the new ones; names the owner wrote stay
     ADM.stamp++; ADM.idx = null; ADM.city.clear(); admSheetKey = '';
   };
   ecoSerial = function () {
@@ -8987,7 +9025,12 @@ function admBuild(s) {
   const X = admIndex(), old = new Set(ECO.adm.filter(u => X.st.get(u.id) === s.id).map(u => u.id)); ECO.adm = ECO.adm.filter(u => !old.has(u.id)); for (const i of land) ECO.admc[i] = '';
   for (let i = 0; i < N; i++) if (old.has(ECO.admc[i])) ECO.admc[i] = '';
   // manors: the land goes to the nearest community the cheapest way over the ground
-  const seeds = cs.map(c => ({ c, h: c.h != null ? c.h : hexAt(c.x, c.y) }));
+  // v0.20.0: a county is seated at one of the greater communities, and the smaller ones near it are its baronies: about one
+  // county for every two and a half communities, the seats spread out over the state, the most populous first
+  const byPop = cs.slice().sort((a, b) => b.pop - a.pop), nC = Math.max(1, Math.round(cs.length / 2.5)), span = Math.sqrt(land.length) * R * 1.6 / Math.sqrt(nC), heads = [];
+  for (const c of byPop) { if (heads.length >= nC) break; if (heads.some(h => Math.hypot(h.x - c.x, h.y - c.y) < span)) continue; heads.push(c); }
+  for (const c of byPop) { if (heads.length >= nC) break; if (!heads.includes(c)) heads.push(c); }
+  const seeds = heads.map(c => ({ c, h: c.h != null ? c.h : hexAt(c.x, c.y) }));
   if (!seeds.length) seeds.push({ c: null, h: land[0] });
   const cost = i => { const b = eff(i); return b === 'M' ? 4 : 'fokjaw'.includes(b) ? 1.5 : b === 'd' || b === 'n' ? 1.8 : 1; };
   const T = new Float64Array(N).fill(Infinity), own = new Int32Array(N).fill(-1), H = [];
@@ -9008,8 +9051,8 @@ function admBuild(s) {
     return ups;
   };
   if (manors.length < 2) return manors.length;
-  const counties = group(manors, 5, h => { const u = { id: admNewId(), t: 1, name: h.u.name, up: '', type: '', seat: h.u.seat }; ECO.adm.push(u); return { u, x: h.x, y: h.y, pop: 0 }; });
-  if (counties.length >= 4) {
+  const counties = group(manors, 4, h => { const u = { id: admNewId(), t: 1, name: h.u.name, up: '', type: '', seat: h.u.seat }; ECO.adm.push(u); return { u, x: h.x, y: h.y, pop: 0 }; });   // v0.20.0: duchies of about four counties
+  if (counties.length >= 3) {
     const duchies = group(counties, 4, h => { const u = { id: admNewId(), t: 2, name: h.u.name, up: '', type: '', seat: h.u.seat }; ECO.adm.push(u); return { u, x: h.x, y: h.y, pop: 0 }; });
     // a duchy on the border with a rival keeps the march
     ADM.idx = null; ADM.stamp++; const X2 = admIndex();
@@ -9105,36 +9148,57 @@ function admAnnex(h, quiet) {
     $('ecobody').innerHTML = admHTML();
   };
 }
+// v0.20.0: who holds a duchy or a kingdom in fact: its counties, counted by the state each lies in (de jure, the title is the
+// land; de facto, the state with 51% of its counties holds it)
+function admCounties(u, X) { const out = []; const walk = x => { if (x.t === 0) { out.push(x); return; } for (const k of X.kids.get(x.id) || []) walk(X.by.get(k)); }; walk(u); return out; }
+function admHold(u, X) {
+  const cs = admCounties(u, X), n = new Map(); for (const c of cs) { const z = X.st.get(c.id) || ''; n.set(z, (n.get(z) || 0) + 1); }
+  let holder = null; for (const [z, k] of n) if (z && k / Math.max(1, cs.length) >= ADM_HOLD) holder = ECO.states.find(x => x.id === z) || null;
+  return { total: cs.length, n, holder };
+}
+// a state's titles: the duchies and kingdoms it holds in fact, and those it holds in part, which it has a claim to
+function admTitlesHTML(s, X) {
+  const held = [], part = [];
+  for (const u of ECO.adm) { if (u.t < 1) continue; const H = admHold(u, X), k = H.n.get(s.id) || 0; if (!k || !H.total) continue; (H.holder === s ? held : part).push(`<a href="#" data-adm="${u.id}">${esc(admTitle(u))}</a> ${k}/${H.total}`); }
+  return (held.length ? `<div class="tr"><b>ตำแหน่งที่ครอง</b> <span class="w">${held.join(' · ')}</span></div>` : '')
+    + (part.length ? `<div class="tr"><b>อ้างสิทธิ์ได้ (ครองไม่ถึง 51%)</b> <span class="w">${part.join(' · ')}</span></div>` : '');
+}
 function admHTML() {
   const X = admIndex(), dis = editable ? '' : ' disabled', lv = ADM.lv;
-  let h = `<div class="erow"><span class="lbl">คลิกเลือกระดับ</span><div class="seg" id="admLv">${[0, 1, 2, 3].map(t => `<button type="button" data-lv="${t}" aria-pressed="${t === lv}">${esc(ECO.admn[t])}</button>`).join('')}</div></div>`;
+  let h = `<div class="erow"><span class="lbl">คลิกเลือกระดับ</span><div class="seg" id="admLv">${[0, 1, 2, 3].map(t => `<button type="button" data-lv="${t}" aria-pressed="${t === lv}">${esc(ECO.admn[t])}</button>`).join('')}</div></div>`
+    + (editable && ECO.states.length ? `<div class="btns" style="margin:4px 0 8px">${[0, 1, 2].map(t => `<button type="button" class="btn" data-aa="new" data-t="${t}">ตั้ง${esc(ECO.admn[t])}ใหม่</button>`).join('')}</div>` : '');
   // the chosen unit
-  if (ADM.sel && ADM.sel.startsWith('S:')) { const s = ECO.states.find(x => x.id === ADM.sel.slice(2)); if (s) h += `<div class="scard" style="padding:8px"><b>${esc(ECO.admn[3])} ${esc(s.name)}</b><div class="tr w">กด Shift ค้างแล้วคลิกบนแผนที่เพื่อผนวกหน่วยที่ใหญ่ที่สุดใต้ช่องนั้นพร้อมดินแดน</div><button type="button" class="btn" data-sopen="${s.id}">การ์ดของรัฐ</button></div>`; }
+  if (ADM.sel && ADM.sel.startsWith('S:')) { const s = ECO.states.find(x => x.id === ADM.sel.slice(2)); if (s) h += `<div class="scard" style="padding:8px"><b>${esc(ECO.admn[3])} ${esc(s.name)}</b><div class="tr w">กด Shift ค้างแล้วคลิกบนแผนที่เพื่อผนวกหน่วยที่ใหญ่ที่สุดใต้ช่องนั้นพร้อมดินแดน</div><button type="button" class="btn" data-sopen="${s.id}">การ์ดของรัฐ</button>${admTitlesHTML(s, X)}</div>`; }
   const u = ADM.sel && !ADM.sel.startsWith('S:') ? admById(ADM.sel) : null;
   if (u) {
     const up = X.upOf(u), st = ECO.states.find(s => s.id === X.st.get(u.id)), cs = X.cities.get(u.id) || [], kids = (X.kids.get(u.id) || []).map(id => X.by.get(id));
     const vc = new Map(visibleCities().map(c => [c.id, c]));
     h += `<div class="scard" style="padding:8px"><b>${esc(admTitle(u))}</b> <small>${X.hexes.get(u.id).length} ช่อง · ${cs.length} ชุมชน · ${socN(X.people.get(u.id) || 0)} คน</small>`
       + `<div class="tr w">ขึ้นกับ ${up ? `<a href="#" data-adm="${up.id}">${esc(admTitle(up))}</a>` : st ? `<a href="#" data-sopen="${st.id}">${esc(ECO.admn[3])} ${esc(st.name)}</a>` : 'ไม่มีรัฐ'}</div>`
+      + (u.t >= 1 ? (() => { const H = admHold(u, X), parts = [...H.n].filter(([z]) => z).map(([z, k]) => { const st2 = ECO.states.find(x => x.id === z); return `${esc(st2 ? st2.name : '?')} ${k}/${H.total}`; }).join(' · ');
+          return `<div class="tr w">ตามสิทธิ์ (de jure) มี ${H.total} ${esc(ECO.admn[0])} · ${H.holder ? `ครองโดย <b>${esc(H.holder.name)}</b>` : 'ยังไม่มีรัฐใดครองถึง 51%'}${parts ? ' · ' + parts : ''}</div>`; })() : '')
       + `<div class="erow"><label>ชื่อ <input type="text" data-af="name" maxlength="60" value="${esc(u.name)}"${dis}></label>`
       + (u.t === 2 ? `<label>ชนิด <select data-af="type"${dis}><option value="">${esc(ECO.admn[2])}</option><option value="march"${u.type === 'march' ? ' selected' : ''}>${esc(ECO.admn.march)}</option><option value="princ"${u.type === 'princ' ? ' selected' : ''}>${esc(ECO.admn.princ)}</option></select></label>` : '') + `</div>`
+      + (u.t === 0 ? `<div class="erow"><label>การผนวก <select data-af="inc"${dis}>${Object.entries(ADMINC).map(([k, v]) => `<option value="${k}"${(u.inc || '') === k ? ' selected' : ''}>${v[0]}</option>`).join('')}</select></label><span class="lbl">${u.inc ? `เก็บภาษีได้ ${Math.round(ADMINC[u.inc][1] * 100)}% เสถียรภาพ ${ADMINC[u.inc][2]}` : 'เก็บภาษีเต็ม'}</span></div>` : '')
       + `<div class="erow"><label>ที่ตั้งศูนย์กลาง <select data-af="seat"${dis}><option value="">ไม่ระบุ</option>${cs.map(id => `<option value="${esc(id)}"${id === u.seat ? ' selected' : ''}>${esc((vc.get(id) || {}).name || 'ไม่มีชื่อ')}</option>`).join('')}</select></label></div>`
       + (u.type === 'march' ? `<div class="tr w">${esc(ECO.admn.march)}: เขตทหาร ชุมชนในเขตทำอาวุธได้มากขึ้นหนึ่งในสี่ ความเป็นอยู่ −1</div>` : u.type === 'princ' ? `<div class="tr w">${esc(ECO.admn.princ)}: ปกครองตนเองเกือบเต็มที่ ความเป็นอยู่ +2 และในระบบการคลังจะเก็บภาษีไว้เองได้มากกว่า</div>` : '')
       + (kids.length ? `<div class="tr"><b>หน่วยในสังกัด</b> <span class="w">${kids.map(k => `<a href="#" data-adm="${k.id}">${esc(admTitle(k))}</a>`).join(' · ')}</span></div>` : '')
-      + (cs.length ? `<div class="tr"><b>ชุมชน</b> <span class="w">${cs.slice(0, 30).map(id => `<a href="#" data-city="${esc(id)}">${esc((vc.get(id) || {}).name || 'ไม่มีชื่อ')}</a>`).join(' · ')}${cs.length > 30 ? ' …' : ''}</span></div>` : '')
+      + (cs.length ? `<div class="tr"><b>${u.t === 0 ? 'บาโรนี (ชุมชนในเคาน์ตี)' : 'ชุมชน'}</b> <span class="w">${cs.slice(0, 30).map(id => `<a href="#" data-city="${esc(id)}">${esc((vc.get(id) || {}).name || 'ไม่มีชื่อ')}</a>`).join(' · ')}${cs.length > 30 ? ' …' : ''}</span></div>` : '')
       + `<div class="btns"><button type="button" class="btn" data-note="s:${u.id}" data-nt="${esc(admTitle(u))}">${noteOf('s:' + u.id) ? 'ประวัติ' : 'เขียนประวัติ'}</button>${up ? `<button type="button" class="btn" data-aa="free"${dis}>แยกออกจากหน่วยเหนือ</button>` : ''}<button type="button" class="btn warn" data-aa="del"${dis}>ยุบหน่วยนี้</button></div></div>`;
   }
   // each state, its tree
   for (const s of ECO.states) {
+    // v0.19.6: a state not yet divided shows its card open, with the button to divide it (the owner could not find it folded away)
     const tops = ECO.adm.filter(x => !X.upOf(x) && X.st.get(x.id) === s.id).sort((a, b) => b.t - a.t || (X.people.get(b.id) || 0) - (X.people.get(a.id) || 0));
     const tree = x => `<li><a href="#" data-adm="${x.id}"${ADM.sel === x.id ? ' class="on"' : ''}>${esc(admTitle(x))}</a>${x.t > 0 && (X.kids.get(x.id) || []).length ? `<ul>${X.kids.get(x.id).map(id => tree(X.by.get(id))).join('')}</ul>` : ''}</li>`;
-    h += `<details class="efold scard"${GDPV['ad' + s.id] ? ' open' : ''} data-afold="${s.id}"><summary><i class="sdot" style="background:${s.color}"></i>${esc(ECO.admn[3])} ${esc(s.name)} <small>${tops.length ? ECO.adm.filter(x => X.st.get(x.id) === s.id).length + ' หน่วย' : 'ยังไม่แบ่ง'}</small></summary><div class="eform">`
+    h += `<details class="efold scard"${GDPV['ad' + s.id] || (GDPV['ad' + s.id] == null && !tops.length) ? ' open' : ''} data-afold="${s.id}"><summary><i class="sdot" style="background:${s.color}"></i>${esc(ECO.admn[3])} ${esc(s.name)} <small>${tops.length ? ECO.adm.filter(x => X.st.get(x.id) === s.id).length + ' หน่วย' : 'ยังไม่แบ่ง'}</small></summary><div class="eform">`
       + `<div class="btns"><button type="button" class="btn" data-aa="build" data-s="${s.id}"${dis}>${tops.length ? 'แบ่งใหม่อัตโนมัติ' : 'แบ่งหน่วยอัตโนมัติ'}</button><button type="button" class="btn" data-aa="sel" data-s="${s.id}">เลือกรัฐนี้</button></div>`
       + (tops.length ? `<ul class="admtree">${tops.map(tree).join('')}</ul>` : '')
+      + admTitlesHTML(s, X)
       + (ECO.states.length > 1 ? `<div class="erow"><label>รวมเข้ากับ <select data-aj="${s.id}"${dis}>${ECO.states.filter(o => o !== s).map(o => `<option value="${o.id}">${esc(o.name)}</option>`).join('')}</select></label><label><input type="checkbox" data-ak="${s.id}" checked${dis}> เก็บรัฐนี้ไว้เป็น${esc(ECO.admn.princ)}</label><button type="button" class="btn warn" data-aa="join" data-s="${s.id}"${dis}>รวมรัฐ</button></div>` : '')
       + `</div></details>`;
   }
-  if (!ECO.states.length) h += '<p class="note">ยังไม่มีรัฐ เพิ่มรัฐในแท็บรัฐและเขตแดนก่อน</p>';
+  if (!ECO.states.length) h += '<p class="note">ยังไม่มีรัฐ หน่วยการปกครองแบ่งได้ภายในรัฐเท่านั้น เพิ่มรัฐและระบายเขตแดนก่อน แล้วกลับมาแบ่งที่นี่</p><div class="btns"><button type="button" class="btn" data-aa="gost">ไปแท็บรัฐและเขตแดน</button></div>';
   h += `<details class="efold"><summary>ชื่อของระดับการปกครอง</summary><div class="eform"><div class="erow">${['0', '1', '2', 'march', 'princ', '3'].map(k => `<label>${{ 0: 'ระดับเล็กสุด', 1: 'ระดับที่สอง', 2: 'ระดับที่สาม', march: 'ระดับที่สามแบบชายแดน', princ: 'ระดับที่สามแบบปกครองตนเอง', 3: 'ระดับสูงสุด' }[k]} <input type="text" data-an="${k}" maxlength="30" value="${esc(ECO.admn[k])}" style="width:9em"${dis}></label>`).join('')}</div>`
     + `<div class="btns"><button type="button" class="btn" data-aa="names0"${dis}>ชื่อแบบยุโรป</button><button type="button" class="btn" data-aa="namesTh"${dis}>ชื่อแบบไทยโบราณ</button></div></div></details>`;
   return h;
@@ -9146,8 +9210,11 @@ $('ecobody').addEventListener('click', e => {
   const cg = e.target.closest ? e.target.closest('[data-city]') : null; if (cg) { e.preventDefault(); const v = visibleCities().find(c => c.id === cg.dataset.city); if (v) { setMode('city'); selectCity(v.id); admFocusXY(v.x, v.y); } return; }
   const b = e.target.closest ? e.target.closest('[data-aa]') : null; if (!b) return; const a = b.dataset.aa;
   if (a === 'sel') { ADM.sel = 'S:' + b.dataset.s; ADM.lv = 3; ecoRender(); requestDraw(); return; }
+  if (a === 'gost') { ecoTab = 'states'; ecoRender(); requestDraw(); return; }
   if (!editable) return; const u = admById(ADM.sel);
-  if (a === 'build') { const s = ECO.states.find(x => x.id === b.dataset.s); if (s) { let n = 0; admDo(() => { n = admBuild(s); }); flash(n ? `แบ่ง${s.name}เป็น ${n} ${ECO.admn[0]}แล้ว` : 'รัฐนี้ยังไม่มีดินแดนบนแผ่นดิน'); } }
+  if (a === 'new') { const t = +b.dataset.t; if (![0, 1, 2].includes(t)) return; const nu = { id: admNewId(), t, name: ECO.admn[t] + 'ใหม่', up: '', type: '', seat: '' }; admDo(() => { ECO.adm.push(nu); }); ADM.sel = nu.id; ADM.lv = t; ecoRender(); requestDraw();
+    flash(t === 0 ? `ตั้ง${ECO.admn[0]}ใหม่แล้ว กด Shift ค้างแล้วลากบนแผนที่เพื่อระบายที่ดินให้` : `ตั้ง${ECO.admn[t]}ใหม่แล้ว กด Shift ค้างแล้วคลิก${ECO.admn[t - 1]}บนแผนที่เพื่อรวมเข้ามา`); return; }
+  if (a === 'build') { const s = ECO.states.find(x => x.id === b.dataset.s); if (s) { let n = 0; admDo(() => { n = admBuild(s); }); flash(n ? `แบ่ง${s.name} เป็น ${n} ${ECO.admn[0]}แล้ว` : 'รัฐนี้ยังไม่มีดินแดนบนแผ่นดิน'); } }
   else if (a === 'free' && u) admDo(() => { u.up = ''; });
   else if (a === 'del' && u) { admDo(() => { const X = admIndex(), up = X.upOf(u); for (const k of X.kids.get(u.id) || []) X.by.get(k).up = up ? up.id : ''; if (u.t === 0) { for (let i = 0; i < N; i++) if (ECO.admc[i] === u.id) ECO.admc[i] = ''; } ECO.adm = ECO.adm.filter(x => x !== u); }); ADM.sel = null; ecoRender(); }
   else if (a === 'join') { const from = ECO.states.find(x => x.id === b.dataset.s), to = ECO.states.find(x => x.id === $('ecobody').querySelector(`[data-aj="${b.dataset.s}"]`).value), keep = $('ecobody').querySelector(`[data-ak="${b.dataset.s}"]`).checked; if (from && to) { admDo(() => admJoin(from, to, keep)); ECOX.byKey.delete(from.id); flash(`รวม${from.name}เข้ากับ${to.name}แล้ว` + (keep ? ` ${from.name}เป็น${ECO.admn.princ}` : '')); ecoChanged(true); } }
@@ -9157,7 +9224,7 @@ $('ecobody').addEventListener('change', e => {
   if (ecoTab !== 'adm' || !editable) return; const el = e.target, u = admById(ADM.sel);
   if (el.dataset.an) { const v = el.value.trim().slice(0, 30); if (v) admDo(() => { ECO.admn[el.dataset.an] = v; }); return; }
   if (!u || !el.dataset.af) return; const f = el.dataset.af;
-  admDo(() => { if (f === 'name') u.name = el.value.trim().slice(0, 60); else if (f === 'type') u.type = ADMFX[el.value] ? el.value : ''; else if (f === 'seat') u.seat = el.value; });
+  admDo(() => { if (f === 'name') u.name = el.value.trim().slice(0, 60); else if (f === 'type') u.type = ADMFX[el.value] ? el.value : ''; else if (f === 'seat') u.seat = el.value; else if (f === 'inc' && u.t === 0) { if (ADMINC[el.value] && el.value) u.inc = el.value; else delete u.inc; } });
 });
 $('ecobody').addEventListener('toggle', e => { const d = e.target; if (d.dataset && d.dataset.afold) { GDPV['ad' + d.dataset.afold] = d.open ? 1 : 0; } }, true);
 function admFocusXY(x, y) { const r = cv.getBoundingClientRect(); view.x = r.width / 2 - x * view.s; view.y = r.height / 2 - y * view.s; clampView(); requestDraw(); }
@@ -9691,7 +9758,10 @@ opt.addEventListener('click', e => {
 });
 for (const ev of ['pointerdown', 'wheel']) { opt.addEventListener(ev, e => e.stopPropagation()); mini.addEventListener(ev, e => e.stopPropagation()); }
 if ($('worldLine')) $('worldLine').style.display = 'none';
-setInterval(() => { if (document.hidden) return; hudRender(); }, 700);
+// v0.19.6: the beat stops with the map. It ran on after the map was left, and the old map's beat measured the new map's row of
+// buttons against its own options box, long gone, and set the row's width back and forth with the new one's: the group of
+// settings buttons flickered after leaving a room and coming back (the owner, 26 Nov 2026)
+{ const beat = setInterval(() => { if (__dead || document.hidden) return; hudRender(); }, 700); __offs.push(() => clearInterval(beat)); }
 let miniKey = '';
 function miniDraw() {
   if (mini.hidden) return; const c = mini.getContext('2d'), W = mini.width, H = mini.height, sc = W / G.w;
@@ -9811,6 +9881,162 @@ __on(window, 'keydown', e => {
   else if (code === 'KeyH') { GAME.mini = !GAME.mini; gameSave(); hudRender(); miniDraw(); }
   else return; e.preventDefault();
 });
+// ---------- what a community is known for (v0.19.7) ----------
+// The owner found communities alike, each taking a little of everything from a wide ring of ground, and asked for some to
+// live by one thing they are good at: a mining village, salt pans, a fishing village and many more (26 Nov 2026). A
+// community may take one specialty. Where the ground around it (two hexes out) allows the trade, the goods of the specialty
+// come out of its harvest twice over, and the rest of what it gathers at seven parts in ten, since its hands are on the one
+// thing; a mining village opens a mine on a mountain beside it, whatever its size. Ground that does not allow the trade
+// leaves the community as it was, and its card says why. The doubling, the seven in ten and the two hexes are Claude's
+// numbers, for the owner to tune. A better price for goods of a famous place was proposed too, but the year's trade prices
+// goods by their class, not one by one, so it waits for a market that knows them apart.
+const SPEC_MULT = 2, SPEC_OTHER = 0.7;
+// what the ground two hexes out holds: kinds of ground counted, the sea and lakes, rivers, features and ruins
+function specGround(h) {
+  const o = { M: 0, sea: 0, sea1: 0, lake: 0, riv: 0, forest: 0, f: 0, j: 0, a: 0, o: 0, d: 0, cold: 0, wet: 0, grass: 0, dry: 0, farm: 0, u: 0, feat: new Set(), ruin: 0 };
+  if (h < 0) return o;
+  let ring = [h]; const seen = new Set(ring);
+  for (let d = 0; d <= 2; d++) {
+    const nx = [];
+    for (const u of ring) {
+      const b = eff(u);
+      if (isSea(b)) { o.sea++; if (d <= 1) o.sea1++; } else if (b === 'L') o.lake++;
+      else {
+        if (b === 'M') o.M++; if (FOREST.has(b)) o.forest++; if (b === 'f') o.f++; if (b === 'j') o.j++; if (b === 'a') o.a++; if (b === 'o' || b === 'k') o.o++;
+        if (b === 'd') o.d++; if (b === 't' || b === 'n') o.cold++; if (b === 'w' || b === 'm') o.wet++; if ('gsvhe'.includes(b)) o.grass++; if ('scy'.includes(b)) o.dry++; if (b === 'p' || b === 'r') o.farm++; if (b === 'u') o.u++;
+        if ((RV[u] === '1' && shownAt(u)) || URVH.has(u)) o.riv++;
+      }
+      const fk = ECO.feat ? ECO.feat[u] : '.'; if (fk && fk !== '.' && featAt(u)) o.feat.add(fk);
+      for (let j = 0; j < 6; j++) { const v = NB[u * 6 + j]; if (v >= 0 && !seen.has(v)) { seen.add(v); nx.push(v); } }
+    }
+    ring = nx;
+  }
+  for (const p of ptLike()) if (p.k === 'ruin') { const ph = p.h != null ? p.h : hexAt(p.x, p.y); if (ph >= 0 && seen.has(ph)) o.ruin++; }
+  return o;
+}
+// each specialty: its group, its name, the goods it lives by (those of Gresland and of our own world alike), what the ground
+// must hold, and that in words
+const SPECG = { mine: 'เหมืองและหิน', salt: 'เกลือ', water: 'น้ำ', wood: 'ป่า', crop: 'ไร่สินค้าราคาดี', herd: 'เลี้ยงสัตว์', other: 'อื่น ๆ' };
+const SPEC = {
+  iron: ['mine', 'หมู่บ้านเหมืองเหล็ก', ['iron'], g => g.M > 0, 'มีภูเขาไม่เกินสองช่อง'],
+  copper: ['mine', 'เหมืองทองแดงและดีบุก', ['copper'], g => g.M > 0, 'มีภูเขาไม่เกินสองช่อง'],
+  gold: ['mine', 'เหมืองทองคำ', ['gold'], g => g.M > 0 || g.riv > 0, 'มีภูเขาหรือแม่น้ำไม่เกินสองช่อง'],
+  silver: ['mine', 'เหมืองเงิน', ['silver'], g => g.M > 0, 'มีภูเขาไม่เกินสองช่อง'],
+  gems: ['mine', 'เหมืองพลอย', ['gems', 'bloodruby'], g => g.M > 0, 'มีภูเขาไม่เกินสองช่อง'],
+  coal: ['mine', 'เหมืองถ่านหิน', ['coal'], g => g.M > 0, 'มีภูเขาไม่เกินสองช่อง'],
+  arcane: ['mine', 'เหมืองแร่เวท', ['mithril', 'hyperium', 'adamant', 'orichalcum', 'umbralite', 'manastone', 'sephine', 'floatstone', 'phantomstone'], g => g.M > 0, 'มีภูเขาไม่เกินสองช่อง'],
+  sulfur: ['mine', 'บ่อกำมะถัน', ['sulfur'], g => g.u > 0 || g.feat.has('c') || g.feat.has('m') || g.feat.has('d'), 'มีทุ่งกำมะถัน ดินภูเขาไฟ หรือบ่อน้ำร้อนใกล้ ๆ'],
+  quarry: ['mine', 'หมู่บ้านบ่อหิน', ['stone'], g => g.M > 0 || g.feat.has('q') || g.feat.has('j'), 'มีภูเขา ภูเขาหินปูน หรือหุบผาใกล้ ๆ'],
+  potter: ['mine', 'หมู่บ้านช่างปั้น', ['clay'], g => g.riv > 0 || g.lake > 0 || g.wet > 0, 'มีแม่น้ำ ทะเลสาบ หรือที่ลุ่มใกล้ ๆ'],
+  seasalt: ['salt', 'นาเกลือทะเล', ['seasalt'], g => g.sea1 > 0, 'อยู่ติดทะเล'],
+  rocksalt: ['salt', 'บ่อเกลือสินเธาว์', ['rocksalt', 'minesalt', 'desertsalt', 'plainsalt'], g => g.feat.has('e') || g.d > 0 || g.M > 0, 'มีแหล่งเกลือ ทะเลทราย หรือภูเขาใกล้ ๆ'],
+  seafish: ['water', 'หมู่บ้านประมงทะเล', ['seafish', 'dragonalgae'], g => g.sea1 > 0, 'อยู่ติดทะเล'],
+  lakefish: ['water', 'หมู่บ้านประมงน้ำจืด', ['lakefish'], g => g.lake > 0 || g.riv > 0, 'มีทะเลสาบหรือแม่น้ำใกล้ ๆ'],
+  pearl: ['water', 'หมู่บ้านไข่มุก', ['pearl'], g => g.sea1 > 0, 'อยู่ติดทะเล (แนวปะการังหรือลากูนยิ่งดี)'],
+  whale: ['water', 'ฐานล่าวาฬ', ['whaleoil'], g => g.sea1 > 0, 'อยู่ติดทะเล'],
+  logging: ['wood', 'หมู่บ้านตัดไม้', ['softwood', 'hardwood', 'tropicalwood', 'swampwood', 'pine', 'darkwood', 'junglewood', 'steelwood'], g => g.forest >= 3, 'มีป่าอย่างน้อยสามช่องใกล้ ๆ'],
+  charcoal: ['wood', 'หมู่บ้านเผาถ่าน', ['charcoal'], g => g.forest >= 2, 'มีป่าอย่างน้อยสองช่องใกล้ ๆ'],
+  pitch: ['wood', 'หมู่บ้านเก็บยางสน', ['pitch'], g => g.f > 0, 'มีป่าสนใกล้ ๆ'],
+  finewood: ['wood', 'หมู่บ้านไม้หอม', ['finewood'], g => g.j + g.a > 0, 'มีป่าดงดิบหรือป่าบรรพกาลใกล้ ๆ'],
+  furs: ['wood', 'หมู่บ้านพรานขนสัตว์', ['furs', 'game', 'phantomgame'], g => g.forest >= 2 || g.cold > 0, 'มีป่าหรือทุนดราใกล้ ๆ'],
+  honey: ['wood', 'หมู่บ้านน้ำผึ้ง', ['honey', 'bloodroot', 'bluebird'], g => g.forest + g.grass > 0, 'มีป่าหรือทุ่งดอกไม้ใกล้ ๆ'],
+  herbs: ['wood', 'หมู่บ้านสมุนไพรและเห็ด', ['herbs', 'crimsonvein', 'cliffmush', 'shadowflora', 'guardian', 'coriander', 'spiritsap'], g => g.forest > 0 || g.M > 0, 'มีป่าหรือภูเขาใกล้ ๆ'],
+  peat: ['wood', 'หมู่บ้านขุดพีต', ['peat'], g => g.wet > 0 || g.feat.has('f'), 'มีบึงหรือบึงพรุใกล้ ๆ'],
+  tea: ['crop', 'หมู่บ้านไร่ชา', ['tea'], g => g.M > 0, 'มีเนินภูเขาใกล้ ๆ'],
+  spice: ['crop', 'สวนเครื่องเทศ', ['spice'], g => g.j > 0 || g.farm > 0, 'มีป่าดงดิบหรือไร่อาณานิคมใกล้ ๆ'],
+  sugar: ['crop', 'ไร่อ้อย', ['sugar'], g => g.farm > 0 || g.j > 0, 'มีนาริมแม่น้ำ ไร่อาณานิคม หรือป่าดงดิบใกล้ ๆ'],
+  wine: ['crop', 'สวนองุ่นและมะกอก', ['wine'], g => g.dry + g.grass > 0, 'มีทุ่งหญ้าหรือทุ่งพุ่มไม้แห้งใกล้ ๆ'],
+  silk: ['crop', 'หมู่บ้านเลี้ยงไหม', ['silk', 'manasilk'], g => g.o + g.grass > 0, 'มีป่าผลัดใบหรือทุ่งหญ้าใกล้ ๆ'],
+  dyes: ['crop', 'ไร่คราม', ['dyes'], g => g.farm + g.grass > 0, 'มีนา ไร่ หรือทุ่งหญ้าใกล้ ๆ'],
+  cotton: ['crop', 'ไร่ฝ้าย', ['cotton'], g => g.dry + g.farm + g.grass > 0, 'มีทุ่งหรือไร่ใกล้ ๆ'],
+  flax: ['crop', 'หมู่บ้านลินิน', ['flax', 'ironvine'], g => g.grass + g.wet > 0, 'มีทุ่งหญ้าหรือที่ลุ่มใกล้ ๆ'],
+  dates: ['crop', 'สวนอินทผลัม', ['dates', 'oasisfruit'], g => g.d > 0 || g.feat.has('a'), 'มีทะเลทรายหรือโอเอซิสใกล้ ๆ'],
+  cocoa: ['crop', 'สวนโกโก้และกาแฟ', ['cocoa'], g => g.j > 0, 'มีป่าดงดิบใกล้ ๆ'],
+  incense: ['crop', 'หมู่บ้านกำยาน', ['incense'], g => g.d + g.dry > 0, 'มีทะเลทรายหรือดินแห้งใกล้ ๆ'],
+  sheep: ['herd', 'หมู่บ้านเลี้ยงแกะ', ['wool', 'sheep', 'stonewool'], g => g.grass + g.M > 0, 'มีทุ่งหญ้าหรือภูเขาใกล้ ๆ'],
+  dairy: ['herd', 'ฟาร์มโคนม', ['cattle', 'amberdairy', 'bison'], g => g.grass > 0, 'มีทุ่งหญ้าใกล้ ๆ'],
+  camel: ['herd', 'หมู่บ้านอูฐ', ['camel', 'drake'], g => g.d > 0, 'มีทะเลทรายใกล้ ๆ'],
+  reindeer: ['herd', 'หมู่บ้านเลี้ยงเรนเดียร์', ['reindeer'], g => g.cold > 0, 'มีทุนดราหรือแดนหิมะใกล้ ๆ'],
+  tannery: ['herd', 'หมู่บ้านฟอกหนัง', ['hides', 'bisonhide', 'drakehide'], g => g.grass > 0 && (g.riv > 0 || g.lake > 0), 'มีทุ่งหญ้าและน้ำใกล้ ๆ'],
+  relics: ['other', 'หมู่บ้านขุดซากเมืองเก่า', ['relics'], g => g.ruin > 0, 'มีซากเมืองเก่าใกล้ ๆ'],
+};
+ECO.spec = {};
+const specOf = id => (SPEC[ECO.spec[id]] ? ECO.spec[id] : '');
+const SPECK = new Map();                             // a community's ground, kept until the map or the community moves
+function specFits(c, k) { const s = SPEC[k]; if (!s) return false; const h = c.h != null ? c.h : hexAt(c.x, c.y), key = h + '|' + painted.size + '|' + featStamp + '|' + ED.rivers.length; let g = SPECK.get(c.id); if (!g || g.key !== key) { g = { key, v: specGround(h) }; SPECK.set(c.id, g); } return s[3](g.v); }
+function specMine(c) { const k = specOf(c.id); return !!k && SPEC[k][0] === 'mine' && k !== 'potter' && specFits(c, k); }
+function specApply(cities, prod) {
+  cities.forEach((c, k) => {
+    const key = specOf(c.id); c.spec = ''; if (!key || !specFits(c, key)) return;
+    const own = new Set(SPEC[key][2]), P = prod[k]; c.spec = key;
+    for (const [id, v] of P) { const cat = catOf(id); if (!ERAW.includes(cat)) continue; P.set(id, v * (own.has(id) ? SPEC_MULT : SPEC_OTHER)); }
+  });
+}
+{ const ha = harvApply; harvApply = function (cities, prod, own, dist) { const r = ha(cities, prod, own, dist); specApply(cities, prod); return r; }; }
+// ---- the document ----
+{
+  const ld = ecoLoad, sr = ecoSerial;
+  ecoLoad = function (b) { ld(b); b = b || {}; ECO.spec = {}; for (const [id, v] of Object.entries(b.spec || {}).slice(0, 4000)) if (SPEC[v]) ECO.spec[ecoStr(id, 120)] = v; };
+  ecoSerial = function () { const o = sr(); if (Object.keys(ECO.spec).length) o.spec = { ...ECO.spec }; return o; };
+}
+// ---- the community's form ----
+function specForm() {
+  const box = $('cfSpec'); if (!box) return; if (!sel) { box.innerHTML = ''; return; }
+  const v = visibleCities().find(c => c.id === sel); if (!v) { box.innerHTML = ''; return; }
+  const c = { id: v.id, x: v.x, y: v.y, h: hexAt(v.x, v.y) }, cur = specOf(sel), ro = editable ? '' : ' disabled';
+  // what the ground allows, the trades whose goods its harvest already brings in first, the largest first
+  const r0 = ECON ? ECON.cities.findIndex(x => x.id === sel) : -1, P0 = r0 >= 0 ? ECON.prod[r0] : null;
+  const worth = k => { if (!P0) return 0; let w = 0; for (const id of SPEC[k][2]) { const v = P0.get(id) || 0, g = ecoGood(id); if (v > 0 && g && ECAT[g.cat]) w += v * ECAT[g.cat].v; } return w; };
+  const fitAll = Object.keys(SPEC).filter(k => specFits(c, k)), fit = fitAll.filter(k => worth(k) > 0).sort((a, b) => worth(b) - worth(a)), thin = fitAll.filter(k => !(worth(k) > 0));
+  const opt = k => `<option value="${k}"${k === cur ? ' selected' : ''}>${esc(SPEC[k][1])}</option>`;
+  let h = `<label>ความชำนาญ <select id="cfSpecSel"${ro}><option value="">ไม่มี (เก็บทุกอย่างรอบตัว)</option>`;
+  if (fit.length) h += `<optgroup label="เหมาะ และพื้นที่มีสินค้านี้อยู่แล้ว">${fit.map(opt).join('')}</optgroup>`;
+  if (thin.length) h += `<optgroup label="พื้นที่เหมาะ แต่ยังไม่มีสินค้านี้">${thin.map(opt).join('')}</optgroup>`;
+  for (const [g, gn] of Object.entries(SPECG)) { const rest = Object.keys(SPEC).filter(k => SPEC[k][0] === g && !fitAll.includes(k)); if (rest.length) h += `<optgroup label="${esc(gn)} (พื้นที่ไม่เหมาะ)">${rest.map(opt).join('')}</optgroup>`; }
+  h += '</select></label>';
+  let note = '';
+  if (cur) {
+    const ok = fitAll.includes(cur), r = ECON ? ECON.cities.find(x => x.id === sel) : null, P = r && ECON.prod ? ECON.prod[ECON.cities.indexOf(r)] : null;
+    note = ok ? `${SPEC[cur][1]}: ผลผลิต${SPEC[cur][2].filter(id => ecoGood(id)).map(id => ecoGood(id).name).slice(0, 3).join(' ')} ×${SPEC_MULT} ของอื่นที่เก็บได้ ×${SPEC_OTHER}` : `ยังไม่มีผล ต้อง${SPEC[cur][4]}`;
+    if (ok && P && !SPEC[cur][2].some(id => (P.get ? P.get(id) : P[id]) > 0)) note += ' · พื้นที่ที่ชุมชนนี้เก็บเกี่ยวยังไม่มีสินค้านี้เลย';
+  } else if (fit.length) note = 'เหมาะกับ ' + fit.slice(0, 3).map(k => SPEC[k][1]).join(' ') + (fit.length > 3 ? ' และอื่น ๆ' : '');
+  box.innerHTML = h + `<span class="lbl">${esc(note)}</span>`;
+}
+__on(document, 'change', e => {
+  const el = e.target; if (!el || el.id !== 'cfSpecSel' || !editable || !sel) return;
+  if (SPEC[el.value]) ECO.spec[sel] = el.value; else delete ECO.spec[sel];
+  ecoChanged(false); scheduleEcon(60); specForm();
+});
+{ const rf = refreshForm; refreshForm = function () { rf(); specForm(); }; }
+// ---------- what is being typed survives a redraw (v0.19.6) ----------
+// The owner and a friend working in one room found that text being typed sometimes vanished (26 Nov 2026). A change heard
+// from the room reloads a document and redraws the panels: the economy card is written afresh and the community's form is
+// filled again from the map, and either way the box under the cursor lost what had been typed but not yet committed. Around
+// each redraw, the box that has the focus is found again afterwards, by its id or by its data attributes and its place
+// among boxes alike, and given back its text, its cursor and the focus.
+const TYPE_TAGS = new Set(['INPUT', 'TEXTAREA']);
+function typingNow(root) {
+  const a = document.activeElement; if (!a || !root || !root.contains(a) || !TYPE_TAGS.has(a.tagName)) return null;
+  if (a.type === 'checkbox' || a.type === 'radio' || a.type === 'range' || a.type === 'button' || a.type === 'file') return null;
+  const attrs = [...a.attributes].filter(x => x.name.startsWith('data-')).map(x => `[${x.name}="${CSS.escape(x.value)}"]`).join('');
+  const sel = a.id ? '#' + CSS.escape(a.id) : a.tagName.toLowerCase() + attrs + (a.name ? `[name="${CSS.escape(a.name)}"]` : '');
+  const n = a.id ? 0 : [...root.querySelectorAll(sel)].indexOf(a);
+  let s0 = null, s1 = null; try { s0 = a.selectionStart; s1 = a.selectionEnd; } catch (err) { /* a number box has none */ }
+  return { root, sel, n, val: a.value, s0, s1, el: a };
+}
+function typingBack(t) {
+  if (!t) return; let b = null;
+  try { b = t.sel.startsWith('#') ? t.root.querySelector(t.sel) : t.root.querySelectorAll(t.sel)[Math.max(0, t.n)]; } catch (err) { b = null; }
+  if (!b || b.disabled) return;
+  if (b.value !== t.val) b.value = t.val;
+  if (document.activeElement !== b) b.focus({ preventScroll: true });
+  if (t.s0 != null) try { b.setSelectionRange(t.s0, t.s1); } catch (err) { /* not a text box */ }
+}
+// what the panel shows must be the same before and after (the same community, the same tab and good): a redraw for another
+// one is a fresh form, and the text goes with the old one
+function keepTyping(root, fn, same) { const t = typingNow(root), k = same ? same() : ''; const r = fn(); if (t && (!same || same() === k)) typingBack(t); return r; }
+{ const er = ecoRender; ecoRender = function () { return keepTyping($('ecobody'), er, () => mode + '|' + ecoTab + '|' + ecoSel); }; }
+{ const rf = refreshForm; refreshForm = function () { return keepTyping(document.getElementById('opts') || document.body, rf, () => mode + '|' + sel); }; }
 return {
   destroy() { __dead = true; for (const f of __offs) f(); cancelAnimationFrame(rq); cancelAnimationFrame(fxRaf); cancelAnimationFrame(panRaf); },
   async flush() { for (const k of Object.keys(DOCS)) { clearTimeout(saveT[k]); if (dirty[k] && !saving[k]) await save(k); } await ecoFlush(); },
@@ -9826,7 +10052,7 @@ return {
   },
   recalc: () => scheduleEcon(150),
   refit,
-  test: { trv: () => trvTest(), rail: () => railTest(), seas: () => ({ any: seasAny, on: clSeas, lines: seasLines().length, R: (() => { const R = seasRatio(); if (!R) return null; let lo = 9, hi = 0; for (let i = 0; i < N; i++) if (!isW(eff(i))) { lo = Math.min(lo, R.r[i]); hi = Math.max(hi, R.r[i]); } return [lo, hi]; })() }), nav: () => { let a = 0, b = 0; for (let i = 0; i < N; i++) { if (NAVR[i] === 1) a++; else if (NAVR[i] === 2) b++; } return { small: a, big: b }; }, comFx: id => { const c = visibleCities().find(v => v.id === id); return c ? comFx(id, c.kind) : null; }, routes: () => { ensureRoutes(); return visibleRoutes().map(r => { const g = geoOf(r); return { id: r.id, cls: r.cls, a: r.a, b: r.b, via: (r.via || []).map(p => [p[0], p[1]]), ok: !!(g && !g.fail), mid: g && !g.fail ? g.q[g.q.length >> 1] : null, len: g && !g.fail ? g.len : 0 }; }); }, rsel: () => rsel, tlsel: () => tlsel, mapXY: (x, y) => { const r = cv.getBoundingClientRect(); return [r.left + view.x + x * view.s, r.top + view.y + y * view.s]; }, linkVia: id => { const L = ECON && ECON.links.find(x => x.id === id); return L ? (L.via || []).map(p => [p[0], p[1]]) : null; }, linkMidMap: id => { const L = ECON && ECON.links.find(x => x.id === id); if (!L || !L.geo) return null; const q = L.geo.runs[0].q; return q[q.length >> 1]; }, reach: () => REACH ? { n: REACH.n, cells: REACH.cells.length, all: REACH.all, tint: REACH.tint } : null, tip: () => ({ shown: tip.shown, fold: TIP.fold, x: TIP.x, y: TIP.y, text: tipBody.textContent }), avoid: v => { AVOID_ON = !!v; scheduleEcon(50); }, cities: () => ECON ? ECON.cities.map((c, k) => ({ id: c.id, name: c.name, kind: c.kind, h: c.h, st: c.st, rank: c.rank, pop: c.pop, through: c.through, seat: ECOX.seat[k], short: c.short ? Object.keys(c.short).length : 0 })) : [], econ: () => ECON ? { ms: Math.round(ECON.ms), ver: ECON.ver, rounds: ECON.rounds, flows: ECON.flows.length, vol: ECON.flows.reduce((x, f) => x + f.amt, 0), goods: ECON.flows.reduce((x, f) => x + (f.cat === 'labor' ? 0 : f.amt), 0), gflows: ECON.flows.filter(f => f.cat !== 'labor').length, val: ECON.flows.reduce((x, f) => x + f.amt * ECAT[f.cat].v, 0), via: ECON.flows.filter(f => f.via).length, broker: ECON.flows.filter(f => f.broker >= 0).length, hub: ECON.flows.filter(f => f.hub).length, links: ECON.links.length, hostile: ECON.links.filter(L => L.hostile > 0).length, bad: ECON.flows.filter(f => !isFinite(f.amt) || !isFinite(f.cost)).length, cross: ECON.flows.filter(f => ECON.cities[f.from].st !== ECON.cities[f.to].st).length, rivals: ECON.flows.filter(f => { const a = ECON.cities[f.from].sto, b = ECON.cities[f.to].sto; return a && b && a !== b && (a.rel[b.id] === 'rival' || b.rel[a.id] === 'rival'); }).length } : null, gdp: () => ecoIncome(ecoGdp()).map(r => ({ id: r.c.id, name: r.c.name, st: r.s ? r.s.id : '.', gdp: r.gdp, inc: r.inc, people: r.people, well: r.well, well0: r.well0, trvWell: r.trvWell || 0, met: r.met, rich: r.rich, reg: r.c.reg, lab: r.c.lab, reach: r.c.reach, lack: r.c.land ? r.c.land.lack : 0, att: r.c.att, work: r.c.work, cls: r.cls, clsW: r.clsW, metB: r.metB, metO: r.metO, rich0: r.c.rich0, stable: r.stable, sur: r.sur, why: r.wellWhy, made: r.made, tw: (() => { const A = climEnsure(); return A && A.tw ? A.tw[r.c.h] : null; })(), demo: r.demo, tourWhy: r.tourWhy, pol: r.c.pol ? { k: r.c.pol.k, tools: [...r.c.pol.tools], top: [...r.c.pol.top], def1: r.c.pol.def1 } : null })), soc: () => { ecoIncome(ecoGdp()); return SOC ? { mean: SOC.mean, tot: SOC.tot, cs: SOC.cls ? clsSum(SOC.cls) : null, fx: ECON && ECON.fx ? [...ECON.fx] : [], books: [...SOC.books.values()].map(b => ({ id: b.s.id, out: b.out, inn: b.inn, gdp: b.gdp, def: b.def, pen: b.pen, net: b.net, lost: b.lost, won: b.won, tourIn: b.tourIn, tourOut: b.tourOut, stable: b.stable, fx: b.fx, cs: b.cls ? clsSum(b.cls) : null, plan: b.plan ? { k: b.plan.k, tools: [...b.plan.tools], top: [...b.plan.top], def1: b.plan.def1 } : null })) } : null; }, grid: () => ({ N, COLS, ROWS }), labor: () => { const rows = ecoIncome(ecoGdp()); return SLAVE ? { tot: SLAVE.tot, price: SLAVE.price, mean: SLAVE.mean, flows: SLAVE.flows.map(f => ({ a: ECON.cities[f.a].id, b: ECON.cities[f.b].id, n: f.n, t: f.t, h: f.h, by: f.by, legs: f.way.length, mids: f.mids.map(k => ECON.cities[k].id) })), rows: rows.map(r => ({ id: r.c.id, st: r.c.st, people: r.people, inc: r.inc, held: r.slave ? r.slave.held : 0, out: r.slave ? r.slave.out : 0, bought: r.slave ? r.slave.bought : 0 })) } : null; }, fieldsOf: id => { if (!ECON || !ECON.land) return null; const k = ECON.cities.findIndex(c => c.id === id), L = ECON.land; let a = 0, b = 0; for (let i = 0; i < N; i++) if (L.own[i] === k && L.use[i] >= 1 && L.use[i] !== 5) { b++; if (ECON.hin[i] === k) a++; } return [a, b]; }, crossBasic: () => { if (!ECON) return null; let x = 0, all = 0; for (const f of ECON.flows) { if (!SOC_BASIC.has(f.cat)) continue; all += f.amt; const a = ECON.cities[f.from].sto, b = ECON.cities[f.to].sto; if (a !== b) x += f.amt; } return { cross: x, all }; }, reachOf: id => { if (!ECON || !ECON.hin) return null; const k = ECON.cities.findIndex(c => c.id === id); if (k < 0) return null; const P = reachOf(k); return { ni: P.ni, no: P.no, reach: ECON.cities[k].reach, sel: reachSel() }; }, cityBook: id => { if (!ECON) return null; const k = ECON.cities.findIndex(c => c.id === id); if (k < 0) return null; const o = {}; for (const cat of ECATS) { const b = ECON.MK[k][cat]; if (b && (b[0] || b[1])) o[cat] = Array.from(b, v => +v.toFixed(2)); } const c = ECON.cities[k]; return { o, foodCut: c.foodCut, land: c.land, pop: c.pop, unit: ECO.unit, cm: c.cm, ki: c.ki, kind: c.kind, goods: Object.fromEntries([...ECON.prod[k]].map(([g, v]) => [g, +v.toFixed(3)])), need: Object.fromEntries(Object.entries(ECON.need[k]).map(([g, v]) => [g, +v.toFixed(2)])) }; }, ptOwners: () => visiblePoints().map(p => { const h = p.h != null ? p.h : hexAt(p.x, p.y), k = ECON && ECON.hin && h >= 0 ? ECON.hin[h] : -1; return [p.k, p.name || '', h, h >= 0 ? eff(h) : '', k >= 0 ? ECON.cities[k].name : null]; }), climTw: () => { const A = climEnsure(); return Array.from(A.tw, v => Math.round(v)); }, ground: () => groundNow().join(''), harv: id => { if (!ECON) return null; const c = ECON.cities.find(c => c.id === id); return c && c.harv ? JSON.parse(JSON.stringify(c.harv)) : null; }, harvAll: () => ECON ? ECON.cities.map(c => c.harv ? [c.id, c.harv.L, c.harv.hexes, c.harv.d, c.harv.eff.grain, c.harv.est, c.pop] : null).filter(Boolean) : [], harvPasses: () => ECON ? !!ECON.harvL : null, worldBook: () => { if (!ECON) return null; const o = {}; for (const cat of ECATS) { const t = [0, 0, 0, 0]; for (let k = 0; k < ECON.cities.length; k++) { const b = ECON.MK[k][cat]; if (b) for (let q = 0; q < 4; q++) t[q] += b[q]; } if (t[0] || t[1]) o[cat] = t.map(v => +v.toFixed(1)); } return o; }, needOf: (id, cat) => { if (!ECON) return null; const k = ECON.cities.findIndex(c => c.id === id); return k < 0 ? null : ECON.need[k][cat]; }, market: id => { if (!ECON) return null; const k = ECON.cities.findIndex(c => c.id === id); if (k < 0) return null; const o = {}; for (const cat of ECATS) { const b = ECON.MK[k][cat]; if (b) o[cat] = Array.from(b); } return { book: o, prod: ECON.prod[k].size, price: Object.assign({}, ECON.P1[k]) }; }, nt: (a, b) => { if (!ECON) return null; const i = ECON.cities.findIndex(c => c.id === a), j = ECON.cities.findIndex(c => c.id === b); return i < 0 || j < 0 ? null : ECON.NT[i][j]; }, lines: () => ECON ? ECON.links.filter(L => !L.fail).map(L => ({ a: ECON.cities[L.ia].id, b: ECON.cities[L.ib].id, wet: L.wet, dry: L.dry })) : [], bridges: () => { const r = cv.getBoundingClientRect(), out = []; for (const rt of visibleRoutes()) { if (rt.t !== 'road') continue; const g = geoOf(rt); if (!g || g.fail) continue; for (const b of g.bridges) { let d = Infinity; for (let i = 0; i + 1 < g.q.length; i++) { const px = g.q[i][0], py = g.q[i][1], dx = g.q[i + 1][0] - px, dy = g.q[i + 1][1] - py, l2 = dx * dx + dy * dy, w = l2 > 0 ? Math.max(0, Math.min(1, ((b.x - px) * dx + (b.y - py) * dy) / l2)) : 0; d = Math.min(d, Math.hypot(px + dx * w - b.x, py + dy * w - b.y)); } out.push({ x: r.left + view.x + b.x * view.s, y: r.top + view.y + b.y * view.s, off: d, a: b.a }); } } return out; }, linkCard: li => { const d = document.createElement('div'); d.innerHTML = tradeLinkHTML(ECON.links[li]); return d.textContent; }, cityCard: k => { const d = document.createElement('div'); d.innerHTML = tradeCityHTML(k); return d.textContent; }, drawOrder: () => { const seq = {}; let n = 0; const g = drawOverGround, r = drawRoutes, t = drawTrade, m = drawNames; drawOverGround = function () { seq.ground = ++n; return g.apply(this, arguments); }; drawRoutes = function () { seq.routes = ++n; return r.apply(this, arguments); }; drawTrade = function () { seq.trade = ++n; return t.apply(this, arguments); }; drawNames = function () { seq.names = ++n; return m.apply(this, arguments); }; try { draw(); } finally { drawOverGround = g; drawRoutes = r; drawTrade = t; drawNames = m; } return seq; }, landSheet: () => { const cvs = landSheet(); return { on: !!cvs, any: landAny, key: landKey, w: cvs ? cvs.width : 0, ms: Math.round(landMs) }; }, landPx: i => { if (!landSheet()) return null; return Array.from(LLC.getImageData(Math.round(CX[i] * LS), Math.round(CY[i] * LS), 1, 1).data); }, landUse: () => { landCompute(); return LAND ? { use: Array.from(LAND.use), own: Array.from(LAND.own) } : null; }, slaveLoad: () => { if (!ECON) return null; const S = slaveNow().S; return S ? { links: [...S.load].map(([li, x]) => ({ li, fwd: x[0], back: x[1], a: ECON.links[li].ia, b: ECON.links[li].ib })), tRef: S.tRef, haul: S.tot.haul } : null; }, land: () => { landCompute(); return LAND ? { tot: LAND.tot, total: LAND.total, crop: LAND.crop, haHex: LAND.haHex, short: LAND.short, rows: LAND.rows.map((r, k) => ({ id: ECON.cities[k].id, people: Math.round(ECON.cities[k].pop * ECO.unit), ...r })) } : null; }, eco: () => JSON.parse(JSON.stringify(ecoSerial())), army: () => [...ARMY.st.values()].map(R => ({ id: R.s.id, men: R.men, want: R.want, can: R.can, pow: R.pow, ready: { ...R.ready }, units: Object.fromEntries(Object.entries(R.units).map(([k, u]) => [k, { men: u.men, regs: u.regs }])), seats: R.seats.slice() })), armyNeedOf: id => ({ ...(ARMY.need.get(id) || {}) }), mk: () => { const M = mkBuild(); return M ? { n: M.regions.length, seas: M.seas.length, regions: M.regions.map(R => ({ name: R.name, cities: R.cities.length, cats: Object.keys(R.cat).length, grain: R.cat.grain ? { P: R.cat.grain.P, rows: R.cat.grain.rows.map(r => ({ sup: r.sup, dem: r.dem, stock0: r.stock0, price: r.price })) } : null })) } : null; }, fisc: () => { const rows = ecoIncome(ecoGdp()); return { st: [...FISC.st.values()].map(S => ({ id: S.s.id, rev: { ...S.rev }, total: S.total, leak: S.leak, kept: S.kept, reach: S.reach, bud: { ...S.bud }, treasury: S.treasury, gdp: S.gdp })), units: [...FISC.unit].map(([id, U]) => ({ id, ...U })), rows: rows.map(r => ({ id: r.c.id, s: r.s ? r.s.id : null, tax: r.tax || 0, back: r.taxBack || 0, stab: r.stab, well: r.well, parts: { ...(r.taxParts || {}) } })), flows: ECON.flows.filter(f => f.cat !== 'labor' && rows[f.from].s && rows[f.to].s && rows[f.from].s !== rows[f.to].s).map(f => ({ a: rows[f.from].s.id, b: rows[f.to].s.id, cat: f.cat, amt: f.amt })) }; }, screenToMap: (x, y) => toMap(x, y), adm: () => { const X = admIndex(); return { units: ECO.adm.map(u => ({ ...u, st: X.st.get(u.id), hexes: X.hexes.get(u.id).length, cities: X.cities.get(u.id).length })), sel: ADM.sel, lv: ADM.lv, names: { ...ECO.admn }, states: ECO.states.map(s => s.id), cells: ECO.cells.filter(z => z !== '.').length }; }, admAt: (x, y) => { const h = hexAt(x, y); return h >= 0 ? admChain(h) : null; }, bel: () => ({ cul: JSON.parse(JSON.stringify(ECO.cul)), rel: JSON.parse(JSON.stringify(ECO.rel)), culn: ECO.culc.filter(Boolean).length, reln: ECO.relc.filter(Boolean).length, tithe: JSON.parse(JSON.stringify(BEL.tithe || {})), city: ECON ? ECON.cities.map(c => { const b = belCity(c.id); return { id: c.id, cul: b.cul && b.cul.id, rel: b.rel && b.rel.id }; }) : [], far: ECON ? ECON.links.filter(L => L.belFar > 0).length : 0 }), belSpread: (k, n) => belSpread(k, n), belStates: k => belFromStates(k), musicSeek: left => { if (SND.song) SND.song.currentTime = Math.max(0, SND.song.duration - left); }, music: () => ({ on: !!SND.music, paused: SND.song ? SND.song.paused : null, t: SND.song ? SND.song.currentTime : 0, loop: !!(SND.song && SND.song.loop), dur: SND.song ? SND.song.duration : 0, vol: SND.song ? SND.song.volume : 0, src: SND.song ? SND.song.src.slice(0, 40) : '' }), tripT: (veh, a, b) => { const old = MS.trip.veh; MS.trip.veh = veh; MS.cache = null; const r = tripReach(a, b), d = r.T[b]; let n = 0; for (let v = b; v >= 0 && n < 99999; v = r.prev[v]) n++; MS.trip.veh = old; MS.cache = null; return { d: isFinite(d) ? d : -1, hexes: n }; }, cityHexes: () => visibleCities().map(c => ({ h: hexAt(c.x, c.y), name: c.name, wet: (() => { const h = hexAt(c.x, c.y); for (let k = 0; k < 6; k++) { const v = NB[h * 6 + k]; if (v >= 0 && isW(eff(v))) return true; } return false; })(), river: (() => { const h = hexAt(c.x, c.y); return (typeof NAVR !== 'undefined' && NAVR[h] > 0) || RV[h] === '1'; })() })), b19: () => ({ sz: ECO.sz.map(z => ({ ...z })), szn: ECO.szc.filter(Boolean).length, notes: { ...ECO.notes }, world: { ...ECO.world }, ruler: MS.ruler.length, trip: JSON.parse(JSON.stringify(MS.trip)), legs: tripLegs().map(L => L.days), tool: MS.tool, crop: CROP.on, rect: cropRect(), fk: Object.fromEntries(Object.entries(FK).map(([c, k]) => [c, { name: k.name, look: k.look || 'mark', pk: k.pk || '' }])), feat: ECO.feat.filter(c => c !== '.').length, pts: visiblePoints().length, ptl: ptLike().length }), ecoPaintNow: () => [ecoPaint, ecoTab, mode], pickCity: id => { setMode('city'); selectCity(id); }, admBoss: id => { const r = admUpCity(id), b = r.u && r.u.seat && r.u.seat !== id ? r.u : r.p; return b ? b.seat || 'u:' + b.id : ''; }, roadCount: () => visibleRoutes().filter(r => r.t === 'road').length, cityXY: id => { const v = visibleCities().find(c => c.id === id); if (!v) return null; const r = cv.getBoundingClientRect(); return [r.left + v.x * view.s + view.x, r.top + v.y * view.s + view.y]; }, vcount: () => visibleCities().length, stCount: () => ECO.states.length, admCount: () => ECO.adm.length, landOfStates: () => ECO.cells.filter(x => x !== '.').length, layerHoles: () => { let n = 0, px = 0; for (const i of painted) { if (isW(eff(i))) continue; let inner = true; for (let k = 0; k < 6; k++) { const v = NB[i * 6 + k]; if (v < 0 || !painted.has(v) || isW(eff(v))) { inner = false; break; } } if (!inner) continue; n++; const d = LC.getImageData(Math.round((CX[i] - R) * LS), Math.round((CY[i] - R) * LS), Math.round(2 * R * LS), Math.round(2 * R * LS)).data; for (let q = 3; q < d.length; q += 4) if (d[q] < 250) px++; } return { hexes: n, px }; }, featPaint: (list, code) => { for (const i of list) ECO.feat[i] = code; featStamp++; FEATW.key = -1; requestDraw(); return list.filter(i => ECO.feat[i] === code && !!featAt(i)).length; }, riverHexes: () => { const out = []; for (let i = 0; i < N; i++) if (RV[i] === '1' || (typeof NAVR !== 'undefined' && NAVR[i] > 0)) out.push(i); return out; }, cropTest: (a, b) => { CROP.a = a; CROP.b = b; const rc = cropRect(); return rc ? cropBuild(rc, 'ทดสอบ') : null; }, szWell: () => { const rows = ecoIncome(ecoGdp()); return rows.filter(r => r.zone).map(r => ({ id: r.c.id, well: r.well })); }, linkZones: () => ECON ? ECON.links.filter(L => L.zone).map(L => ({ id: L.id, lv: L.zone.lv, share: L.zone.share, danger: L.danger })) : [], rivers: () => ED.rivers.map(U => ({ id: U.id, kind: U.kind, n: U.pts.length, pts: U.pts.map(q => [q[0], q[1]]) })), riverDraw: (pts, kind) => { const ops = riverJoin(pts, kind); doOp(ops.length > 1 ? { k: 'm', ops } : ops[0]); return ops.length; }, endAt: (x, y, ex) => endAt(x, y, ex), pts: () => ED.points.size, iptool: () => iptool, cityAt: id => { const c = visibleCities().find(x => x.id === id); return c ? [c.x, c.y] : null; }, R: () => R, vs: () => view.s, tax: () => { const rows = ecoIncome(ecoGdp()); return { rows: rows.map(r => ({ id: r.c.id, kind: r.c.kind, s: r.s ? r.s.id : null, tax: r.tax || 0, back: r.taxBack || 0, rate: r.taxRate || 0, well: r.well, inc: r.inc, gdp: r.gdp, people: r.people, tw: r.taxWell || 0 })), books: SOC ? [...SOC.books.values()].map(b => ({ id: b.s.id, sys: b.s.sys, tax: b.tax || 0, use: b.taxUse || '', tr: b.treasury || 0, gdp: b.gdp })) : [] }; }, ecoSet: b => { ecoLoad(b); ecoChanged(true); ecoRender(); }, orgs: () => [...orgValues(ecoIncome(ecoGdp()))].map(([id, v]) => ({ id, ...v })), cityXY: id => { const c = visibleCities().find(x => x.id === id), r = cv.getBoundingClientRect(); return c ? [r.left + view.x + c.x * view.s, r.top + view.y + c.y * view.s] : null; }, hexXY: i => { const r = cv.getBoundingClientRect(); return [r.left + view.x + CX[i] * view.s, r.top + view.y + CY[i] * view.s]; }, flowsOf: () => ECON ? ECON.flows.map(f => ({ a: ECON.cities[f.from].id, b: ECON.cities[f.to].id, cat: f.cat, amt: f.amt, org: f.org || null, broker: f.broker })) : [], tune: () => ({ ...ECO.tune }), pt: (fx, fy) => { const r = cv.getBoundingClientRect(); return [r.left + view.x + fx * G.w * view.s, r.top + view.y + fy * G.h * view.s]; }, way: (a, b) => { const C = ECON.cities, i = C.findIndex(c => c.name === a), j = C.findIndex(c => c.name === b); if (i < 0 || j < 0 || !ECOX.on) return null; const w = ecoWay(i, j); return [a, ...(w.mids || []).map(k => C[k].name), b].join('>') + ' t=' + w.t.toFixed(1) + ' direct=' + ECOX.NT[i][j].toFixed(1); }, linkAt: k => { const L = ECON && ECON.links[k]; if (!L || !L.states) return null; const t = L.states[L.states.length >> 1], h = t >> 1, r = cv.getBoundingClientRect(); return [r.left + view.x + (t & 1 && NAVR[h] ? NPX[h] : CX[h]) * view.s, r.top + view.y + (t & 1 && NAVR[h] ? NPY[h] : CY[h]) * view.s, L.id, L.danger, L.dauto ? L.dauto.lv : -1]; } },
+  test: { trv: () => trvTest(), rail: () => railTest(), seas: () => ({ any: seasAny, on: clSeas, lines: seasLines().length, R: (() => { const R = seasRatio(); if (!R) return null; let lo = 9, hi = 0; for (let i = 0; i < N; i++) if (!isW(eff(i))) { lo = Math.min(lo, R.r[i]); hi = Math.max(hi, R.r[i]); } return [lo, hi]; })() }), nav: () => { let a = 0, b = 0; for (let i = 0; i < N; i++) { if (NAVR[i] === 1) a++; else if (NAVR[i] === 2) b++; } return { small: a, big: b }; }, comFx: id => { const c = visibleCities().find(v => v.id === id); return c ? comFx(id, c.kind) : null; }, routes: () => { ensureRoutes(); return visibleRoutes().map(r => { const g = geoOf(r); return { id: r.id, cls: r.cls, a: r.a, b: r.b, via: (r.via || []).map(p => [p[0], p[1]]), ok: !!(g && !g.fail), mid: g && !g.fail ? g.q[g.q.length >> 1] : null, len: g && !g.fail ? g.len : 0 }; }); }, rsel: () => rsel, tlsel: () => tlsel, mapXY: (x, y) => { const r = cv.getBoundingClientRect(); return [r.left + view.x + x * view.s, r.top + view.y + y * view.s]; }, linkVia: id => { const L = ECON && ECON.links.find(x => x.id === id); return L ? (L.via || []).map(p => [p[0], p[1]]) : null; }, linkMidMap: id => { const L = ECON && ECON.links.find(x => x.id === id); if (!L || !L.geo) return null; const q = L.geo.runs[0].q; return q[q.length >> 1]; }, reach: () => REACH ? { n: REACH.n, cells: REACH.cells.length, all: REACH.all, tint: REACH.tint } : null, tip: () => ({ shown: tip.shown, fold: TIP.fold, x: TIP.x, y: TIP.y, text: tipBody.textContent }), avoid: v => { AVOID_ON = !!v; scheduleEcon(50); }, cities: () => ECON ? ECON.cities.map((c, k) => ({ id: c.id, name: c.name, kind: c.kind, h: c.h, st: c.st, rank: c.rank, pop: c.pop, through: c.through, seat: ECOX.seat[k], short: c.short ? Object.keys(c.short).length : 0 })) : [], econ: () => ECON ? { ms: Math.round(ECON.ms), ver: ECON.ver, rounds: ECON.rounds, flows: ECON.flows.length, vol: ECON.flows.reduce((x, f) => x + f.amt, 0), goods: ECON.flows.reduce((x, f) => x + (f.cat === 'labor' ? 0 : f.amt), 0), gflows: ECON.flows.filter(f => f.cat !== 'labor').length, val: ECON.flows.reduce((x, f) => x + f.amt * ECAT[f.cat].v, 0), via: ECON.flows.filter(f => f.via).length, broker: ECON.flows.filter(f => f.broker >= 0).length, hub: ECON.flows.filter(f => f.hub).length, links: ECON.links.length, hostile: ECON.links.filter(L => L.hostile > 0).length, bad: ECON.flows.filter(f => !isFinite(f.amt) || !isFinite(f.cost)).length, cross: ECON.flows.filter(f => ECON.cities[f.from].st !== ECON.cities[f.to].st).length, rivals: ECON.flows.filter(f => { const a = ECON.cities[f.from].sto, b = ECON.cities[f.to].sto; return a && b && a !== b && (a.rel[b.id] === 'rival' || b.rel[a.id] === 'rival'); }).length } : null, gdp: () => ecoIncome(ecoGdp()).map(r => ({ id: r.c.id, name: r.c.name, st: r.s ? r.s.id : '.', gdp: r.gdp, inc: r.inc, people: r.people, well: r.well, well0: r.well0, trvWell: r.trvWell || 0, met: r.met, rich: r.rich, reg: r.c.reg, lab: r.c.lab, reach: r.c.reach, lack: r.c.land ? r.c.land.lack : 0, att: r.c.att, work: r.c.work, cls: r.cls, clsW: r.clsW, metB: r.metB, metO: r.metO, rich0: r.c.rich0, stable: r.stable, sur: r.sur, why: r.wellWhy, made: r.made, tw: (() => { const A = climEnsure(); return A && A.tw ? A.tw[r.c.h] : null; })(), demo: r.demo, tourWhy: r.tourWhy, pol: r.c.pol ? { k: r.c.pol.k, tools: [...r.c.pol.tools], top: [...r.c.pol.top], def1: r.c.pol.def1 } : null })), soc: () => { ecoIncome(ecoGdp()); return SOC ? { mean: SOC.mean, tot: SOC.tot, cs: SOC.cls ? clsSum(SOC.cls) : null, fx: ECON && ECON.fx ? [...ECON.fx] : [], books: [...SOC.books.values()].map(b => ({ id: b.s.id, out: b.out, inn: b.inn, gdp: b.gdp, def: b.def, pen: b.pen, net: b.net, lost: b.lost, won: b.won, tourIn: b.tourIn, tourOut: b.tourOut, stable: b.stable, fx: b.fx, cs: b.cls ? clsSum(b.cls) : null, plan: b.plan ? { k: b.plan.k, tools: [...b.plan.tools], top: [...b.plan.top], def1: b.plan.def1 } : null })) } : null; }, grid: () => ({ N, COLS, ROWS }), labor: () => { const rows = ecoIncome(ecoGdp()); return SLAVE ? { tot: SLAVE.tot, price: SLAVE.price, mean: SLAVE.mean, flows: SLAVE.flows.map(f => ({ a: ECON.cities[f.a].id, b: ECON.cities[f.b].id, n: f.n, t: f.t, h: f.h, by: f.by, legs: f.way.length, mids: f.mids.map(k => ECON.cities[k].id) })), rows: rows.map(r => ({ id: r.c.id, st: r.c.st, people: r.people, inc: r.inc, held: r.slave ? r.slave.held : 0, out: r.slave ? r.slave.out : 0, bought: r.slave ? r.slave.bought : 0 })) } : null; }, fieldsOf: id => { if (!ECON || !ECON.land) return null; const k = ECON.cities.findIndex(c => c.id === id), L = ECON.land; let a = 0, b = 0; for (let i = 0; i < N; i++) if (L.own[i] === k && L.use[i] >= 1 && L.use[i] !== 5) { b++; if (ECON.hin[i] === k) a++; } return [a, b]; }, crossBasic: () => { if (!ECON) return null; let x = 0, all = 0; for (const f of ECON.flows) { if (!SOC_BASIC.has(f.cat)) continue; all += f.amt; const a = ECON.cities[f.from].sto, b = ECON.cities[f.to].sto; if (a !== b) x += f.amt; } return { cross: x, all }; }, reachOf: id => { if (!ECON || !ECON.hin) return null; const k = ECON.cities.findIndex(c => c.id === id); if (k < 0) return null; const P = reachOf(k); return { ni: P.ni, no: P.no, reach: ECON.cities[k].reach, sel: reachSel() }; }, cityBook: id => { if (!ECON) return null; const k = ECON.cities.findIndex(c => c.id === id); if (k < 0) return null; const o = {}; for (const cat of ECATS) { const b = ECON.MK[k][cat]; if (b && (b[0] || b[1])) o[cat] = Array.from(b, v => +v.toFixed(2)); } const c = ECON.cities[k]; return { o, foodCut: c.foodCut, land: c.land, pop: c.pop, unit: ECO.unit, cm: c.cm, ki: c.ki, kind: c.kind, goods: Object.fromEntries([...ECON.prod[k]].map(([g, v]) => [g, +v.toFixed(3)])), need: Object.fromEntries(Object.entries(ECON.need[k]).map(([g, v]) => [g, +v.toFixed(2)])) }; }, ptOwners: () => visiblePoints().map(p => { const h = p.h != null ? p.h : hexAt(p.x, p.y), k = ECON && ECON.hin && h >= 0 ? ECON.hin[h] : -1; return [p.k, p.name || '', h, h >= 0 ? eff(h) : '', k >= 0 ? ECON.cities[k].name : null]; }), climTw: () => { const A = climEnsure(); return Array.from(A.tw, v => Math.round(v)); }, ground: () => groundNow().join(''), harv: id => { if (!ECON) return null; const c = ECON.cities.find(c => c.id === id); return c && c.harv ? JSON.parse(JSON.stringify(c.harv)) : null; }, harvAll: () => ECON ? ECON.cities.map(c => c.harv ? [c.id, c.harv.L, c.harv.hexes, c.harv.d, c.harv.eff.grain, c.harv.est, c.pop] : null).filter(Boolean) : [], harvPasses: () => ECON ? !!ECON.harvL : null, worldBook: () => { if (!ECON) return null; const o = {}; for (const cat of ECATS) { const t = [0, 0, 0, 0]; for (let k = 0; k < ECON.cities.length; k++) { const b = ECON.MK[k][cat]; if (b) for (let q = 0; q < 4; q++) t[q] += b[q]; } if (t[0] || t[1]) o[cat] = t.map(v => +v.toFixed(1)); } return o; }, needOf: (id, cat) => { if (!ECON) return null; const k = ECON.cities.findIndex(c => c.id === id); return k < 0 ? null : ECON.need[k][cat]; }, market: id => { if (!ECON) return null; const k = ECON.cities.findIndex(c => c.id === id); if (k < 0) return null; const o = {}; for (const cat of ECATS) { const b = ECON.MK[k][cat]; if (b) o[cat] = Array.from(b); } return { book: o, prod: ECON.prod[k].size, price: Object.assign({}, ECON.P1[k]) }; }, nt: (a, b) => { if (!ECON) return null; const i = ECON.cities.findIndex(c => c.id === a), j = ECON.cities.findIndex(c => c.id === b); return i < 0 || j < 0 ? null : ECON.NT[i][j]; }, lines: () => ECON ? ECON.links.filter(L => !L.fail).map(L => ({ a: ECON.cities[L.ia].id, b: ECON.cities[L.ib].id, wet: L.wet, dry: L.dry })) : [], bridges: () => { const r = cv.getBoundingClientRect(), out = []; for (const rt of visibleRoutes()) { if (rt.t !== 'road') continue; const g = geoOf(rt); if (!g || g.fail) continue; for (const b of g.bridges) { let d = Infinity; for (let i = 0; i + 1 < g.q.length; i++) { const px = g.q[i][0], py = g.q[i][1], dx = g.q[i + 1][0] - px, dy = g.q[i + 1][1] - py, l2 = dx * dx + dy * dy, w = l2 > 0 ? Math.max(0, Math.min(1, ((b.x - px) * dx + (b.y - py) * dy) / l2)) : 0; d = Math.min(d, Math.hypot(px + dx * w - b.x, py + dy * w - b.y)); } out.push({ x: r.left + view.x + b.x * view.s, y: r.top + view.y + b.y * view.s, off: d, a: b.a }); } } return out; }, linkCard: li => { const d = document.createElement('div'); d.innerHTML = tradeLinkHTML(ECON.links[li]); return d.textContent; }, cityCard: k => { const d = document.createElement('div'); d.innerHTML = tradeCityHTML(k); return d.textContent; }, drawOrder: () => { const seq = {}; let n = 0; const g = drawOverGround, r = drawRoutes, t = drawTrade, m = drawNames; drawOverGround = function () { seq.ground = ++n; return g.apply(this, arguments); }; drawRoutes = function () { seq.routes = ++n; return r.apply(this, arguments); }; drawTrade = function () { seq.trade = ++n; return t.apply(this, arguments); }; drawNames = function () { seq.names = ++n; return m.apply(this, arguments); }; try { draw(); } finally { drawOverGround = g; drawRoutes = r; drawTrade = t; drawNames = m; } return seq; }, landSheet: () => { const cvs = landSheet(); return { on: !!cvs, any: landAny, key: landKey, w: cvs ? cvs.width : 0, ms: Math.round(landMs) }; }, landPx: i => { if (!landSheet()) return null; return Array.from(LLC.getImageData(Math.round(CX[i] * LS), Math.round(CY[i] * LS), 1, 1).data); }, landUse: () => { landCompute(); return LAND ? { use: Array.from(LAND.use), own: Array.from(LAND.own) } : null; }, slaveLoad: () => { if (!ECON) return null; const S = slaveNow().S; return S ? { links: [...S.load].map(([li, x]) => ({ li, fwd: x[0], back: x[1], a: ECON.links[li].ia, b: ECON.links[li].ib })), tRef: S.tRef, haul: S.tot.haul } : null; }, land: () => { landCompute(); return LAND ? { tot: LAND.tot, total: LAND.total, crop: LAND.crop, haHex: LAND.haHex, short: LAND.short, rows: LAND.rows.map((r, k) => ({ id: ECON.cities[k].id, people: Math.round(ECON.cities[k].pop * ECO.unit), ...r })) } : null; }, eco: () => JSON.parse(JSON.stringify(ecoSerial())), army: () => [...ARMY.st.values()].map(R => ({ id: R.s.id, men: R.men, want: R.want, can: R.can, pow: R.pow, ready: { ...R.ready }, units: Object.fromEntries(Object.entries(R.units).map(([k, u]) => [k, { men: u.men, regs: u.regs }])), seats: R.seats.slice() })), armyNeedOf: id => ({ ...(ARMY.need.get(id) || {}) }), mk: () => { const M = mkBuild(); return M ? { n: M.regions.length, seas: M.seas.length, regions: M.regions.map(R => ({ name: R.name, cities: R.cities.length, cats: Object.keys(R.cat).length, grain: R.cat.grain ? { P: R.cat.grain.P, rows: R.cat.grain.rows.map(r => ({ sup: r.sup, dem: r.dem, stock0: r.stock0, price: r.price })) } : null })) } : null; }, fisc: () => { const rows = ecoIncome(ecoGdp()); return { st: [...FISC.st.values()].map(S => ({ id: S.s.id, rev: { ...S.rev }, total: S.total, leak: S.leak, kept: S.kept, reach: S.reach, bud: { ...S.bud }, treasury: S.treasury, gdp: S.gdp })), units: [...FISC.unit].map(([id, U]) => ({ id, ...U })), rows: rows.map(r => ({ id: r.c.id, s: r.s ? r.s.id : null, tax: r.tax || 0, back: r.taxBack || 0, stab: r.stab, well: r.well, parts: { ...(r.taxParts || {}) } })), flows: ECON.flows.filter(f => f.cat !== 'labor' && rows[f.from].s && rows[f.to].s && rows[f.from].s !== rows[f.to].s).map(f => ({ a: rows[f.from].s.id, b: rows[f.to].s.id, cat: f.cat, amt: f.amt })) }; }, screenToMap: (x, y) => toMap(x, y), adm: () => { const X = admIndex(); return { units: ECO.adm.map(u => ({ ...u, st: X.st.get(u.id), hexes: X.hexes.get(u.id).length, cities: X.cities.get(u.id).length })), sel: ADM.sel, lv: ADM.lv, names: { ...ECO.admn }, states: ECO.states.map(s => s.id), cells: ECO.cells.filter(z => z !== '.').length }; }, admAt: (x, y) => { const h = hexAt(x, y); return h >= 0 ? admChain(h) : null; }, bel: () => ({ cul: JSON.parse(JSON.stringify(ECO.cul)), rel: JSON.parse(JSON.stringify(ECO.rel)), culn: ECO.culc.filter(Boolean).length, reln: ECO.relc.filter(Boolean).length, tithe: JSON.parse(JSON.stringify(BEL.tithe || {})), city: ECON ? ECON.cities.map(c => { const b = belCity(c.id); return { id: c.id, cul: b.cul && b.cul.id, rel: b.rel && b.rel.id }; }) : [], far: ECON ? ECON.links.filter(L => L.belFar > 0).length : 0 }), belSpread: (k, n) => belSpread(k, n), belStates: k => belFromStates(k), musicSeek: left => { if (SND.song) SND.song.currentTime = Math.max(0, SND.song.duration - left); }, music: () => ({ on: !!SND.music, paused: SND.song ? SND.song.paused : null, t: SND.song ? SND.song.currentTime : 0, loop: !!(SND.song && SND.song.loop), dur: SND.song ? SND.song.duration : 0, vol: SND.song ? SND.song.volume : 0, src: SND.song ? SND.song.src.slice(0, 40) : '' }), tripT: (veh, a, b) => { const old = MS.trip.veh; MS.trip.veh = veh; MS.cache = null; const r = tripReach(a, b), d = r.T[b]; let n = 0; for (let v = b; v >= 0 && n < 99999; v = r.prev[v]) n++; MS.trip.veh = old; MS.cache = null; return { d: isFinite(d) ? d : -1, hexes: n }; }, cityHexes: () => visibleCities().map(c => ({ h: hexAt(c.x, c.y), name: c.name, wet: (() => { const h = hexAt(c.x, c.y); for (let k = 0; k < 6; k++) { const v = NB[h * 6 + k]; if (v >= 0 && isW(eff(v))) return true; } return false; })(), river: (() => { const h = hexAt(c.x, c.y); return (typeof NAVR !== 'undefined' && NAVR[h] > 0) || RV[h] === '1'; })() })), b19: () => ({ sz: ECO.sz.map(z => ({ ...z })), szn: ECO.szc.filter(Boolean).length, notes: { ...ECO.notes }, world: { ...ECO.world }, ruler: MS.ruler.length, trip: JSON.parse(JSON.stringify(MS.trip)), legs: tripLegs().map(L => L.days), tool: MS.tool, crop: CROP.on, rect: cropRect(), fk: Object.fromEntries(Object.entries(FK).map(([c, k]) => [c, { name: k.name, look: k.look || 'mark', pk: k.pk || '' }])), feat: ECO.feat.filter(c => c !== '.').length, pts: visiblePoints().length, ptl: ptLike().length }), prodOf: id => { if (!ECON) return null; const k = ECON.cities.findIndex(c => c.id === id); return k < 0 ? null : { prod: Object.fromEntries(ECON.prod[k]), mine: ECON.land && ECON.land.rows[k] ? ECON.land.rows[k].mine : 0, spec: ECON.cities[k].spec || '', intens: ECON.land && ECON.land.rows[k] ? ECON.land.rows[k].intens || 1 : 1 }; }, specFitList: id => { const v = visibleCities().find(c => c.id === id); if (!v) return []; const c = { id, x: v.x, y: v.y, h: hexAt(v.x, v.y) }; return Object.keys(SPEC).filter(k => specFits(c, k)); }, ecoPaintNow: () => [ecoPaint, ecoTab, mode], pickCity: id => { setMode('city'); selectCity(id); }, admBoss: id => { const r = admUpCity(id), b = r.u && r.u.seat && r.u.seat !== id ? r.u : r.p; return b ? b.seat || 'u:' + b.id : ''; }, roadCount: () => visibleRoutes().filter(r => r.t === 'road').length, cityXY: id => { const v = visibleCities().find(c => c.id === id); if (!v) return null; const r = cv.getBoundingClientRect(); return [r.left + v.x * view.s + view.x, r.top + v.y * view.s + view.y]; }, vcount: () => visibleCities().length, stCount: () => ECO.states.length, admCount: () => ECO.adm.length, landOfStates: () => ECO.cells.filter(x => x !== '.').length, layerHoles: () => { let n = 0, px = 0; for (const i of painted) { if (isW(eff(i))) continue; let inner = true; for (let k = 0; k < 6; k++) { const v = NB[i * 6 + k]; if (v < 0 || !painted.has(v) || isW(eff(v))) { inner = false; break; } } if (!inner) continue; n++; const d = LC.getImageData(Math.round((CX[i] - R) * LS), Math.round((CY[i] - R) * LS), Math.round(2 * R * LS), Math.round(2 * R * LS)).data; for (let q = 3; q < d.length; q += 4) if (d[q] < 250) px++; } return { hexes: n, px }; }, featPaint: (list, code) => { for (const i of list) ECO.feat[i] = code; featStamp++; FEATW.key = -1; requestDraw(); return list.filter(i => ECO.feat[i] === code && !!featAt(i)).length; }, riverHexes: () => { const out = []; for (let i = 0; i < N; i++) if (RV[i] === '1' || (typeof NAVR !== 'undefined' && NAVR[i] > 0)) out.push(i); return out; }, cropTest: (a, b) => { CROP.a = a; CROP.b = b; const rc = cropRect(); return rc ? cropBuild(rc, 'ทดสอบ') : null; }, szWell: () => { const rows = ecoIncome(ecoGdp()); return rows.filter(r => r.zone).map(r => ({ id: r.c.id, well: r.well })); }, linkZones: () => ECON ? ECON.links.filter(L => L.zone).map(L => ({ id: L.id, lv: L.zone.lv, share: L.zone.share, danger: L.danger })) : [], rivers: () => ED.rivers.map(U => ({ id: U.id, kind: U.kind, n: U.pts.length, pts: U.pts.map(q => [q[0], q[1]]) })), riverDraw: (pts, kind) => { const ops = riverJoin(pts, kind); doOp(ops.length > 1 ? { k: 'm', ops } : ops[0]); return ops.length; }, endAt: (x, y, ex) => endAt(x, y, ex), pts: () => ED.points.size, iptool: () => iptool, cityAt: id => { const c = visibleCities().find(x => x.id === id); return c ? [c.x, c.y] : null; }, R: () => R, vs: () => view.s, tax: () => { const rows = ecoIncome(ecoGdp()); return { rows: rows.map(r => ({ id: r.c.id, kind: r.c.kind, s: r.s ? r.s.id : null, tax: r.tax || 0, back: r.taxBack || 0, rate: r.taxRate || 0, well: r.well, inc: r.inc, gdp: r.gdp, people: r.people, tw: r.taxWell || 0 })), books: SOC ? [...SOC.books.values()].map(b => ({ id: b.s.id, sys: b.s.sys, tax: b.tax || 0, use: b.taxUse || '', tr: b.treasury || 0, gdp: b.gdp })) : [] }; }, ecoSet: b => { ecoLoad(b); ecoChanged(true); ecoRender(); }, orgs: () => [...orgValues(ecoIncome(ecoGdp()))].map(([id, v]) => ({ id, ...v })), cityXY: id => { const c = visibleCities().find(x => x.id === id), r = cv.getBoundingClientRect(); return c ? [r.left + view.x + c.x * view.s, r.top + view.y + c.y * view.s] : null; }, hexXY: i => { const r = cv.getBoundingClientRect(); return [r.left + view.x + CX[i] * view.s, r.top + view.y + CY[i] * view.s]; }, flowsOf: () => ECON ? ECON.flows.map(f => ({ a: ECON.cities[f.from].id, b: ECON.cities[f.to].id, cat: f.cat, amt: f.amt, org: f.org || null, broker: f.broker })) : [], tune: () => ({ ...ECO.tune }), pt: (fx, fy) => { const r = cv.getBoundingClientRect(); return [r.left + view.x + fx * G.w * view.s, r.top + view.y + fy * G.h * view.s]; }, way: (a, b) => { const C = ECON.cities, i = C.findIndex(c => c.name === a), j = C.findIndex(c => c.name === b); if (i < 0 || j < 0 || !ECOX.on) return null; const w = ecoWay(i, j); return [a, ...(w.mids || []).map(k => C[k].name), b].join('>') + ' t=' + w.t.toFixed(1) + ' direct=' + ECOX.NT[i][j].toFixed(1); }, linkAt: k => { const L = ECON && ECON.links[k]; if (!L || !L.states) return null; const t = L.states[L.states.length >> 1], h = t >> 1, r = cv.getBoundingClientRect(); return [r.left + view.x + (t & 1 && NAVR[h] ? NPX[h] : CX[h]) * view.s, r.top + view.y + (t & 1 && NAVR[h] ? NPY[h] : CY[h]) * view.s, L.id, L.danger, L.dauto ? L.dauto.lv : -1]; } },
   clim: () => { const A = climEnsure(), land = []; for (let i = 0; i < N; i++) if (!isNaN(A.h[i])) land.push(i); const mean = f => land.reduce((a, i) => a + f(i), 0) / (land.length || 1), band = (f, lo, hi) => { const q = land.filter(i => CY[i] / G.h >= lo && CY[i] / G.h < hi); return q.length ? q.reduce((a, i) => a + f(i), 0) / q.length : null; };
     return { seasons: A.seas ? A.seas.map((s, k) => ({ id: s.id, name: s.name, t: mean(i => A.S[k].t[i]), p: mean(i => A.S[k].p[i]), north: band(i => A.S[k].t[i], 0, 0.33), south: band(i => A.S[k].t[i], 0.67, 1.01), wind: clWindOf(s) })) : null, p: mean(i => A.p[i]), ai: mean(i => Math.min(5, A.ai[i])), f: mean(i => A.f[i]), grow: A.grow ? mean(i => A.grow[i]) : null, lat: [clLat0(), clLat1()], land: land.length, bad: land.filter(i => !isFinite(A.ts[i]) || !isFinite(A.tw[i]) || !isFinite(A.p[i]) || !isFinite(A.f[i])).length, sum: A.S ? mean(i => Math.abs(A.S.reduce((a, S) => a + S.p[i], 0) - A.p[i])) : 0 }; },
   climHex: i => { const A = climEnsure(); return isNaN(A.h[i]) ? null : { h: A.h[i], ts: A.ts[i], tw: A.tw[i], p: A.p[i], ai: A.ai[i], f: A.f[i], grow: A.grow ? A.grow[i] : null, s: A.S ? A.S.map(S => [Math.round(S.t[i] * 10) / 10, Math.round(S.p[i])]) : null }; },

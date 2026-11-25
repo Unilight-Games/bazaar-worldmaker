@@ -12,7 +12,7 @@ let fails = 0; const ok = (c, m) => { console.log((c ? 'ok   ' : 'FAIL ') + m); 
   await p.evaluate(() => { const x = MME.shell.cur.rt.test, e = x.eco(), g = x.grid(); let cells = ''; for (let i = 0; i < g.N; i++) { const c = i % g.COLS; cells += c < g.COLS * 0.45 ? 'A' : c < g.COLS * 0.7 ? 'B' : 'C'; }
     e.states = [{ id: 'A', name: 'รัฐตะวันตก', color: '#d9534f', sys: 'feud', cur: '', rate: 1, rel: {}, slave: 'free' }, { id: 'B', name: 'รัฐกลาง', color: '#4f8fd9', sys: 'cap', cur: '', rate: 1, rel: {}, slave: 'free' }, { id: 'C', name: 'รัฐตะวันออก', color: '#58b368', sys: 'soc', cur: '', rate: 1, rel: {}, slave: 'abol' }]; e.cells = cells; x.ecoSet(e); });
   await settle();
-  ok(/0\.1[7-9]\.\d/.test(await p.evaluate(() => MME.VERSION)), 'version 0.17');
+  ok(/^0\.(1[7-9]|[2-9]\d)\.\d+$/.test(await p.evaluate(() => MME.VERSION)), "version 0.17 or later");
   const T0 = await p.evaluate(() => MME.shell.cur.rt.test.trv());
   console.log('   travel', JSON.stringify(T0.by), 'holy', JSON.stringify(T0.holy.slice(0, 5)));
   ok(T0.by.tour > 0 && T0.by.per > 0 && T0.by.biz > 0, 'sightseers, personal journeys and business trips all travel');

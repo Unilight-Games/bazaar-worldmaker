@@ -23,6 +23,17 @@
 // None of this changes the year's trade: it is the picture of what the people need, and a count of where the land falls short.
 const LAND_GARDEN = 0.3, LAND_TERRACE = 0.25, LAND_WOODY = 0.5, LAND_HILLY = 0.3;
 const LAND_TILL = 0.45, LAND_REACH = 16, LAND_MINE = 1e5, LAND_OPEN = new Set(['g', 's', 'v', 'h', 'e', 'm', 'c', 'y']), LAND_FARM = new Set(['p', 'r']);
+// v0.19.7: how far fields may spread before the land is farmed harder (below). A cap in kilometres was tried and measured: the
+// fields also widen the ground a populous community harvests, so a crowded map of 5 km a hex lost half its GDP. It stays 16
+// hexes, and the numbers tab sets it.
+const landReachHex = () => Math.max(1, Math.round(TU('landReach')));
+const LAND_INT = 2.5;                                 // how much more a hex yields at the hardest farming (Claude's number)
+Object.assign(ETUNE, {
+  reachMul: [1, 0.25, 2, 0.05, 'ระยะที่ชุมชนเก็บเกี่ยว คูณจากค่าตั้งต้น (หมู่บ้าน 4 ช่อง ถึงเมืองหลวง 7 ช่อง) ลดลงแล้วผลผลิตลดด้วย เพราะผลผลิตตั้งไว้ต่อช่อง', 'ประชากรและแรงงาน'],
+  landReach: [LAND_REACH, 1, 30, 1, 'ไร่นาของชุมชนแผ่ออกไกลสุดกี่ช่อง ก่อนจะทำนาเข้มข้นขึ้นแทน (ไร่ที่แผ่ไกลก็ขยายพื้นที่เก็บเกี่ยวของชุมชนด้วย)', 'ประชากรและแรงงาน'],
+  intMax: [LAND_INT, 1, 5, 0.1, 'ทำนาเข้มข้นได้มากสุดกี่เท่าของผลผลิตปกติต่อช่อง ก่อนที่อาหารจะเริ่มขาด (ทดน้ำ ปลูกสองรอบ ใส่ปุ๋ยคอก)', 'ประชากรและแรงงาน'],
+  intWell: [3, 0, 20, 0.5, 'ความเป็นอยู่ที่ลดลงต่อการทำนาเข้มข้นขึ้นหนึ่งเท่า (งานหนักขึ้น)', 'ประชากรและแรงงาน'],
+});
 function ecoCrop(total) { return total < 5e8 ? 0.45 : total < 5e9 ? 0.3 : 0.15; }
 let LAND = null, landOn = (() => { try { return localStorage.getItem('mme-land') !== '0'; } catch (err) { return true; } })();
 // The land is worked out with the year itself (v0.13.0): the year asks it how far each city's fields reach, to work the ground
@@ -38,7 +49,7 @@ function landPlan(cities) {
   for (const k of E.cities.map((c, i) => i).sort((a, b) => E.cities[b].pop - E.cities[a].pop)) {   // the largest city takes its land first
     const c = E.cities[k], r = rows[k], P = c.pop * ECO.unit; r.need = P * crop / 100;             // square kilometres of ploughland
     if (c.h < 0) continue;
-    let nF = Math.round(P * crop / (haHex * LAND_TILL)), nW = Math.round(P * wood / (haHex * 0.8)), nM = P >= LAND_MINE ? Math.min(12, 1 + Math.floor((P - LAND_MINE) / 2.5e5)) : 0;
+    let nF = Math.round(P * crop / (haHex * LAND_TILL)), nW = Math.round(P * wood / (haHex * 0.8)), nM = P >= LAND_MINE ? Math.min(12, 1 + Math.floor((P - LAND_MINE) / 2.5e5)) : specMine(c) ? 1 : 0;   // v0.19.7: a mining village opens its mine whatever its size
     r.want = nF; r.wantW = nW; r.wantM = nM; if (!nF && !nW && !nM) continue;
     // what kind of country the city stands in, read off the land within two hexes of it
     let nl = 0, nf = 0, nm = 0; { let rg = [c.h]; const sn = new Set(rg); for (let d = 0; d <= 2; d++) { const nx = []; for (const u of rg) { const b = eff(u); if (!isW(b)) { nl++; if (FOREST.has(b)) nf++; else if (b === 'M') nm++; } for (let j = 0; j < 6; j++) { const v = NB[u * 6 + j]; if (v >= 0 && !sn.has(v)) { sn.add(v); nx.push(v); } } } rg = nx; } }
@@ -49,7 +60,7 @@ function landPlan(cities) {
     const woody = wf >= LAND_WOODY, hilly = wm >= LAND_HILLY;
     r.kind = woody && hilly ? 'both' : woody ? 'forest' : hilly ? 'mount' : '';
     let ring = [c.h]; const seen = new Set(ring);
-    for (let d = 0; d <= LAND_REACH && (nF >= 0.5 || nW > 0 || nM > 0) && ring.length; d++) {
+    for (let d = 0, dMax = landReachHex(); d <= dMax && (nF >= 0.5 || nW > 0 || nM > 0) && ring.length; d++) {
       const trees = [], hills = [], d0 = r.farm + r.cleared + r.logged + r.mine + r.terrace + r.garden + tot.was;
       for (const u of ring) {
         if (use[u]) continue; const b = eff(u);
@@ -67,6 +78,14 @@ function landPlan(cities) {
       }
       if (r.farm + r.cleared + r.logged + r.mine + r.terrace + r.garden + tot.was > d0) r.ring = d;
       const nx = []; for (const u of ring) for (let j = 0; j < 6; j++) { const v = NB[u * 6 + j]; if (v >= 0 && !seen.has(v)) { seen.add(v); nx.push(v); } } ring = nx;
+    }
+    // v0.19.7: short of ground, a community farms what it has harder before it goes short of food (the owner found the
+    // people's weight on the land too harsh, 26 Nov 2026): the yield of its fields rises up to intMax times, as Boserup argued
+    // farming grows denser as people press on the land, and only what is still missing after that is short
+    r.intens = 1;
+    if (nF >= 0.5 && r.want > 0) {
+      const got = r.want - nF, cap = Math.max(1, TU('intMax'));
+      if (got > 0) { r.intens = clamp(r.want / got, 1, cap); nF = Math.max(0, r.want - got * r.intens); } else nF = r.want;
     }
     r.short = Math.max(0, Math.round(nF)); r.lack = r.want > 0 ? clamp(Math.max(0, nF) / r.want, 0, 1) : 0; short += r.short; tot.farm += r.farm; tot.cleared += r.cleared; tot.logged += r.logged; tot.mine += r.mine; tot.terrace += r.terrace; tot.garden += r.garden;
   }

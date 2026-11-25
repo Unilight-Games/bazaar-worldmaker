@@ -8,8 +8,17 @@
 // What a tier does today: a March makes the arms of its communities and keeps watch on its border; a Principality runs its own
 // affairs and its people live a little better for it. The public purse (batch 4) collects up these tiers.
 // The starting names follow the owner's own; the Thai set beside them is Claude's offer.
-const ADMN0 = { 0: 'แมเนอร์', 1: 'เคาน์ตี', 2: 'ดัชชี', march: 'มาร์ช', princ: 'ราชรัฐ', 3: 'รัฐอธิปไตย' };
-const ADMN_TH = { 0: 'ตำบล', 1: 'เมือง', 2: 'มณฑล', march: 'หัวเมืองชายแดน', princ: 'ประเทศราช', 3: 'ราชอาณาจักร' };
+// v0.20.0: the tiers as Crusader Kings III has them (the owner chose it, 26 Nov 2026): the county is the smallest piece of land,
+// the communities in it are its baronies, counties make a duchy and duchies a kingdom; the state over them is the realm that
+// holds them in fact. The three land tiers keep their places (0, 1, 2), so a map divided before keeps its units under the new
+// names: what was a manor reads as a county, and so on up.
+const ADMN0 = { 0: 'เคาน์ตี', 1: 'ดัชชี', 2: 'คิงดอม', march: 'มาร์ช', princ: 'ราชรัฐ', 3: 'รัฐอธิปไตย' };
+const ADMN_TH = { 0: 'เมือง', 1: 'มณฑล', 2: 'อาณาจักร', march: 'หัวเมืองชายแดน', princ: 'ประเทศราช', 3: 'ราชอาณาจักร' };
+const ADMN_OLD = [{ 0: 'แมเนอร์', 1: 'เคาน์ตี', 2: 'ดัชชี', march: 'มาร์ช', princ: 'ราชรัฐ', 3: 'รัฐอธิปไตย' }, { 0: 'ตำบล', 1: 'เมือง', 2: 'มณฑล', march: 'หัวเมืองชายแดน', princ: 'ประเทศราช', 3: 'ราชอาณาจักร' }];
+const ADM_HOLD = 0.51;                                // a state holds a duchy or a kingdom when it has this share of its counties (CK3's 51%)
+// v0.20.0, from Victoria 3: how fully a county is folded into its state. Unincorporated land pays half its taxes and is a
+// little less settled; a colony pays a fifth and is less settled again. The shares are Claude's, for the owner to tune.
+const ADMINC = { '': ['ผนวกเต็ม', 1, 0], part: ['ไม่ผนวก (ชายขอบ)', 0.5, -3], col: ['อาณานิคม', 0.2, -8] };
 const ADMFX = { march: { arms: 1.25, well: -1 }, princ: { well: 2 } };
 ECO.adm = []; ECO.admc = new Array(N).fill(''); ECO.admn = { ...ADMN0 };
 const ADM = { stamp: 0, idx: null, lv: 2, sel: null, paint: false, cityKey: -1, city: new Map() };
@@ -58,10 +67,11 @@ function admCity(id) {
     ld(b); b = b || {}; ECO.adm = [];
     for (const u of (Array.isArray(b.adm) ? b.adm : []).slice(0, 6000)) {
       if (!u || typeof u.id !== 'string' || !/^[a-z0-9]{1,16}$/.test(u.id) || ECO.adm.some(x => x.id === u.id) || ![0, 1, 2].includes(u.t)) continue;
-      ECO.adm.push({ id: u.id, t: u.t, name: ecoStr(u.name, 60), up: ecoStr(u.up, 16), type: u.t === 2 && ADMFX[u.type] ? u.type : '', seat: ecoStr(u.seat, 120) });
+      ECO.adm.push({ id: u.id, t: u.t, name: ecoStr(u.name, 60), up: ecoStr(u.up, 16), type: u.t === 2 && ADMFX[u.type] ? u.type : '', seat: ecoStr(u.seat, 120), ...(u.t === 0 && ADMINC[u.inc] && u.inc ? { inc: u.inc } : {}) });
     }
     ECO.admc = new Array(N).fill(''); if (b.admc && typeof b.admc === 'object') for (const [id, list] of Object.entries(b.admc)) { const u = admById(id); if (!u || u.t !== 0 || !Array.isArray(list)) continue; for (const i of list.slice(0, N)) if (Number.isInteger(i) && i >= 0 && i < N) ECO.admc[i] = id; }
     ECO.admn = { ...ADMN0 }; if (b.admn && typeof b.admn === 'object') for (const k of Object.keys(ADMN0)) if (typeof b.admn[k] === 'string' && b.admn[k].trim()) ECO.admn[k] = b.admn[k].slice(0, 30);
+    { const j = JSON.stringify(ECO.admn); if (ADMN_OLD.some(o => JSON.stringify(o) === j)) ECO.admn = { ...(JSON.stringify(ADMN_OLD[1]) === j ? ADMN_TH : ADMN0) }; }   // the old stock names give way to the new ones; names the owner wrote stay
     ADM.stamp++; ADM.idx = null; ADM.city.clear(); admSheetKey = '';
   };
   ecoSerial = function () {
@@ -85,7 +95,12 @@ function admBuild(s) {
   const X = admIndex(), old = new Set(ECO.adm.filter(u => X.st.get(u.id) === s.id).map(u => u.id)); ECO.adm = ECO.adm.filter(u => !old.has(u.id)); for (const i of land) ECO.admc[i] = '';
   for (let i = 0; i < N; i++) if (old.has(ECO.admc[i])) ECO.admc[i] = '';
   // manors: the land goes to the nearest community the cheapest way over the ground
-  const seeds = cs.map(c => ({ c, h: c.h != null ? c.h : hexAt(c.x, c.y) }));
+  // v0.20.0: a county is seated at one of the greater communities, and the smaller ones near it are its baronies: about one
+  // county for every two and a half communities, the seats spread out over the state, the most populous first
+  const byPop = cs.slice().sort((a, b) => b.pop - a.pop), nC = Math.max(1, Math.round(cs.length / 2.5)), span = Math.sqrt(land.length) * R * 1.6 / Math.sqrt(nC), heads = [];
+  for (const c of byPop) { if (heads.length >= nC) break; if (heads.some(h => Math.hypot(h.x - c.x, h.y - c.y) < span)) continue; heads.push(c); }
+  for (const c of byPop) { if (heads.length >= nC) break; if (!heads.includes(c)) heads.push(c); }
+  const seeds = heads.map(c => ({ c, h: c.h != null ? c.h : hexAt(c.x, c.y) }));
   if (!seeds.length) seeds.push({ c: null, h: land[0] });
   const cost = i => { const b = eff(i); return b === 'M' ? 4 : 'fokjaw'.includes(b) ? 1.5 : b === 'd' || b === 'n' ? 1.8 : 1; };
   const T = new Float64Array(N).fill(Infinity), own = new Int32Array(N).fill(-1), H = [];
@@ -106,8 +121,8 @@ function admBuild(s) {
     return ups;
   };
   if (manors.length < 2) return manors.length;
-  const counties = group(manors, 5, h => { const u = { id: admNewId(), t: 1, name: h.u.name, up: '', type: '', seat: h.u.seat }; ECO.adm.push(u); return { u, x: h.x, y: h.y, pop: 0 }; });
-  if (counties.length >= 4) {
+  const counties = group(manors, 4, h => { const u = { id: admNewId(), t: 1, name: h.u.name, up: '', type: '', seat: h.u.seat }; ECO.adm.push(u); return { u, x: h.x, y: h.y, pop: 0 }; });   // v0.20.0: duchies of about four counties
+  if (counties.length >= 3) {
     const duchies = group(counties, 4, h => { const u = { id: admNewId(), t: 2, name: h.u.name, up: '', type: '', seat: h.u.seat }; ECO.adm.push(u); return { u, x: h.x, y: h.y, pop: 0 }; });
     // a duchy on the border with a rival keeps the march
     ADM.idx = null; ADM.stamp++; const X2 = admIndex();
@@ -203,36 +218,57 @@ function admAnnex(h, quiet) {
     $('ecobody').innerHTML = admHTML();
   };
 }
+// v0.20.0: who holds a duchy or a kingdom in fact: its counties, counted by the state each lies in (de jure, the title is the
+// land; de facto, the state with 51% of its counties holds it)
+function admCounties(u, X) { const out = []; const walk = x => { if (x.t === 0) { out.push(x); return; } for (const k of X.kids.get(x.id) || []) walk(X.by.get(k)); }; walk(u); return out; }
+function admHold(u, X) {
+  const cs = admCounties(u, X), n = new Map(); for (const c of cs) { const z = X.st.get(c.id) || ''; n.set(z, (n.get(z) || 0) + 1); }
+  let holder = null; for (const [z, k] of n) if (z && k / Math.max(1, cs.length) >= ADM_HOLD) holder = ECO.states.find(x => x.id === z) || null;
+  return { total: cs.length, n, holder };
+}
+// a state's titles: the duchies and kingdoms it holds in fact, and those it holds in part, which it has a claim to
+function admTitlesHTML(s, X) {
+  const held = [], part = [];
+  for (const u of ECO.adm) { if (u.t < 1) continue; const H = admHold(u, X), k = H.n.get(s.id) || 0; if (!k || !H.total) continue; (H.holder === s ? held : part).push(`<a href="#" data-adm="${u.id}">${esc(admTitle(u))}</a> ${k}/${H.total}`); }
+  return (held.length ? `<div class="tr"><b>ตำแหน่งที่ครอง</b> <span class="w">${held.join(' · ')}</span></div>` : '')
+    + (part.length ? `<div class="tr"><b>อ้างสิทธิ์ได้ (ครองไม่ถึง 51%)</b> <span class="w">${part.join(' · ')}</span></div>` : '');
+}
 function admHTML() {
   const X = admIndex(), dis = editable ? '' : ' disabled', lv = ADM.lv;
-  let h = `<div class="erow"><span class="lbl">คลิกเลือกระดับ</span><div class="seg" id="admLv">${[0, 1, 2, 3].map(t => `<button type="button" data-lv="${t}" aria-pressed="${t === lv}">${esc(ECO.admn[t])}</button>`).join('')}</div></div>`;
+  let h = `<div class="erow"><span class="lbl">คลิกเลือกระดับ</span><div class="seg" id="admLv">${[0, 1, 2, 3].map(t => `<button type="button" data-lv="${t}" aria-pressed="${t === lv}">${esc(ECO.admn[t])}</button>`).join('')}</div></div>`
+    + (editable && ECO.states.length ? `<div class="btns" style="margin:4px 0 8px">${[0, 1, 2].map(t => `<button type="button" class="btn" data-aa="new" data-t="${t}">ตั้ง${esc(ECO.admn[t])}ใหม่</button>`).join('')}</div>` : '');
   // the chosen unit
-  if (ADM.sel && ADM.sel.startsWith('S:')) { const s = ECO.states.find(x => x.id === ADM.sel.slice(2)); if (s) h += `<div class="scard" style="padding:8px"><b>${esc(ECO.admn[3])} ${esc(s.name)}</b><div class="tr w">กด Shift ค้างแล้วคลิกบนแผนที่เพื่อผนวกหน่วยที่ใหญ่ที่สุดใต้ช่องนั้นพร้อมดินแดน</div><button type="button" class="btn" data-sopen="${s.id}">การ์ดของรัฐ</button></div>`; }
+  if (ADM.sel && ADM.sel.startsWith('S:')) { const s = ECO.states.find(x => x.id === ADM.sel.slice(2)); if (s) h += `<div class="scard" style="padding:8px"><b>${esc(ECO.admn[3])} ${esc(s.name)}</b><div class="tr w">กด Shift ค้างแล้วคลิกบนแผนที่เพื่อผนวกหน่วยที่ใหญ่ที่สุดใต้ช่องนั้นพร้อมดินแดน</div><button type="button" class="btn" data-sopen="${s.id}">การ์ดของรัฐ</button>${admTitlesHTML(s, X)}</div>`; }
   const u = ADM.sel && !ADM.sel.startsWith('S:') ? admById(ADM.sel) : null;
   if (u) {
     const up = X.upOf(u), st = ECO.states.find(s => s.id === X.st.get(u.id)), cs = X.cities.get(u.id) || [], kids = (X.kids.get(u.id) || []).map(id => X.by.get(id));
     const vc = new Map(visibleCities().map(c => [c.id, c]));
     h += `<div class="scard" style="padding:8px"><b>${esc(admTitle(u))}</b> <small>${X.hexes.get(u.id).length} ช่อง · ${cs.length} ชุมชน · ${socN(X.people.get(u.id) || 0)} คน</small>`
       + `<div class="tr w">ขึ้นกับ ${up ? `<a href="#" data-adm="${up.id}">${esc(admTitle(up))}</a>` : st ? `<a href="#" data-sopen="${st.id}">${esc(ECO.admn[3])} ${esc(st.name)}</a>` : 'ไม่มีรัฐ'}</div>`
+      + (u.t >= 1 ? (() => { const H = admHold(u, X), parts = [...H.n].filter(([z]) => z).map(([z, k]) => { const st2 = ECO.states.find(x => x.id === z); return `${esc(st2 ? st2.name : '?')} ${k}/${H.total}`; }).join(' · ');
+          return `<div class="tr w">ตามสิทธิ์ (de jure) มี ${H.total} ${esc(ECO.admn[0])} · ${H.holder ? `ครองโดย <b>${esc(H.holder.name)}</b>` : 'ยังไม่มีรัฐใดครองถึง 51%'}${parts ? ' · ' + parts : ''}</div>`; })() : '')
       + `<div class="erow"><label>ชื่อ <input type="text" data-af="name" maxlength="60" value="${esc(u.name)}"${dis}></label>`
       + (u.t === 2 ? `<label>ชนิด <select data-af="type"${dis}><option value="">${esc(ECO.admn[2])}</option><option value="march"${u.type === 'march' ? ' selected' : ''}>${esc(ECO.admn.march)}</option><option value="princ"${u.type === 'princ' ? ' selected' : ''}>${esc(ECO.admn.princ)}</option></select></label>` : '') + `</div>`
+      + (u.t === 0 ? `<div class="erow"><label>การผนวก <select data-af="inc"${dis}>${Object.entries(ADMINC).map(([k, v]) => `<option value="${k}"${(u.inc || '') === k ? ' selected' : ''}>${v[0]}</option>`).join('')}</select></label><span class="lbl">${u.inc ? `เก็บภาษีได้ ${Math.round(ADMINC[u.inc][1] * 100)}% เสถียรภาพ ${ADMINC[u.inc][2]}` : 'เก็บภาษีเต็ม'}</span></div>` : '')
       + `<div class="erow"><label>ที่ตั้งศูนย์กลาง <select data-af="seat"${dis}><option value="">ไม่ระบุ</option>${cs.map(id => `<option value="${esc(id)}"${id === u.seat ? ' selected' : ''}>${esc((vc.get(id) || {}).name || 'ไม่มีชื่อ')}</option>`).join('')}</select></label></div>`
       + (u.type === 'march' ? `<div class="tr w">${esc(ECO.admn.march)}: เขตทหาร ชุมชนในเขตทำอาวุธได้มากขึ้นหนึ่งในสี่ ความเป็นอยู่ −1</div>` : u.type === 'princ' ? `<div class="tr w">${esc(ECO.admn.princ)}: ปกครองตนเองเกือบเต็มที่ ความเป็นอยู่ +2 และในระบบการคลังจะเก็บภาษีไว้เองได้มากกว่า</div>` : '')
       + (kids.length ? `<div class="tr"><b>หน่วยในสังกัด</b> <span class="w">${kids.map(k => `<a href="#" data-adm="${k.id}">${esc(admTitle(k))}</a>`).join(' · ')}</span></div>` : '')
-      + (cs.length ? `<div class="tr"><b>ชุมชน</b> <span class="w">${cs.slice(0, 30).map(id => `<a href="#" data-city="${esc(id)}">${esc((vc.get(id) || {}).name || 'ไม่มีชื่อ')}</a>`).join(' · ')}${cs.length > 30 ? ' …' : ''}</span></div>` : '')
+      + (cs.length ? `<div class="tr"><b>${u.t === 0 ? 'บาโรนี (ชุมชนในเคาน์ตี)' : 'ชุมชน'}</b> <span class="w">${cs.slice(0, 30).map(id => `<a href="#" data-city="${esc(id)}">${esc((vc.get(id) || {}).name || 'ไม่มีชื่อ')}</a>`).join(' · ')}${cs.length > 30 ? ' …' : ''}</span></div>` : '')
       + `<div class="btns"><button type="button" class="btn" data-note="s:${u.id}" data-nt="${esc(admTitle(u))}">${noteOf('s:' + u.id) ? 'ประวัติ' : 'เขียนประวัติ'}</button>${up ? `<button type="button" class="btn" data-aa="free"${dis}>แยกออกจากหน่วยเหนือ</button>` : ''}<button type="button" class="btn warn" data-aa="del"${dis}>ยุบหน่วยนี้</button></div></div>`;
   }
   // each state, its tree
   for (const s of ECO.states) {
+    // v0.19.6: a state not yet divided shows its card open, with the button to divide it (the owner could not find it folded away)
     const tops = ECO.adm.filter(x => !X.upOf(x) && X.st.get(x.id) === s.id).sort((a, b) => b.t - a.t || (X.people.get(b.id) || 0) - (X.people.get(a.id) || 0));
     const tree = x => `<li><a href="#" data-adm="${x.id}"${ADM.sel === x.id ? ' class="on"' : ''}>${esc(admTitle(x))}</a>${x.t > 0 && (X.kids.get(x.id) || []).length ? `<ul>${X.kids.get(x.id).map(id => tree(X.by.get(id))).join('')}</ul>` : ''}</li>`;
-    h += `<details class="efold scard"${GDPV['ad' + s.id] ? ' open' : ''} data-afold="${s.id}"><summary><i class="sdot" style="background:${s.color}"></i>${esc(ECO.admn[3])} ${esc(s.name)} <small>${tops.length ? ECO.adm.filter(x => X.st.get(x.id) === s.id).length + ' หน่วย' : 'ยังไม่แบ่ง'}</small></summary><div class="eform">`
+    h += `<details class="efold scard"${GDPV['ad' + s.id] || (GDPV['ad' + s.id] == null && !tops.length) ? ' open' : ''} data-afold="${s.id}"><summary><i class="sdot" style="background:${s.color}"></i>${esc(ECO.admn[3])} ${esc(s.name)} <small>${tops.length ? ECO.adm.filter(x => X.st.get(x.id) === s.id).length + ' หน่วย' : 'ยังไม่แบ่ง'}</small></summary><div class="eform">`
       + `<div class="btns"><button type="button" class="btn" data-aa="build" data-s="${s.id}"${dis}>${tops.length ? 'แบ่งใหม่อัตโนมัติ' : 'แบ่งหน่วยอัตโนมัติ'}</button><button type="button" class="btn" data-aa="sel" data-s="${s.id}">เลือกรัฐนี้</button></div>`
       + (tops.length ? `<ul class="admtree">${tops.map(tree).join('')}</ul>` : '')
+      + admTitlesHTML(s, X)
       + (ECO.states.length > 1 ? `<div class="erow"><label>รวมเข้ากับ <select data-aj="${s.id}"${dis}>${ECO.states.filter(o => o !== s).map(o => `<option value="${o.id}">${esc(o.name)}</option>`).join('')}</select></label><label><input type="checkbox" data-ak="${s.id}" checked${dis}> เก็บรัฐนี้ไว้เป็น${esc(ECO.admn.princ)}</label><button type="button" class="btn warn" data-aa="join" data-s="${s.id}"${dis}>รวมรัฐ</button></div>` : '')
       + `</div></details>`;
   }
-  if (!ECO.states.length) h += '<p class="note">ยังไม่มีรัฐ เพิ่มรัฐในแท็บรัฐและเขตแดนก่อน</p>';
+  if (!ECO.states.length) h += '<p class="note">ยังไม่มีรัฐ หน่วยการปกครองแบ่งได้ภายในรัฐเท่านั้น เพิ่มรัฐและระบายเขตแดนก่อน แล้วกลับมาแบ่งที่นี่</p><div class="btns"><button type="button" class="btn" data-aa="gost">ไปแท็บรัฐและเขตแดน</button></div>';
   h += `<details class="efold"><summary>ชื่อของระดับการปกครอง</summary><div class="eform"><div class="erow">${['0', '1', '2', 'march', 'princ', '3'].map(k => `<label>${{ 0: 'ระดับเล็กสุด', 1: 'ระดับที่สอง', 2: 'ระดับที่สาม', march: 'ระดับที่สามแบบชายแดน', princ: 'ระดับที่สามแบบปกครองตนเอง', 3: 'ระดับสูงสุด' }[k]} <input type="text" data-an="${k}" maxlength="30" value="${esc(ECO.admn[k])}" style="width:9em"${dis}></label>`).join('')}</div>`
     + `<div class="btns"><button type="button" class="btn" data-aa="names0"${dis}>ชื่อแบบยุโรป</button><button type="button" class="btn" data-aa="namesTh"${dis}>ชื่อแบบไทยโบราณ</button></div></div></details>`;
   return h;
@@ -244,8 +280,11 @@ $('ecobody').addEventListener('click', e => {
   const cg = e.target.closest ? e.target.closest('[data-city]') : null; if (cg) { e.preventDefault(); const v = visibleCities().find(c => c.id === cg.dataset.city); if (v) { setMode('city'); selectCity(v.id); admFocusXY(v.x, v.y); } return; }
   const b = e.target.closest ? e.target.closest('[data-aa]') : null; if (!b) return; const a = b.dataset.aa;
   if (a === 'sel') { ADM.sel = 'S:' + b.dataset.s; ADM.lv = 3; ecoRender(); requestDraw(); return; }
+  if (a === 'gost') { ecoTab = 'states'; ecoRender(); requestDraw(); return; }
   if (!editable) return; const u = admById(ADM.sel);
-  if (a === 'build') { const s = ECO.states.find(x => x.id === b.dataset.s); if (s) { let n = 0; admDo(() => { n = admBuild(s); }); flash(n ? `แบ่ง${s.name}เป็น ${n} ${ECO.admn[0]}แล้ว` : 'รัฐนี้ยังไม่มีดินแดนบนแผ่นดิน'); } }
+  if (a === 'new') { const t = +b.dataset.t; if (![0, 1, 2].includes(t)) return; const nu = { id: admNewId(), t, name: ECO.admn[t] + 'ใหม่', up: '', type: '', seat: '' }; admDo(() => { ECO.adm.push(nu); }); ADM.sel = nu.id; ADM.lv = t; ecoRender(); requestDraw();
+    flash(t === 0 ? `ตั้ง${ECO.admn[0]}ใหม่แล้ว กด Shift ค้างแล้วลากบนแผนที่เพื่อระบายที่ดินให้` : `ตั้ง${ECO.admn[t]}ใหม่แล้ว กด Shift ค้างแล้วคลิก${ECO.admn[t - 1]}บนแผนที่เพื่อรวมเข้ามา`); return; }
+  if (a === 'build') { const s = ECO.states.find(x => x.id === b.dataset.s); if (s) { let n = 0; admDo(() => { n = admBuild(s); }); flash(n ? `แบ่ง${s.name} เป็น ${n} ${ECO.admn[0]}แล้ว` : 'รัฐนี้ยังไม่มีดินแดนบนแผ่นดิน'); } }
   else if (a === 'free' && u) admDo(() => { u.up = ''; });
   else if (a === 'del' && u) { admDo(() => { const X = admIndex(), up = X.upOf(u); for (const k of X.kids.get(u.id) || []) X.by.get(k).up = up ? up.id : ''; if (u.t === 0) { for (let i = 0; i < N; i++) if (ECO.admc[i] === u.id) ECO.admc[i] = ''; } ECO.adm = ECO.adm.filter(x => x !== u); }); ADM.sel = null; ecoRender(); }
   else if (a === 'join') { const from = ECO.states.find(x => x.id === b.dataset.s), to = ECO.states.find(x => x.id === $('ecobody').querySelector(`[data-aj="${b.dataset.s}"]`).value), keep = $('ecobody').querySelector(`[data-ak="${b.dataset.s}"]`).checked; if (from && to) { admDo(() => admJoin(from, to, keep)); ECOX.byKey.delete(from.id); flash(`รวม${from.name}เข้ากับ${to.name}แล้ว` + (keep ? ` ${from.name}เป็น${ECO.admn.princ}` : '')); ecoChanged(true); } }
@@ -255,7 +294,7 @@ $('ecobody').addEventListener('change', e => {
   if (ecoTab !== 'adm' || !editable) return; const el = e.target, u = admById(ADM.sel);
   if (el.dataset.an) { const v = el.value.trim().slice(0, 30); if (v) admDo(() => { ECO.admn[el.dataset.an] = v; }); return; }
   if (!u || !el.dataset.af) return; const f = el.dataset.af;
-  admDo(() => { if (f === 'name') u.name = el.value.trim().slice(0, 60); else if (f === 'type') u.type = ADMFX[el.value] ? el.value : ''; else if (f === 'seat') u.seat = el.value; });
+  admDo(() => { if (f === 'name') u.name = el.value.trim().slice(0, 60); else if (f === 'type') u.type = ADMFX[el.value] ? el.value : ''; else if (f === 'seat') u.seat = el.value; else if (f === 'inc' && u.t === 0) { if (ADMINC[el.value] && el.value) u.inc = el.value; else delete u.inc; } });
 });
 $('ecobody').addEventListener('toggle', e => { const d = e.target; if (d.dataset && d.dataset.afold) { GDPV['ad' + d.dataset.afold] = d.open ? 1 : 0; } }, true);
 function admFocusXY(x, y) { const r = cv.getBoundingClientRect(); view.x = r.width / 2 - x * view.s; view.y = r.height / 2 - y * view.s; clampView(); requestDraw(); }

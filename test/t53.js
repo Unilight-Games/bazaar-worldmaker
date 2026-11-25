@@ -25,8 +25,10 @@ let fails = 0; const ok = (c, m) => { console.log((c ? 'ok   ' : 'FAIL ') + m); 
   await p.evaluate(() => { for (const d of document.querySelectorAll('[data-afold]')) d.open = true; }); await p.click('[data-aa="build"][data-s="A"]'); await settle();
   f = await F(); ok(A().kept > 0 && f.units.length > 5, 'the units keep a share on the way up (' + f.units.length + ' units hold money)');
   // more welfare, people live better
+  // v0.20.0: the same defence, offices and works on both sides, so only the welfare budget differs
+  f = await set(d => { d.states.find(s => s.id === 'A').fisc = { bud: { wel: 0, mil: 0.2, adm: 0.1, pub: 0.1 } }; });
   const wA = f.rows.filter(r => r.s === 'A'), w0 = wA.reduce((a, r) => a + r.well, 0) / wA.length;
-  f = await set(d => { d.states.find(s => s.id === 'A').fisc = { bud: { wel: 0.8, mil: 0, adm: 0.1, pub: 0.1 } }; });
+  f = await set(d => { d.states.find(s => s.id === 'A').fisc = { bud: { wel: 0.5, mil: 0.2, adm: 0.1, pub: 0.1 } }; });
   const w1 = f.rows.filter(r => r.s === 'A').reduce((a, r) => a + r.well, 0) / wA.length;
   ok(w1 > w0, 'a welfare budget lifts well-being (' + w0.toFixed(1) + '→' + w1.toFixed(1) + ')');
   // a community exempt

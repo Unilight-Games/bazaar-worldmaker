@@ -51,4 +51,6 @@
 29v-market.js
 29w-army.js
 29x-game.js
+29z-spec.js
+29y-typing.js
 30-api.js

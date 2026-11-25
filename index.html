@@ -160,6 +160,10 @@ aside { display: flex; flex-direction: column; gap: 12px; }
 /* v0.18.5: a community's marks */
 .optrow.traits { gap: 4px 12px; }
 .optrow.traits .trait { display: inline-flex; align-items: center; gap: 4px; font-size: .84rem; white-space: nowrap; cursor: pointer; }
+/* v0.20.1: the community's form gives its text boxes a fixed width, and its ticks took it too: each box sat in the middle of a
+   190 px field with its name far off to the right (the owner, 26 Nov 2026). Ticks are their own size, beside their names. */
+.cf input[type=checkbox], .cf input[type=radio] { width: auto; padding: 0; margin: 0; border: 0; background: none; accent-color: var(--brass); flex: none; }
+.optrow.traits { justify-content: flex-start; }
 #cfFx { margin-top: 2px; }
 /* v0.19.0: the writer of notes, the world's line, and the windows over the map */
 .mmodal { position: absolute; inset: 0; z-index: 20; background: rgba(10, 11, 14, .55); display: flex; align-items: center; justify-content: center; padding: 18px; }
@@ -1103,6 +1107,7 @@ b.warn { color: var(--warn); font-weight: 600; }
             <label class="full">บันทึก <textarea id="cfNote" rows="2" maxlength="600"></textarea></label>
             <div class="optrow"><label>ประชากร <input id="cfPop" type="number" min="0" step="100" style="width:8em" autocomplete="off"> คน</label><span class="lbl">เว้นว่างเพื่อใช้ค่าตามชนิดของชุมชนและคุณลักษณะ ประชากรกำหนดความต้องการ กำลังผลิตของโรงงาน และลำดับที่พ่อค้าเลือกมาขาย</span></div>
             <div class="optrow"><label>ภาษี <input id="cfTax" type="number" min="0" max="90" step="1" style="width:5em" autocomplete="off"> %</label><span class="lbl" id="cfTaxNote"></span></div><div class="optrow traits" id="cfTraits"></div>
+            <div class="optrow" id="cfSpec"></div>
             <div class="optrow"><label>ขึ้นตรงต่อ <select id="cfUp"></select></label><span class="lbl" id="cfUpNote"></span></div>
             <p class="hint" id="cfFx" hidden></p>
             <p class="hint" id="cfHint"></p>
@@ -1225,18 +1230,18 @@ b.warn { color: var(--warn); font-weight: 600; }
 <section class="method"><div class="card" id="method"></div></section>
 </template>
 <script>window.MME_BUILD = "web"; window.MME_NO_GRESLAND = true;</script>
-<script src="firebase-config.js?v=0.19.5"></script>
-<script src="engine/gen.js?v=0.19.5"></script>
-<script src="engine/store.js?v=0.19.5"></script>
-<script src="engine/backup.js?v=0.19.5"></script>
-<script src="engine/net.js?v=0.19.5"></script>
-<script src="engine/fire.js?v=0.19.5"></script>
-<script src="engine/defaults.js?v=0.19.5"></script>
-<script src="engine/runtime.js?v=0.19.5"></script>
-<script src="engine/shell.js?v=0.19.5"></script>
-<script src="engine/hub.js?v=0.19.5"></script>
-<script src="engine/policy.js?v=0.19.5"></script>
-<script src="engine/tutor-lines.js?v=0.19.5"></script>
-<script src="engine/tutor.js?v=0.19.5"></script>
+<script src="firebase-config.js?v=0.20.1"></script>
+<script src="engine/gen.js?v=0.20.1"></script>
+<script src="engine/store.js?v=0.20.1"></script>
+<script src="engine/backup.js?v=0.20.1"></script>
+<script src="engine/net.js?v=0.20.1"></script>
+<script src="engine/fire.js?v=0.20.1"></script>
+<script src="engine/defaults.js?v=0.20.1"></script>
+<script src="engine/runtime.js?v=0.20.1"></script>
+<script src="engine/shell.js?v=0.20.1"></script>
+<script src="engine/hub.js?v=0.20.1"></script>
+<script src="engine/policy.js?v=0.20.1"></script>
+<script src="engine/tutor-lines.js?v=0.20.1"></script>
+<script src="engine/tutor.js?v=0.20.1"></script>
 </body>
 </html>

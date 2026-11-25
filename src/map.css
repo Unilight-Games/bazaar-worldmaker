@@ -150,6 +150,10 @@ aside { display: flex; flex-direction: column; gap: 12px; }
 /* v0.18.5: a community's marks */
 .optrow.traits { gap: 4px 12px; }
 .optrow.traits .trait { display: inline-flex; align-items: center; gap: 4px; font-size: .84rem; white-space: nowrap; cursor: pointer; }
+/* v0.20.1: the community's form gives its text boxes a fixed width, and its ticks took it too: each box sat in the middle of a
+   190 px field with its name far off to the right (the owner, 26 Nov 2026). Ticks are their own size, beside their names. */
+.cf input[type=checkbox], .cf input[type=radio] { width: auto; padding: 0; margin: 0; border: 0; background: none; accent-color: var(--brass); flex: none; }
+.optrow.traits { justify-content: flex-start; }
 #cfFx { margin-top: 2px; }
 /* v0.19.0: the writer of notes, the world's line, and the windows over the map */
 .mmodal { position: absolute; inset: 0; z-index: 20; background: rgba(10, 11, 14, .55); display: flex; align-items: center; justify-content: center; padding: 18px; }

@@ -29,7 +29,13 @@ if (BLANK) { ECAT.mana.name = 'น้ำมันดิบ'; ECAT.mana.v = ECAT.
 const ECATS = Object.keys(ECAT), ERAW = ECATS.filter(c => !ECAT[c].made && !ECAT[c].people), EMADEC = ECATS.filter(c => ECAT[c].made);
 const KIX = { capital: 0, city: 1, town: 2, fort: 3, village: 4, hamlet: 4, monastery: 4, camp: 4, waystation: 4 };   // the level each kind works at (v0.18.5: the four new kinds at a village's)
 const EPOP = [12, 7, 4, 3, 1.6];                   // heads of a capital, a city, a town, a fort, a village
-const EREACH = [7, 6, 5, 4, 4];                    // how far out each works the land, in hexes of open ground
+// how far out each works the land, in hexes of open ground. v0.19.7: the owner found communities harvesting far too much
+// ground (26 Nov 2026). Counting the reach in kilometres was tried and measured: the yields of a hex are set for the hex, not
+// for its area, so Gresland's harvest fell by more than half (its GDP from 78 to 35 million, well-being from 71 to 35). The
+// reach stays in hexes; the numbers tab scales it (reachMul), and a community with a specialty works a narrower ring (29z).
+const EREACH_HEX = [7, 6, 5, 4, 4];
+const kmHexNow = () => (ENV.meta && +ENV.meta.kmPerHex) || 34;
+const EREACH = new Proxy([], { get: (t, k) => { const i = +k; return Number.isInteger(i) && i >= 0 && i < 5 ? Math.max(1, EREACH_HEX[i] * (ETUNE.reachMul ? TU('reachMul') : 1)) : t[k]; } });
 const EIND = [1, 0.8, 0.4, 0.35, 0.1];             // workshops per head
 const ENEED = {                                    // loads a head needs a year, capital, city, town, fort, village
   grain: [1, 1, 1, 1, 1], protein: [0.5, 0.45, 0.4, 0.5, 0.35], salt: [0.09, 0.08, 0.08, 0.08, 0.07], herbs: [0.08, 0.06, 0.04, 0.03, 0.02],

@@ -83,6 +83,7 @@ function taxApply(rows, book) {
       const k = g.ks[j], m = ECO.cmul[r.c.id] != null ? ECO.cmul[r.c.id] : 1, made = Math.max(0, r.made || 0);
       const parts = { poll: F.poll * mean * r.people, land: F.land * Math.max(0, r.gdp - made), corp: F.corp * made, vat: F.vat * Math.max(0, r.inc), lic: F.lic * Math.max(0, r.exX || 0), imp: imp[k] };
       let T = 0; for (const x of Object.keys(parts)) { parts[x] *= m; T += parts[x]; }
+      { const ch0 = typeof admCity === 'function' && ECO.adm.length ? admCity(r.c.id)[0] : null, ic = ch0 && ch0.inc && typeof ADMINC !== 'undefined' ? ADMINC[ch0.inc] : null; if (ic) { T *= ic[1]; for (const x of Object.keys(parts)) parts[x] *= ic[1]; r.incKind = ch0.inc; } else r.incKind = ''; }   // v0.20.0: land not folded in pays less
       const cap = 0.8 * Math.max(0, r.inc); if (T > cap && T > 0) { const q = cap / T; for (const x of Object.keys(parts)) parts[x] *= q; T = cap; }
       r.inc -= T; r.tax = T; r.taxParts = parts; for (const x of Object.keys(parts)) S.rev[x] += parts[x]; S.total += T; S.gdp += r.gdp;
       // stability of the community, which its units sum
@@ -91,7 +92,7 @@ function taxApply(rows, book) {
       add('ความต้องการพื้นฐาน', 40 * ((r.metB == null ? 1 : r.metB) - 0.8)); add('ความมั่งคั่ง', 8 * clamp(Math.log2(Math.max(0.05, mean > 0 ? Math.max(0, r.inc + T) / r.people / mean : 1)), -1.5, 1.5));
       if (mc && bb.cul && bb.cul !== mc) add('วัฒนธรรมต่างจากคนส่วนใหญ่ของรัฐ', -12); if (mr && bb.rel && bb.rel !== mr) add('ศาสนาต่างจากคนส่วนใหญ่ของรัฐ', -8);
       const burden = r.inc + T > 0 ? T / (r.inc + T) : 0; add('ภาระภาษี', -60 * burden); add('งบสวัสดิการ', 20 * F.bud.wel); add('งบกลาโหม', 15 * F.bud.mil);
-      const ch = typeof admCity === 'function' && ECO.adm.length ? admCity(r.c.id) : null; if (ch && ch[2] && ch[2].type === 'princ') add('ปกครองตนเอง', 5); if (ch && ch[2] && ch[2].type === 'march') add('เขตชายแดน', -3);
+      const ch = typeof admCity === 'function' && ECO.adm.length ? admCity(r.c.id) : null; if (r.incKind && typeof ADMINC !== 'undefined') add(ADMINC[r.incKind][0], ADMINC[r.incKind][2]); if (ch && ch[2] && ch[2].type === 'princ') add('ปกครองตนเอง', 5); if (ch && ch[2] && ch[2].type === 'march') add('เขตชายแดน', -3);
       const h = r.c.h != null ? r.c.h : hexAt(r.c.x, r.c.y), z = h >= 0 && typeof szAt === 'function' ? szAt(h) : null; if (z) add(z.name, { war: -25, unrest: -15, bandit: -8 }[z.kind] || -5);
       r.stab = clamp(st, 0, 100); r.stabWhy = why; r.taxWhy.push(['ภาษี', -TU('taxWell') * burden]);
       if (r.stab < TU('stabLow')) r.taxWhy.push(['เสถียรภาพต่ำ', -5]);
