@@ -6,6 +6,7 @@ const W = +(process.env.W || 1536), H = +(process.env.H || 602), TAG = process.e
   const browser = await chromium.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox'] });
   const ctx = await browser.newContext({ viewport: { width: W, height: H } }); const page = await ctx.newPage(); const errs = [];
   page.on('pageerror', e => errs.push('PAGEERR ' + e.message));
+  if (process.env.UI) await page.addInitScript(u => localStorage.setItem('mme-ui', u), process.env.UI);   // a fixed letter size (s, m, l); the default is the automatic one
   if (BK) await page.addInitScript(() => { const S = new Map(), snap = (i, b) => ({ id: i, exists: b != null, data: () => b, metadata: {} }); const doc = p => ({ id: p.split('/').pop(), path: p, get: async () => snap(p, S.get(p)), set: async b => { S.set(p, b); }, delete: async () => { S.delete(p); }, onSnapshot: () => () => {} }); const q = p => ({ where: () => q(p), doc: i => doc(p + '/' + i), get: async () => ({ docs: [], size: 0, empty: true }) }); window.claude = { use: n => Promise.resolve(n === 'db' ? { doc, collection: q } : n === 'user' ? { id: async () => 'u1', isOwner: async () => true } : null) }; });
   await page.goto('http://localhost:8765/index.html'); await page.waitForSelector('.mapcard');
   await page.click('#tuStart'); await page.waitForSelector('#tutor:not([hidden])', { timeout: 30000 }); await page.waitForTimeout(2000);

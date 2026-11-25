@@ -3787,7 +3787,13 @@ $('layers').innerHTML = LAYERS.map(([k, st]) => `<label><input type="checkbox" d
 for (const b of document.querySelectorAll('#layers input')) b.onchange = () => { showR[b.dataset.k] = b.checked; try { localStorage.setItem('gresland-route-layers', JSON.stringify(showR)); } catch (err) { /* the choice lasts this visit */ } requestDraw(); fxKick(); };
 // the two cards under the map's buttons: opening one closes the other
 function openCard(id, btn) {
-  for (const [c, b] of [['layers', 'layersBtn'], ['nsize', 'nsizeBtn']]) { const open = c === id && $(c).hidden; $(c).hidden = !open; $(b).setAttribute('aria-expanded', String(open)); }
+  for (const [c, b] of [['layers', 'layersBtn'], ['nsize', 'nsizeBtn']]) { const open = c === id && $(c).hidden; $(c).hidden = !open; $(b).setAttribute('aria-expanded', String(open)); if (open) cardUnder($(c), $(b)); }
+}
+// v0.19.2: the card opens right under its own button, now that the row of buttons can wrap onto two or three lines
+function cardUnder(el, btn) {
+  const host = el.offsetParent || el.parentNode, hr = host.getBoundingClientRect(), br = btn.getBoundingClientRect();
+  el.style.top = Math.round(br.bottom - hr.top + 4) + 'px';
+  el.style.left = Math.round(Math.max(4, Math.min(br.left - hr.left, hr.width - el.offsetWidth - 4))) + 'px';
 }
 $('layersBtn').onclick = () => openCard('layers');
 $('nsizeBtn').onclick = () => openCard('nsize');
@@ -9491,19 +9497,31 @@ function bhazeSheet() {
 const opt = document.createElement('div'); opt.className = 'mapopt'; $('mapbox').appendChild(opt);
 const mini = document.createElement('canvas'); mini.className = 'minimap'; mini.width = 200; mini.height = Math.max(60, Math.round(200 * G.h / G.w)); mini.title = 'คลิกหรือลากเพื่อเลื่อนแผนที่ (กด H เพื่อซ่อน)'; $('mapbox').appendChild(mini);
 let optLast = '';
+function uiTop() {                                    // the lowest edge of the controls along the top of the map, in the map box
+  const br = box.getBoundingClientRect(); let b = 46;
+  for (const e of box.querySelectorAll('.ctl button, .ctl select, .ctl label, .ctl input, .mapopt')) { const r = e.getBoundingClientRect(); if (r.width && r.height && r.top < br.top + 200) b = Math.max(b, r.bottom - br.top); }
+  return Math.round(b);
+}
 function hudRender() {
   // the options take the top right corner itself (the owner, 25 Nov 2026); the zoom buttons step down below them
   mini.hidden = !GAME.mini; mini.style.right = (padR() + 10) + 'px'; opt.style.right = (padR() + 10) + 'px';
+  { const mw = Math.round(clamp((box.clientWidth - padR()) * 0.17, 110, 200)); if (mini.style.width !== mw + 'px') { mini.style.width = mw + 'px'; mini.style.height = 'auto'; } }   // v0.19.2: the small map shrinks with a small window
   { const ctl = document.querySelector('#mapbox .ctl'), br = box.getBoundingClientRect(); let top = 10;
     // the row of map buttons wraps short of the corner, so the options keep it; only on a very narrow map do they step below the row
     if (ctl) { ctl.style.maxWidth = ''; const room = br.right - padR() - 10 - opt.offsetWidth - 10 - ctl.getBoundingClientRect().left; if (room >= 280) ctl.style.maxWidth = Math.floor(room) + 'px'; else top = Math.round(ctl.getBoundingClientRect().bottom - br.top + 8); }
     opt.style.top = top + 'px';
-    const zm = box.querySelector('.zoom'); if (zm) zm.style.top = (top + (opt.offsetHeight || 32) + 8) + 'px'; }
+    const zm = box.querySelector('.zoom'); if (zm) zm.style.top = (top + (opt.offsetHeight || 32) + 8) + 'px';
+    // v0.19.2: what opens under the top controls (the journey and crop windows, a card popped out) starts below them all, and
+    // the short messages at the foot of the map rise over the small map
+    box.style.setProperty('--uitop', (uiTop() + 8) + 'px');
+    const mb = GAME.mini && !mini.hidden ? mini.offsetHeight + 22 : 14;
+    box.style.setProperty('--toastb', mb + 'px'); box.style.setProperty('--minib', (mb + 4) + 'px');
+    box.style.setProperty('--toastx', Math.round((box.clientWidth - padR() + padL()) / 2) + 'px'); }
   // during a lesson the scale sits at the top of the map, where the row of map buttons may now reach: it goes below them
   { const sb = $('scalebar'), ctl = document.querySelector('#mapbox .ctl'); if (sb && ctl) { sb.style.top = ''; if (document.body.classList.contains('tutoring')) { const a = sb.getBoundingClientRect(), c = ctl.getBoundingClientRect(); if (a.top < c.bottom && a.bottom > c.top && a.left < c.right && a.right > c.left) sb.style.top = Math.round(c.bottom - box.getBoundingClientRect().top + 6) + 'px'; } } }
   const w = ECO.world, wt = [w.name, w.era, w.year ? 'ปี ' + w.year : ''].filter(Boolean).join(' · ');
   const key = wt + GAME.sfx + GAME.music; if (key === optLast) return; optLast = key;
-  opt.innerHTML = `<button type="button" data-hud="world" class="w" title="ข้อมูลโลก: ชื่อ ยุค ปี และประวัติ">${esc(wt || 'ตั้งชื่อโลก')}</button><button type="button" data-hud="sfx" aria-pressed="${GAME.sfx}" title="เสียงประกอบ">${GAME.sfx ? 'เสียง ●' : 'เสียง ○'}</button><button type="button" data-hud="music" aria-pressed="${GAME.music}" title="เพลง">${GAME.music ? 'เพลง ●' : 'เพลง ○'}</button><button type="button" data-hud="keys" title="คีย์ลัด">?</button>`;
+  opt.innerHTML = `<button type="button" data-hud="world" class="w" title="ข้อมูลโลก: ชื่อ ยุค ปี และประวัติ">${esc(wt || 'ตั้งชื่อโลก')}</button><button type="button" data-hud="sfx" aria-pressed="${GAME.sfx}" title="เสียงประกอบ">${GAME.sfx ? 'เสียง ●' : 'เสียง ○'}</button><button type="button" data-hud="music" aria-pressed="${GAME.music}" title="เพลง">${GAME.music ? 'เพลง ●' : 'เพลง ○'}</button><button type="button" data-hud="bare" title="ซ่อนเครื่องมือทั้งหมดบนแผนที่ (U)">ซ่อน</button><button type="button" data-hud="keys" title="คีย์ลัด">?</button>`;
 }
 opt.addEventListener('click', e => {
   const b = e.target.closest('[data-hud]'); if (!b) return; const k = b.dataset.hud; sfx('tick');
@@ -9511,6 +9529,7 @@ opt.addEventListener('click', e => {
   else if (k === 'sfx') { GAME.sfx = !GAME.sfx; gameSave(); optLast = ''; hudRender(); if (GAME.sfx) sfx('open'); }
   else if (k === 'music') { GAME.music = !GAME.music; gameSave(); optLast = ''; hudRender(); if (GAME.music) musicStart(); else musicStop(); }
   else if (k === 'keys') keysHelp();
+  else if (k === 'bare') bareToggle();
 });
 for (const ev of ['pointerdown', 'wheel']) { opt.addEventListener(ev, e => e.stopPropagation()); mini.addEventListener(ev, e => e.stopPropagation()); }
 if ($('worldLine')) $('worldLine').style.display = 'none';
@@ -9557,7 +9576,7 @@ function popCards() {
     let home = null;
     b.onclick = e => {
       e.stopPropagation(); sfx('open');
-      if (!card.classList.contains('floating')) { home = { parent: card.parentNode, next: card.nextSibling }; $('mapbox').appendChild(card); card.classList.add('floating'); b.textContent = '⤓'; b.title = 'เก็บกลับเข้าแผงข้าง'; if (!card.style.left) { card.style.left = (padL() + 60) + 'px'; card.style.top = '70px'; } if (!card._drag) { dragBy(card, h2, 'card-' + (card.id || 'x')); card._drag = 1; } }
+      if (!card.classList.contains('floating')) { home = { parent: card.parentNode, next: card.nextSibling }; $('mapbox').appendChild(card); card.classList.add('floating'); b.textContent = '⤓'; b.title = 'เก็บกลับเข้าแผงข้าง'; if (!card.style.left) { const bw = box.clientWidth; card.style.left = Math.max(padL() + 10, bw - padR() - 56 - 330) + 'px'; card.style.top = (uiTop() + 8) + 'px'; } if (!card._drag) { dragBy(card, h2, 'card-' + (card.id || 'x')); card._drag = 1; } }
       else { card.classList.remove('floating'); if (home) home.parent.insertBefore(card, home.next); b.textContent = '⧉'; b.title = 'แยกการ์ดนี้ออกมาเป็นหน้าต่างลอย'; }
     };
     for (const ev of ['pointerdown', 'wheel']) card.addEventListener(ev, e => { if (card.classList.contains('floating')) e.stopPropagation(); });
@@ -9596,8 +9615,33 @@ __on(window, 'keydown', e => { if (e.key === 'Escape') ring.hidden = true; });
 // ---- keys, shown on the mode buttons at the top ----
 const HOTK = [['1', 'view', 'ดู'], ['2', 'terrain', 'ภูมิประเทศ'], ['3', 'river', 'แม่น้ำ'], ['4', 'city', 'ชุมชน'], ['5', 'label', 'ชื่อ'], ['6', 'route', 'ถนน'], ['7', 'trade', 'การค้า'], ['8', 'climate', 'ภูมิอากาศ'], ['9', 'econ', 'เศรษฐกิจ'], ['0', 'info', 'ข้อมูล']];
 for (const [k, m] of HOTK) { const b = document.querySelector(`#modes button[data-mode="${m}"]`); if (!b || b.querySelector('kbd')) continue; const kb = document.createElement('kbd'); kb.className = 'modekey'; kb.textContent = k; b.appendChild(kb); b.title = (b.title ? b.title + ' ' : '') + '(กด ' + k + ')'; }
-const KEYS = [['1 ถึง 0', 'เปลี่ยนโหมด ตามเลขบนปุ่มโหมดด้านบน'], ['[ และ ]', 'แปรงเล็กลงและใหญ่ขึ้น'], ['Q / Shift+Q', 'ฤดูถัดไปและฤดูก่อน'], ['M', 'ตลาดสินค้ากลาง'], ['R', 'วัดระยะ'], ['T', 'วางแผนเดินทาง'], ['L', 'ชั้นวัฒนธรรม ศาสนา และการปกครอง'], ['N', 'ชื่อสถานที่'], ['H', 'ซ่อนหรือแสดงแผนที่ย่อ'], ['Ctrl+Z / Ctrl+Y', 'ย้อนและทำซ้ำ'], ['คลิกขวา', 'เมนูวงล้อ'], ['Esc', 'ปิดหน้าต่างหรือเลิกเครื่องมือ']];
-function keysHelp() { const t = $('toast'); flash(KEYS.map(([k, v]) => k + ': ' + v).join('  ·  ')); if (t) { t.classList.add('long'); setTimeout(() => t.classList.remove('long'), 7000); } }
+const KEYS = [['1 ถึง 0', 'เปลี่ยนโหมด ตามเลขบนปุ่มโหมดด้านบน'], ['[ และ ]', 'แปรงเล็กลงและใหญ่ขึ้น'], ['Q / Shift+Q', 'ฤดูถัดไปและฤดูก่อน'], ['M', 'ตลาดสินค้ากลาง'], ['R', 'วัดระยะ'], ['T', 'วางแผนเดินทาง'], ['L', 'ชั้นวัฒนธรรม ศาสนา และการปกครอง'], ['N', 'ชื่อสถานที่'], ['H', 'ซ่อนหรือแสดงแผนที่ย่อ'], ['U', 'ซ่อนหรือแสดงเครื่องมือทั้งหมดบนแผนที่'], ['Ctrl+Z / Ctrl+Y', 'ย้อนและทำซ้ำ'], ['คลิกขวา', 'เมนูวงล้อ'], ['Esc', 'ปิดหน้าต่างหรือเลิกเครื่องมือ']];
+// v0.19.2: the keys open as a small card under the "?" button, where nothing else sits, in place of a long line over the map
+const keysEl = document.createElement('div'); keysEl.className = 'keyspanel'; keysEl.hidden = true; $('mapbox').appendChild(keysEl);
+for (const ev of ['pointerdown', 'wheel']) keysEl.addEventListener(ev, e => e.stopPropagation());
+// v0.19.2: when the tools hide too much of the map, U (or the button at the top right) puts them all away at once: the buttons over
+// the map, the small map, the hover card, the options and the side panel; a chip at the top right and U again bring them back
+let bare = null;
+const bareChip = document.createElement('button'); bareChip.type = 'button'; bareChip.className = 'btn barechip'; bareChip.hidden = true; bareChip.textContent = 'แสดงเครื่องมือ (U)'; $('mapbox').appendChild(bareChip);
+bareChip.onclick = () => bareToggle();
+function bareToggle() {
+  const scr = $('mapscreen'), P = MME.shell && MME.shell.panels;
+  if (!bare) { bare = { side: !!scr && !scr.classList.contains('noside'), opts: !!scr && !scr.classList.contains('noopts') }; box.classList.add('bare'); if (P && scr && scr.classList.contains('fit')) P({ side: false, opts: false }); keysHelp(false); }
+  else { box.classList.remove('bare'); if (P && scr && scr.classList.contains('fit')) P({ side: bare.side, opts: bare.opts }); bare = null; }
+  bareChip.hidden = !bare; sfx('page'); requestDraw();
+}
+__offs.push(() => { if (bare) { const P = MME.shell && MME.shell.panels; if (P) P({ side: bare.side, opts: bare.opts }); bare = null; } });
+const uaName = () => { const u = navigator.userAgent, os = /Mac OS X|Macintosh/.test(u) ? 'Mac' : /Windows/.test(u) ? 'Windows' : /Android/.test(u) ? 'Android' : /iPhone|iPad/.test(u) ? 'iOS' : /Linux/.test(u) ? 'Linux' : '';
+  const b = /Edg\//.test(u) ? 'Edge' : /Firefox\//.test(u) ? 'Firefox' : /Chrome\//.test(u) ? 'Chrome' : /Safari\//.test(u) ? 'Safari' : 'เบราว์เซอร์อื่น', v = (u.match(/(?:Edg|Firefox|Chrome|Version)\/(\d+)/) || [])[1];
+  return [b + (v ? ' ' + v : ''), os].filter(Boolean).join(' บน '); };
+function keysHelp(force) {
+  keysEl.hidden = force === false ? true : !keysEl.hidden; if (keysEl.hidden) return;
+  keysEl.innerHTML = `<div class="mmhead"><h3>คีย์ลัด</h3><button type="button" class="btn" data-k="close">ปิด</button></div><dl>${KEYS.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl><p class="note">หน้าจอ ${innerWidth}×${innerHeight} · ตัวอักษร ${esc(getComputedStyle(document.documentElement).fontSize)} · ${esc(uaName())}</p>`;   // v0.19.2: what to tell the owner when the screen looks wrong
+  keysEl.style.right = (padR() + 56) + 'px'; keysEl.style.top = (uiTop() + 8) + 'px';
+}
+keysEl.addEventListener('click', e => { if (e.target.closest('[data-k="close"]')) keysHelp(false); });
+__on(window, 'keydown', e => { if (e.key === 'Escape' && !keysEl.hidden) keysHelp(false); });
+__on(document, 'pointerdown', e => { if (!keysEl.hidden && !keysEl.contains(e.target) && !e.target.closest('.mapopt [data-hud="keys"]')) keysHelp(false); });
 __on(window, 'keydown', e => {
   if (e.ctrlKey || e.metaKey || e.altKey) return; const t = e.target; if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
   if (!noteBox.hidden || !mkEl.hidden) return; const code = e.code, d = /^Digit([0-9])$/.exec(code);
@@ -9605,6 +9649,7 @@ __on(window, 'keydown', e => {
   if (code === 'BracketLeft' || code === 'BracketRight') { const n = clamp(bsize + (code === 'BracketRight' ? 1 : -1), 1, 4); setBsize(n); flash('แปรง ' + ['', '1 ช่อง', '7 ช่อง', '19 ช่อง', '37 ช่อง'][n]); BEL.n = n; e.preventDefault(); return; }
   if (code === 'KeyQ') { if (e.shiftKey) $('seasonBtn').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })); else $('seasonBtn').click(); }
   else if (code === 'KeyM') mkOpen(); else if (code === 'KeyR') $('rulerBtn').click(); else if (code === 'KeyT') $('tripBtn').click(); else if (code === 'KeyL') $('belBtn').click(); else if (code === 'KeyN') $('names').click();
+  else if (code === 'KeyU') bareToggle();
   else if (code === 'KeyH') { GAME.mini = !GAME.mini; gameSave(); hudRender(); miniDraw(); }
   else return; e.preventDefault();
 });

@@ -81,7 +81,13 @@ $('layers').innerHTML = LAYERS.map(([k, st]) => `<label><input type="checkbox" d
 for (const b of document.querySelectorAll('#layers input')) b.onchange = () => { showR[b.dataset.k] = b.checked; try { localStorage.setItem('gresland-route-layers', JSON.stringify(showR)); } catch (err) { /* the choice lasts this visit */ } requestDraw(); fxKick(); };
 // the two cards under the map's buttons: opening one closes the other
 function openCard(id, btn) {
-  for (const [c, b] of [['layers', 'layersBtn'], ['nsize', 'nsizeBtn']]) { const open = c === id && $(c).hidden; $(c).hidden = !open; $(b).setAttribute('aria-expanded', String(open)); }
+  for (const [c, b] of [['layers', 'layersBtn'], ['nsize', 'nsizeBtn']]) { const open = c === id && $(c).hidden; $(c).hidden = !open; $(b).setAttribute('aria-expanded', String(open)); if (open) cardUnder($(c), $(b)); }
+}
+// v0.19.2: the card opens right under its own button, now that the row of buttons can wrap onto two or three lines
+function cardUnder(el, btn) {
+  const host = el.offsetParent || el.parentNode, hr = host.getBoundingClientRect(), br = btn.getBoundingClientRect();
+  el.style.top = Math.round(br.bottom - hr.top + 4) + 'px';
+  el.style.left = Math.round(Math.max(4, Math.min(br.left - hr.left, hr.width - el.offsetWidth - 4))) + 'px';
 }
 $('layersBtn').onclick = () => openCard('layers');
 $('nsizeBtn').onclick = () => openCard('nsize');

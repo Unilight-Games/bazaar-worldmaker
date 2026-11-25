@@ -9,7 +9,7 @@ const URL = 'http://localhost:8765/index.html';
   const ok = (name, v, extra) => { if (!v) bad++; console.log((v ? 'ok   ' : 'FAIL ') + name + (extra != null ? ' | ' + extra : '')); };
   const p = await ctx.newPage(); p.on('pageerror', e => errs.push('PAGEERR ' + e.message)); p.on('console', m => { if (m.type() === 'error' && !/fonts\.g|Failed to load resource/.test(m.text())) errs.push('CONSOLE ' + m.text()); });
   await p.goto(URL); await p.waitForSelector('#lib');
-  ok('the page starts at the middle letter size, larger than before', await p.evaluate(() => getComputedStyle(document.documentElement).fontSize === '17px' && document.querySelector('.uisize.fixed [data-ui="m"]').getAttribute('aria-pressed') === 'true'));
+  ok('the page starts at the automatic size, worked out from the window (v0.19.2)', await p.evaluate(() => { const f = Math.min(innerWidth / 1536, innerHeight / 864), want = Math.round(Math.max(13, Math.min(22, 17 * Math.pow(f, 0.7))) * 2) / 2; return getComputedStyle(document.documentElement).fontSize === want + 'px' && document.querySelector('.uisize.fixed [data-ui="a"]').getAttribute('aria-pressed') === 'true'; }));
   await p.click('.uisize.fixed [data-ui="l"]'); ok('the large size is one click away and is kept', await p.evaluate(() => getComputedStyle(document.documentElement).fontSize === '19px' && localStorage.getItem('mme-ui') === 'l'));
   await p.click('.uisize.fixed [data-ui="m"]');
   await p.waitForSelector('.mapcard[data-id="gresland"]', { timeout: 60000 }); await p.click('.mapcard[data-id="gresland"] [data-act="open"]');

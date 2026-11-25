@@ -112,7 +112,7 @@ canvas { display: block; width: 100%; cursor: grab; }
 .tip .m { color: var(--muted); }
 .tip .lore { margin: 4px 0 2px; }
 .tip .mine { color: #e9c98a; }
-.toast { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); background: rgba(21, 23, 28, .94); border: 1px solid var(--brass); color: var(--text); border-radius: 6px; padding: 6px 12px; font-size: .84rem; pointer-events: none; opacity: 0; transition: opacity .2s; z-index: 3; max-width: 90%; text-align: center; }
+.toast { position: absolute; left: var(--toastx, 50%); bottom: var(--toastb, 14px); transform: translateX(-50%); background: rgba(21, 23, 28, .94); border: 1px solid var(--brass); color: var(--text); border-radius: 6px; padding: 6px 12px; font-size: .84rem; pointer-events: none; opacity: 0; transition: opacity .2s; z-index: 3; max-width: 90%; text-align: center; }
 .toast.on { opacity: 1; }
 aside { display: flex; flex-direction: column; gap: 12px; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; }
@@ -173,7 +173,7 @@ aside { display: flex; flex-direction: column; gap: 12px; }
 .peek b { font-family: var(--display); font-size: .98rem; }
 .peek .m { color: var(--muted); } .peek .s { color: var(--brass); } .peek .lore { margin-top: 3px; }
 .peekring { position: absolute; z-index: 6; pointer-events: none; width: 16px; height: 16px; border-radius: 50%; background: conic-gradient(var(--brass) var(--p, 0deg), rgba(255, 255, 255, .18) 0); -webkit-mask: radial-gradient(circle, transparent 4px, #000 5px); mask: radial-gradient(circle, transparent 4px, #000 5px); }
-.tripbox { position: absolute; z-index: 5; right: 64px; top: 54px; width: min(340px, calc(100% - 90px)); max-height: calc(100% - 70px); overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 7px; padding: 10px 12px; font-size: .88rem; box-shadow: 0 6px 18px rgba(0, 0, 0, .45); }
+.tripbox { position: absolute; z-index: 5; right: 64px; top: var(--uitop, 54px); width: min(340px, calc(100% - 90px)); max-height: calc(100% - var(--uitop, 54px) - var(--minib, 16px)); overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 7px; padding: 10px 12px; font-size: .88rem; box-shadow: 0 6px 18px rgba(0, 0, 0, .45); }
 .tripbox[hidden] { display: none; }
 .tripbox .mmhead h3 { font-size: 1rem; }
 .tripbox .btn.on, .infobody .btn.on { border-color: var(--brass); color: var(--brass); }
@@ -224,7 +224,7 @@ canvas.measuring { cursor: crosshair; }
 aside .card h2 { position: relative; }
 .popbtn { position: absolute; right: 26px; top: 50%; transform: translateY(-50%); background: none; border: 1px solid transparent; color: var(--muted); font-size: .85rem; cursor: pointer; border-radius: 4px; padding: 0 4px; }
 .popbtn:hover { color: var(--brass); border-color: var(--line); }
-.card.floating { position: absolute; z-index: 8; width: 320px; max-height: 70%; overflow: auto; box-shadow: 0 10px 28px rgba(0, 0, 0, .55); border: 1px solid var(--brass); }
+.card.floating { position: absolute; z-index: 8; width: 320px; max-height: calc(100% - var(--uitop, 54px) - var(--minib, 16px)); overflow: auto; box-shadow: 0 10px 28px rgba(0, 0, 0, .55); border: 1px solid var(--brass); }
 .card.floating.dragging, .tripbox.dragging { opacity: .9; }
 .toast.long { max-width: min(900px, 90%); white-space: normal; }
 .mmodal:not([hidden]) .mmcard { animation: winIn .18s ease-out; }
@@ -236,3 +236,15 @@ aside .card h2 { position: relative; }
 .mapopt button.w { font-family: var(--display); color: #e9cf91; max-width: 22em; overflow: hidden; text-overflow: ellipsis; }
 #modes button { position: relative; }
 #modes .modekey { position: absolute; top: 1px; right: 2px; font-family: inherit; font-size: .56rem; line-height: 1; color: var(--muted); opacity: .8; pointer-events: none; }
+
+/* v0.19.2: the keys, as a card under the "?" button */
+.keyspanel { position: absolute; z-index: 6; width: min(330px, calc(100% - 20px)); max-height: calc(100% - var(--uitop, 54px) - var(--minib, 16px)); overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px 10px; box-shadow: 0 10px 28px rgba(0, 0, 0, .5); font-size: .84rem; }
+.keyspanel dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 6px 0 0; }
+.keyspanel dt { font-weight: 600; color: #e9cf91; white-space: nowrap; }
+.keyspanel dd { margin: 0; color: var(--text); }
+/* v0.19.2: on a short map the hover card stops short of the buttons along the top */
+#mapbox > .tip { max-height: calc(100% - var(--uitop, 54px) - 64px); overflow: auto; }
+/* v0.19.2: everything over the map put away (U) */
+#mapbox.bare .ctl, #mapbox.bare .mapopt, #mapbox.bare .minimap, #mapbox.bare > .tip, #mapbox.bare .zoom, #mapbox.bare .layers, #mapbox.bare .nsize, #mapbox.bare .keyspanel, #mapbox.bare .peek, #mapbox.bare .peekring { display: none !important; }
+.barechip { position: absolute; z-index: 7; top: 10px; right: calc(var(--barer, 10px)); font-size: .8rem; padding: 4px 10px; opacity: .85; }
+.barechip:hover { opacity: 1; }

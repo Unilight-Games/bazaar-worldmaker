@@ -179,8 +179,8 @@ input[type=range] { accent-color: var(--brass); width: 100%; }
 #mapscreen.fit .mapcol { height: 100%; display: flex; flex-direction: column; }
 #mapscreen.fit .toolbar { position: relative; flex: 0 0 auto; padding: 0 0 6px; z-index: 7; }
 #mapscreen.fit .mapbox { flex: 1 1 0; min-height: 0; }
-#mapscreen.fit .opts { position: absolute; left: 10px; top: calc(100% + 8px + var(--ctlh, 38px)); margin: 0; max-width: min(820px, calc(100% - 362px)); max-height: 44vh; overflow: auto; background: rgba(27, 30, 37, .96); box-shadow: 0 8px 26px rgba(0, 0, 0, .5); scrollbar-width: thin; }
-#mapscreen.fit.noside .opts { max-width: min(820px, calc(100% - 20px)); }
+#mapscreen.fit .opts { position: absolute; left: 10px; top: calc(100% + 14px + var(--ctlh, 38px)); margin: 0; max-width: min(820px, calc(100% - 408px)); max-height: 44vh; overflow: auto; background: rgba(27, 30, 37, .96); box-shadow: 0 8px 26px rgba(0, 0, 0, .5); scrollbar-width: thin; }
+#mapscreen.fit.noside .opts { max-width: min(820px, calc(100% - 66px)); }
 #mapscreen.fit.noopts .opts, #mapscreen.fit .mapcol:has(#mapbox[data-mode="view"]) .opts { display: none; }
 #mapscreen.fit .layers, #mapscreen.fit .nsize { z-index: 9; }
 #mapscreen.fit .zoom { right: 352px; }
@@ -580,3 +580,12 @@ b.warn { color: var(--warn); font-weight: 600; }
 .mcard.tutor.glow { animation: tglow 1.6s ease 2; }
 @keyframes tglow { 50% { box-shadow: 0 0 0 3px rgba(207, 169, 94, .8), 0 0 30px rgba(207, 169, 94, .5); } }
 @media (prefers-reduced-motion: reduce) { .gbtn { transition: none; } .mcard.tutor.glow { animation: none; } }
+/* v0.19.2: four sizes (automatic first): the label above, the buttons on one line */
+.uisize { flex-wrap: wrap; row-gap: 4px; }
+.uisize .seg { flex-wrap: nowrap; }
+.uisize .seg button { white-space: nowrap; }
+/* v0.19.2: on a phone the letter size and the version sit at the foot of the menu, in the flow, so they cover nothing */
+@media (max-width: 760px) {
+  .uisize.fixed { position: static; margin: 12px 10px 4px; }
+  #vtag { position: static; display: block; width: max-content; margin: 4px 10px 12px auto; }
+}

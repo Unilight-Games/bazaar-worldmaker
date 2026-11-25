@@ -2,7 +2,7 @@
 // the sheet for a new map, and the room around an open map.
 (function () {
   const MME = window.MME;
-  MME.VERSION = '0.19.2';
+  MME.VERSION = '0.19.3';
   MME.NAME = 'Bazaar Worldmaker';
   MME.GRESLAND_KM = 34;   // canon: the continent is about 12 million square kilometres, and the map draws it on 12,208 hexes
   const $ = id => document.getElementById(id);
@@ -348,19 +348,23 @@
   $('myName').onchange = () => LS.set('mme-name', $('myName').value.trim().slice(0, 24));
 
   // the size of the page's letters: the owner found the first size too small (v0.9.0), so the middle one is larger and there are three
+  // v0.19.2: "auto", the default, sizes the letters (and with them the whole interface) to the window: 17 px at 1536 by 864, less on
+  // a small screen, more on a large one, never under 13 or over 22 (Claude's numbers). A size the person picks stays picked.
   const UIS = { s: 15, m: 17, l: 19 };
+  const uiAuto = () => { const f = Math.min(innerWidth / 1536, innerHeight / 864); return Math.round(Math.max(13, Math.min(22, 17 * Math.pow(Math.max(f, 0.1), 0.7))) * 2) / 2; };
   function setUi(k, keep) {
-    k = UIS[k] ? k : 'm'; document.documentElement.style.setProperty('--ufs', UIS[k] + 'px'); if (keep) LS.set('mme-ui', k);
+    k = UIS[k] || k === 'a' ? k : 'a'; document.documentElement.style.setProperty('--ufs', (k === 'a' ? uiAuto() : UIS[k]) + 'px'); if (keep) LS.set('mme-ui', k);
     for (const b of document.querySelectorAll('[data-ui]')) b.setAttribute('aria-pressed', b.dataset.ui === k ? 'true' : 'false');
-    if (keep && cur) { try { applyFit(false); cur.rt.refit && cur.rt.refit(); } catch (err) { /* the next resize sets it right */ } }
+    if ((keep || k === 'a') && cur) { try { applyFit(false); cur.rt.refit && cur.rt.refit(); } catch (err) { /* the next resize sets it right */ } }
   }
   document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-ui]'); if (b) setUi(b.dataset.ui, true); });
-  setUi(LS.get('mme-ui') || 'm');
+  setUi(LS.get('mme-ui') || 'a');
+  { let rt = 0; window.addEventListener('resize', () => { if ((LS.get('mme-ui') || 'a') !== 'a') return; clearTimeout(rt); rt = setTimeout(() => setUi('a', false), 150); }); }
   function showScreen(map) { $('menu').hidden = map; $('mapscreen').hidden = !map; $('vtag').hidden = map; window.scrollTo(0, 0); }   // on the map the version sits at the foot of the side panel, where it covers nothing (v0.14.0)
   async function mount(meta, db, guestRoom, practice) {
     const scr = $('mapscreen'); scr.innerHTML = '<div id="mapload">กำลังเปิดแผนที่</div>'; showScreen(true);
     let base; try { base = await baseFor(meta); } catch (err) { showScreen(false); toast(err && err.code === 'nobase' ? 'แผนที่ผืนนี้วาดบนพื้นเกรสแลนด์ ซึ่งหน้านี้ไม่มี ให้ส่งออกไฟล์ใหม่จากหน้าที่มีเกรสแลนด์ด้วยเวอร์ชัน 0.8.2 ขึ้นไป แล้วนำเข้าอีกครั้ง' : 'โหลดพื้นแผนที่ไม่สำเร็จ ลองเปิดใหม่อีกครั้ง', err && err.code === 'nobase' ? 9000 : undefined); return false; }
-    scr.innerHTML = ''; scr.appendChild($('tpl-map').content.cloneNode(true)); if ($('vfoot')) $('vfoot').textContent = MME.NAME + ' v' + MME.VERSION; scr.classList.toggle('blank', !!base.blank); setUi(LS.get('mme-ui') || 'm');
+    scr.innerHTML = ''; scr.appendChild($('tpl-map').content.cloneNode(true)); if ($('vfoot')) $('vfoot').textContent = MME.NAME + ' v' + MME.VERSION; scr.classList.toggle('blank', !!base.blank); setUi(LS.get('mme-ui') || 'a');
     const side = scr.querySelector('aside'), meth = scr.querySelector('section.method'); if (side && meth) side.appendChild(meth);   // the notes under the map live in the side panel
     applyFit(true);
     if (base.blank) {                               // words that belong to Gresland alone
@@ -377,7 +381,7 @@
     return true;
   }
   // ---------- the fitted screen: on a screen wide enough the map takes the whole window, and the panels lie over it ----------
-  const FITMQ = window.matchMedia && !/[?&]fit=0\b/.test(location.search) ? matchMedia('(min-width: 981px) and (min-height: 600px)') : null;   // ?fit=0 keeps the scrolling page, for the tests written on it
+  const FITMQ = window.matchMedia && !/[?&]fit=0\b/.test(location.search) ? matchMedia('(min-width: 900px) and (min-height: 480px)') : null;   // v0.19.2: down to 900 by 480, for short laptop windows (a Mac with its Dock and the browser's bars); ?fit=0 keeps the scrolling page, for the tests written on it
   // fold: the options show their title bar alone. ox, oy: where the owner dragged them, from the map's top left corner (null: where the layout puts them)
   const PAN = { side: true, opts: true, fold: false, ox: null, oy: null }, DOCKW = 330;
   try { const p = JSON.parse(LS.get('mme-panels') || 'null'); if (p) { PAN.side = p.side !== false; PAN.opts = p.opts !== false; PAN.fold = !!p.fold; if (Number.isFinite(p.ox) && Number.isFinite(p.oy)) { PAN.ox = p.ox; PAN.oy = p.oy; } } } catch (err) { /* both shown */ }
