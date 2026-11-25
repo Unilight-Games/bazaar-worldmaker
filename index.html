@@ -850,6 +850,10 @@ b.warn { color: var(--warn); font-weight: 600; }
   .uisize.fixed { position: static; margin: 12px 10px 4px; }
   #vtag { position: static; display: block; width: max-content; margin: 4px 10px 12px auto; }
 }
+#nmImage .rng { grid-template-columns: 1fr 84px; }
+#nmImage .rowx { align-items: center; flex-wrap: wrap; }
+#nmInv[aria-pressed=true] { background: var(--brass); color: #1a1508; }
+#nmSeedRow[hidden], #nmGenHint[hidden], #nmImage[hidden] { display: none; }
 </style>
 </head>
 <body>
@@ -919,7 +923,20 @@ b.warn { color: var(--warn); font-weight: 600; }
         <div class="lbl" id="nmKmNote"></div>
         <div class="lbl">30 กม. คือระยะเดินเท้าหรือคาราวานราวหนึ่งวัน แผนที่เกรสแลนด์ใช้ช่องละ 34 กม. ตามขนาดทวีป 12 ล้าน ตร.กม.</div>
         <span class="lblx">พื้นเริ่มต้น</span>
-        <div class="seg2" id="nmStart"><button type="button" data-v="random">สุ่มภูมิประเทศ</button><button type="button" data-v="blank">ทะเลเปล่า</button></div>
+        <div class="seg2" id="nmStart"><button type="button" data-v="random">สุ่มภูมิประเทศ</button><button type="button" data-v="blank">ทะเลเปล่า</button><button type="button" data-v="image">จากรูปภาพ</button></div>
+        <div id="nmImage" hidden>
+          <span class="lblx">รูปต้นแบบ</span>
+          <div class="rowx"><button type="button" class="btn" id="nmPick">เลือกรูป</button><span class="lbl" id="nmPicName">ยังไม่ได้เลือกรูป</span></div>
+          <input type="file" id="nmPicFile" accept="image/*" hidden>
+          <span class="lblx">อ่านรูปแบบ</span>
+          <div class="seg2" id="nmRead"><button type="button" data-v="auto">อัตโนมัติ</button><button type="button" data-v="blue">สีฟ้าเป็นน้ำ</button><button type="button" data-v="dark">สีเข้มเป็นแผ่นดิน</button><button type="button" data-v="light">สีอ่อนเป็นแผ่นดิน</button><button type="button" data-v="line">ภาพลายเส้น</button></div>
+          <label class="lblx" for="nmCut">เส้นแบ่งดินกับน้ำ</label>
+          <div class="rng"><input type="range" id="nmCut" min="0" max="100" value="50"><output id="nmCutV">อัตโนมัติ</output></div>
+          <span class="lblx">วางรูป</span>
+          <div class="seg2" id="nmFit"><button type="button" data-v="fit">พอดีกรอบ ส่วนที่เหลือเป็นทะเล</button><button type="button" data-v="fill">ยืดเต็มกรอบ</button></div>
+          <div class="rowx" style="margin-top:8px"><button type="button" class="btn" id="nmInv" aria-pressed="false">สลับดินกับน้ำ</button><label class="lbl"><input type="checkbox" id="nmClean" checked> เก็บเกาะและแอ่งน้ำช่องเดียวทิ้ง</label></div>
+          <p class="hint">รูปถูกอ่านในเครื่องนี้เท่านั้น ไม่ได้ส่งขึ้นที่ไหน แผนที่ที่ได้มีแค่ทุ่งหญ้า ทะเล และทะเลสาบ ภูเขากับแม่น้ำวางต่อได้ในโหมดภูมิประเทศ</p>
+        </div>
         <div id="nmRandom">
           <span class="lblx">รูปแผ่นดิน</span>
           <div class="seg2" id="nmStyle"><button type="button" data-v="continent">ทวีปเดียว</button><button type="button" data-v="continents">หลายทวีป</button><button type="button" data-v="isles">หมู่เกาะ</button></div>
@@ -939,11 +956,11 @@ b.warn { color: var(--warn); font-weight: 600; }
         <span class="lblx" style="margin-top:0">ตัวอย่าง</span>
         <canvas id="nmPrev" width="318" height="209"></canvas>
         <div class="lbl" id="nmStat" style="margin-top:6px"></div>
-        <div class="rowx" style="margin-top:10px">
+        <div class="rowx" id="nmSeedRow" style="margin-top:10px">
           <label class="field" for="nmSeed" style="margin:0;flex:1">เลขสุ่ม<input type="number" id="nmSeed" min="1" max="999999" step="1"></label>
           <button type="button" class="btn" id="nmReroll" style="align-self:flex-end">สุ่มใหม่</button>
         </div>
-        <p class="hint">ฝั่งที่รับลมประจำชื้นกว่า หลังเทือกเขาแห้งกว่า แม่น้ำเริ่มจากภูเขาแล้วไหลลงทะเลหรือทะเลสาบ ทุกอย่างแก้ต่อได้หลังสร้าง</p>
+        <p class="hint" id="nmGenHint">ฝั่งที่รับลมประจำชื้นกว่า หลังเทือกเขาแห้งกว่า แม่น้ำเริ่มจากภูเขาแล้วไหลลงทะเลหรือทะเลสาบ ทุกอย่างแก้ต่อได้หลังสร้าง</p>
       </div>
     </div>
     <div class="foot"><button type="button" class="btn" id="nmCancel">ยกเลิก</button><button type="button" class="btn brass" id="nmCreate">สร้างแผนที่</button></div>
@@ -1199,18 +1216,18 @@ b.warn { color: var(--warn); font-weight: 600; }
 <section class="method"><div class="card" id="method"></div></section>
 </template>
 <script>window.MME_BUILD = "web"; window.MME_NO_GRESLAND = true;</script>
-<script src="firebase-config.js?v=0.19.3"></script>
-<script src="engine/gen.js?v=0.19.3"></script>
-<script src="engine/store.js?v=0.19.3"></script>
-<script src="engine/backup.js?v=0.19.3"></script>
-<script src="engine/net.js?v=0.19.3"></script>
-<script src="engine/fire.js?v=0.19.3"></script>
-<script src="engine/defaults.js?v=0.19.3"></script>
-<script src="engine/runtime.js?v=0.19.3"></script>
-<script src="engine/shell.js?v=0.19.3"></script>
-<script src="engine/hub.js?v=0.19.3"></script>
-<script src="engine/policy.js?v=0.19.3"></script>
-<script src="engine/tutor-lines.js?v=0.19.3"></script>
-<script src="engine/tutor.js?v=0.19.3"></script>
+<script src="firebase-config.js?v=0.19.4"></script>
+<script src="engine/gen.js?v=0.19.4"></script>
+<script src="engine/store.js?v=0.19.4"></script>
+<script src="engine/backup.js?v=0.19.4"></script>
+<script src="engine/net.js?v=0.19.4"></script>
+<script src="engine/fire.js?v=0.19.4"></script>
+<script src="engine/defaults.js?v=0.19.4"></script>
+<script src="engine/runtime.js?v=0.19.4"></script>
+<script src="engine/shell.js?v=0.19.4"></script>
+<script src="engine/hub.js?v=0.19.4"></script>
+<script src="engine/policy.js?v=0.19.4"></script>
+<script src="engine/tutor-lines.js?v=0.19.4"></script>
+<script src="engine/tutor.js?v=0.19.4"></script>
 </body>
 </html>

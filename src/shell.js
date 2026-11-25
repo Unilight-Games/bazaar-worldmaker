@@ -2,7 +2,7 @@
 // the sheet for a new map, and the room around an open map.
 (function () {
   const MME = window.MME;
-  MME.VERSION = '0.19.3';
+  MME.VERSION = '0.19.4';
   MME.NAME = 'Bazaar Worldmaker';
   MME.GRESLAND_KM = 34;   // canon: the continent is about 12 million square kilometres, and the map draws it on 12,208 hexes
   const $ = id => document.getElementById(id);
@@ -243,7 +243,8 @@
   };
 
   // ---------- a new map ----------
-  const NM = { size: 'm', start: 'random', style: 'continent', climate: 'mixed', wind: 'W', rivers: 1, seed: 1 };
+  const NM = { size: 'm', start: 'random', style: 'continent', climate: 'mixed', wind: 'W', rivers: 1, seed: 1, read: 'auto', fit: 'fit', cut: null, inv: false };
+  let nmPic = null;                                  // the picture a new map is read from: an ImageBitmap or an Image
   let nmGen = null, nmT = 0;
   const seg = (id, key, cb) => { for (const b of $(id).querySelectorAll('button')) b.onclick = () => { NM[key] = isNaN(+b.dataset.v) ? b.dataset.v : +b.dataset.v; syncSeg(id, key); cb && cb(); }; };
   const syncSeg = (id, key) => { for (const b of $(id).querySelectorAll('button')) b.setAttribute('aria-pressed', String(String(NM[key]) === b.dataset.v)); };
@@ -261,6 +262,8 @@
       const s = MME.SIZES[NM.size], cv = $('nmPrev'), c = cv.getContext('2d'); cv.width = s.cols * 2; cv.height = s.rows * 2 + 1;
       c.fillStyle = PREV.S; c.fillRect(0, 0, cv.width, cv.height);
       $('nmRandom').hidden = NM.start !== 'random';
+      $('nmImage').hidden = NM.start !== 'image'; $('nmSeedRow').hidden = $('nmGenHint').hidden = NM.start === 'image';
+      if (NM.start === 'image') { nmGen = null; nmImgRead(s, c); return; }
       if (NM.start !== 'random') { nmGen = null; $('nmStat').textContent = 'ทะเลทั้งผืน รอให้ระบายแผ่นดินเอง'; return; }
       const G = MME.gridFor(s.cols, s.rows); nmGen = MME.generate(G, nmOpts());
       for (let i = 0; i < nmGen.cells.length; i++) { const ch = nmGen.cells[i]; if (ch === '.') continue; const x = i % s.cols, y = (i / s.cols) | 0; c.fillStyle = PREV[ch] || '#999'; c.fillRect(x * 2, y * 2 + (x & 1), 2, 2); }
@@ -271,9 +274,42 @@
   }
   function openNewMap() {
     NM.seed = 1 + Math.floor(Math.random() * 99999); $('nmSeed').value = NM.seed; $('nmTitle').value = '';
-    nmSizes(); for (const [id, key] of [['nmStart', 'start'], ['nmStyle', 'style'], ['nmClimate', 'climate'], ['nmWind', 'wind'], ['nmRivers', 'rivers']]) syncSeg(id, key);
+    nmSizes(); for (const [id, key] of [['nmStart', 'start'], ['nmStyle', 'style'], ['nmClimate', 'climate'], ['nmWind', 'wind'], ['nmRivers', 'rivers'], ['nmRead', 'read'], ['nmFit', 'fit']]) syncSeg(id, key);
     $('newVeil').hidden = false; nmPreview(); $('nmTitle').focus();
   }
+  // v0.19.4: a new map read from a picture, bare land and water only. The picture is drawn over the map's frame at half a pixel
+  // a map unit, then gen.js reads it hex by hex. Nothing of it is kept but the map it gives.
+  let nmImg = null;
+  function nmImgRead(s, c) {
+    nmImg = null;
+    if (!nmPic) { $('nmStat').textContent = 'เลือกรูปก่อน รูปแผนที่วาดมือ ภาพสแกน หรือภาพจากโปรแกรมอื่นก็ได้'; $('nmCutV').textContent = '-'; return; }
+    const G = MME.gridFor(s.cols, s.rows), k = 0.5, w = Math.ceil(G.w * k), h = Math.ceil(G.h * k), cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const x = cv.getContext('2d', { willReadFrequently: true }), iw = nmPic.width, ih = nmPic.height;
+    if (NM.fit === 'fill') x.drawImage(nmPic, 0, 0, w, h);
+    else { const f = Math.min(w / iw, h / ih), dw = iw * f, dh = ih * f; x.drawImage(nmPic, (w - dw) / 2, (h - dh) / 2, dw, dh); }
+    const px = x.getImageData(0, 0, w, h);
+    let clear = 0, n = 0; { const t = document.createElement('canvas'), tw = Math.min(200, iw), th = Math.max(1, Math.round(ih * tw / iw)); t.width = tw; t.height = th; const tx = t.getContext('2d'); tx.drawImage(nmPic, 0, 0, tw, th); const d = tx.getImageData(0, 0, tw, th).data; for (let p = 3; p < d.length; p += 4) { n++; if (d[p] < 128) clear++; } }
+    nmImg = MME.readImage(G, { data: px.data, w, h, k }, { mode: NM.read, cut: NM.cut, invert: NM.inv, clean: $('nmClean').checked, alpha: clear > 0.02 * n });
+    for (let i = 0; i < nmImg.cells.length; i++) { const ch = nmImg.cells[i]; if (ch === '.') continue; const cx = i % s.cols, cy = (i / s.cols) | 0; c.fillStyle = PREV[ch] || '#999'; c.fillRect(cx * 2, cy * 2 + (cx & 1), 2, 2); }
+    const RN = { alpha: 'ส่วนโปร่งใสเป็นน้ำ', blue: 'สีฟ้าเป็นน้ำ', dark: 'สีเข้มเป็นแผ่นดิน', light: 'สีอ่อนเป็นแผ่นดิน', line: 'ภาพลายเส้น' };
+    if (NM.cut == null) $('nmCut').value = Math.round(nmImg.cut * 100); $('nmCut').disabled = nmImg.mode === 'alpha';
+    $('nmCutV').textContent = NM.cut == null ? 'อัตโนมัติ' : Math.round(NM.cut * 100) + '%';
+    $('nmStat').textContent = `แผ่นดิน ${nmImg.land.toLocaleString('en-US')} ช่อง · ทะเลสาบ ${nmImg.lake.toLocaleString('en-US')} ช่อง · อ่านแบบ${RN[nmImg.mode]}`;
+  }
+  $('nmPick').onclick = () => $('nmPicFile').click();
+  $('nmPicFile').onchange = async () => {
+    const f = $('nmPicFile').files[0]; $('nmPicFile').value = ''; if (!f) return;
+    try {
+      nmPic = typeof createImageBitmap === 'function' ? await createImageBitmap(f) : await new Promise((ok, no) => { const im = new Image(); im.onload = () => ok(im); im.onerror = no; im.src = URL.createObjectURL(f); });
+      $('nmPicName').textContent = f.name.slice(0, 60) + ' · ' + nmPic.width + ' × ' + nmPic.height + ' px'; NM.cut = null;
+      if (!$('nmTitle').value.trim()) $('nmTitle').value = f.name.replace(/\.[^.]+$/, '').slice(0, 80);
+    } catch (err) { nmPic = null; $('nmPicName').textContent = 'อ่านรูปนี้ไม่ได้ ลองไฟล์ PNG หรือ JPG'; }
+    nmPreview();
+  };
+  seg('nmRead', 'read', () => { NM.cut = null; nmPreview(); }); seg('nmFit', 'fit', nmPreview);
+  $('nmCut').oninput = () => { NM.cut = +$('nmCut').value / 100; nmPreview(); };
+  $('nmInv').onclick = () => { NM.inv = !NM.inv; $('nmInv').setAttribute('aria-pressed', String(NM.inv)); nmPreview(); };
+  $('nmClean').onchange = nmPreview;
   seg('nmStart', 'start', nmPreview); seg('nmStyle', 'style', nmPreview); seg('nmClimate', 'climate', nmPreview); seg('nmWind', 'wind', nmPreview); seg('nmRivers', 'rivers', nmPreview);
   for (const id of ['nmLand', 'nmRelief']) $(id).oninput = () => { $(id + 'V').textContent = $(id).value + '%'; nmPreview(); };
   $('nmSeed').oninput = () => { NM.seed = Math.max(1, Math.floor(+$('nmSeed').value) || 1); nmPreview(); };
@@ -286,6 +322,7 @@
     const s = MME.SIZES[NM.size], id = MME.newId(), N = s.cols * s.rows;
     const meta = { id, title: ($('nmTitle').value.trim() || 'แผนที่ใหม่').slice(0, 80), base: 'blank', cols: s.cols, rows: s.rows, kmPerHex: Math.max(0.1, Math.min(1000, +$('nmKm').value || 30)), created: Date.now(), updated: Date.now(), thumb: '' };
     let cells = '.'.repeat(N), rivers = [];
+    if (NM.start === 'image') { if (!nmImg) { toast('เลือกรูปก่อนสร้างแผนที่'); return; } cells = nmImg.cells; meta.gen = { image: 1, read: nmImg.mode }; }
     if (NM.start === 'random') { const g = nmGen || MME.generate(MME.gridFor(s.cols, s.rows), nmOpts()); cells = g.cells; rivers = g.rivers.map((r, i) => ({ id: 'g' + i.toString(36) + Math.random().toString(36).slice(2, 6), kind: r.kind, pts: r.pts })); meta.gen = nmOpts(); }
     try { meta.thumb = $('nmPrev').toDataURL('image/webp', 0.8); } catch (err) { meta.thumb = ''; }
     await store.putDoc(id, 'terrain', { v: 2, cols: s.cols, rows: s.rows, cells, rivOff: [], rivSig: '0:0' });

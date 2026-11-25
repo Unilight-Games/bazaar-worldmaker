@@ -264,7 +264,19 @@ function featDraw(c) {
   }
   c.restore();
 }
-{ const dg = drawOverGround; drawOverGround = function (c, w, h, live) { if (dg) dg(c, w, h, live); featDraw(c); }; }
+// v0.19.4: the rivers run over the special features (the owner, 25 Nov 2026): a feature painted as ground covered them; they are
+// drawn again, only inside the hexes that hold a feature, so the rest of the map keeps its own layering
+function featRivers(c) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, n = 0; c.save(); c.beginPath();
+  for (let i = 0; i < N; i++) { if (ECO.feat[i] === '.' || !featAt(i)) continue; hexPath(c, i, 1.03); n++; if (CX[i] < x0) x0 = CX[i]; if (CX[i] > x1) x1 = CX[i]; if (CY[i] < y0) y0 = CY[i]; if (CY[i] > y1) y1 = CY[i]; }
+  if (!n) { c.restore(); return; }
+  c.clip(); x0 -= R; y0 -= R; x1 += R; y1 += R;
+  const near = bb => !bb || !(bb[2] < x0 || bb[0] > x1 || bb[3] < y0 || bb[1] > y1);
+  for (const r of BRIV) if (near(r.bb)) for (const u of riverRuns(r)) strokeRiver(c, u.q, r.w, r.s, u.a, u.b);
+  for (const r of userRiversSorted()) { const d = RDER.get(r.id); if (d && near(d.bb)) strokeRiver(c, d.q, d.w, d.s); }
+  c.restore();
+}
+{ const dg = drawOverGround; drawOverGround = function (c, w, h, live) { if (dg) dg(c, w, h, live); featDraw(c); featRivers(c); }; }
 { const lt = landTipHTML; landTipHTML = function (id) { const k = featAt(id); return lt(id) + (k ? `<div class="s">ลักษณะพิเศษ: ${esc(k.name)} <span class="w">${esc(featSum(k))}</span></div>` : ''); }; }
 
 // ---- the card: the kinds, what each does, and kinds of one's own ----

@@ -159,7 +159,7 @@ setInterval(() => { if (document.hidden) return; hudRender(); }, 700);
 let miniKey = '';
 function miniDraw() {
   if (mini.hidden) return; const c = mini.getContext('2d'), W = mini.width, H = mini.height, sc = W / G.w;
-  const key = painted.size + '|' + (img.complete ? 1 : 0) + '|' + ECO.states.length;
+  const key = painted.size + '|' + (img.complete ? 1 : 0) + '|' + ECO.states.length + '|' + layerVer + '|' + W + 'x' + H;   // v0.19.4: the layer's repaints and the minimap's own size too: a new map showed a black minimap
   if (key !== miniKey) { miniKey = key; c.clearRect(0, 0, W, H); if (img.complete && img.naturalWidth) c.drawImage(img, 0, 0, W, H); if (layerUsed) c.drawImage(layer, 0, 0, W, H); mini._bg = c.getImageData(0, 0, W, H); }
   else if (mini._bg) c.putImageData(mini._bg, 0, 0);
   const r = cv.getBoundingClientRect(), x0 = (-view.x) / view.s, y0 = (-view.y) / view.s, w = r.width / view.s, h = r.height / view.s;

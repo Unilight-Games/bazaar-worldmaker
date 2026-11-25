@@ -335,6 +335,86 @@
     return { cells: cells.join(''), rivers, land };
   };
 
+  // ---------- a map read from a picture (v0.19.4) ----------
+  // The owner asked for a new map traced from an image, with bare land and water only (25 Nov 2026). img is the picture already
+  // drawn over the map's frame at k pixels a map unit: { data, w, h, k }. Each hex takes its colour from the pixels within 0.85 of its radius and looks for a dark line out to its full radius.
+  // How a hex is read: 'alpha' (a clear ground is water, chosen by 'auto' when the picture has one), 'blue' (bluish is water), 'dark' (dark is land), 'light' (light is land), 'line' (dark lines are the
+  // coast, what the border reaches through them is water), or 'auto', which picks one. cut is where the split falls, 0 to 1 of the
+  // feature's range (Otsu's split when not given). Water that reaches the edge, or covers 2% of the map, is sea; the rest is
+  // lake. Land is grassland. The thresholds 0.05, 10% and 2% are Claude's numbers.
+  const ETA_AREA = 0.8;
+  function otsu(vals, lo, hi) {
+    const B = 64, h = new Float64Array(B); let n = 0, sum = 0;
+    for (const v of vals) { const b = Math.min(B - 1, Math.max(0, Math.floor((v - lo) / (hi - lo + 1e-9) * B))); h[b]++; n++; sum += b; }
+    if (!n) return { t: 0.5, eta: 0 };
+    let tot = 0; for (let b = 0; b < B; b++) tot += h[b] * (b - sum / n) ** 2;
+    let w0 = 0, s0 = 0, best = -1, bt = B >> 1;
+    for (let b = 0; b < B - 1; b++) { w0 += h[b]; s0 += b * h[b]; const w1 = n - w0; if (!w0 || !w1) continue; const m0 = s0 / w0, m1 = (sum - s0) / w1, v = w0 * w1 * (m0 - m1) ** 2 / n; if (v > best) { best = v; bt = b + 1; } }
+    return { t: bt / B, eta: tot > 0 ? Math.max(0, best) / tot : 0 };
+  }
+  // a scan or a photo is lit unevenly: the lightness is taken as a tilted plane plus one step between land and water, the
+  // plane is fitted by least squares with the step, and taken away (twice, as the step is found from the flattened values)
+  function solve(A, b) {
+    const n = b.length; for (let c = 0; c < n; c++) { let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r; [A[c], A[p]] = [A[p], A[c]]; [b[c], b[p]] = [b[p], b[c]]; if (Math.abs(A[c][c]) < 1e-12) return null;
+      for (let r = 0; r < n; r++) if (r !== c) { const f = A[r][c] / A[c][c]; for (let q = c; q < n; q++) A[r][q] -= f * A[c][q]; b[r] -= f * b[c]; } }
+    return b.map((v, c) => v / A[c][c]);
+  }
+  MME.readImage = function (G, img, opt) {
+    const L = lattice(G), N = L.N, o = opt || {}, k = img.k, rr = G.R * k, rr2 = rr * rr, rc2 = (0.85 * G.R * k) ** 2, D = img.data;
+    const blue = new Float32Array(N), light = new Float32Array(N), ink = new Float32Array(N), has = new Uint8Array(N);
+    for (let i = 0; i < N; i++) {
+      const cx = L.CX[i] * k, cy = L.CY[i] * k; let r = 0, g = 0, b = 0, m = 0, mn = 1, lf = 0, nf = 0;
+      for (let y = Math.max(0, Math.floor(cy - rr)); y <= Math.min(img.h - 1, Math.ceil(cy + rr)); y++) for (let x = Math.max(0, Math.floor(cx - rr)); x <= Math.min(img.w - 1, Math.ceil(cx + rr)); x++) {
+        const d2 = (x - cx) ** 2 + (y - cy) ** 2; if (d2 > rr2) continue; const p = (y * img.w + x) * 4; if (D[p + 3] < 128) continue;
+        const l = (0.299 * D[p] + 0.587 * D[p + 1] + 0.114 * D[p + 2]) / 255; if (l < mn) mn = l; lf += l; nf++;     // a line is looked for out to the corners
+        if (d2 <= rc2) { r += D[p]; g += D[p + 1]; b += D[p + 2]; m++; }
+      }
+      if (!m) continue; has[i] = 1; r /= m; g /= m; b /= m;
+      blue[i] = (b - (r + g) / 2) / 255; light[i] = (0.299 * r + 0.587 * g + 0.114 * b) / 255; ink[i] = lf / nf - mn;   // ink: how much darker the darkest pixel is than the hex
+    }
+    const range = a => { let lo = Infinity, hi = -Infinity; for (let i = 0; i < N; i++) if (has[i]) { if (a[i] < lo) lo = a[i]; if (a[i] > hi) hi = a[i]; } return lo <= hi ? [lo, hi] : [0, 1]; };
+    const split = a => { const [lo, hi] = range(a), v = []; for (let i = 0; i < N; i++) if (has[i]) v.push(a[i]); return otsu(v, lo, hi); };
+    const edge = i => { const c = i % L.cols, r = (i / L.cols) | 0; return c === 0 || r === 0 || c === L.cols - 1 || r === L.rows - 1; };
+    const flat = Float32Array.from(light);
+    for (let pass = 0; pass < 2; pass++) {
+      const [lo, hi] = range(flat), t = lo + split(flat).t * (hi - lo), A = [0, 1, 2, 3].map(() => [0, 0, 0, 0]), B = [0, 0, 0, 0];
+      for (let i = 0; i < N; i++) { if (!has[i]) continue; const v = [1, flat[i] > t ? 1 : 0, L.CX[i] / G.w - 0.5, L.CY[i] / G.h - 0.5]; for (let a = 0; a < 4; a++) { B[a] += v[a] * light[i]; for (let b = 0; b < 4; b++) A[a][b] += v[a] * v[b]; } }
+      const w = solve(A, B); if (!w) break;
+      for (let i = 0; i < N; i++) if (has[i]) flat[i] = light[i] - w[2] * (L.CX[i] / G.w - 0.5) - w[3] * (L.CY[i] / G.h - 0.5);
+    }
+    const sb = split(blue), sl = split(flat);
+    let mode = o.mode || 'auto';
+    if (mode === 'auto' && o.alpha) mode = 'alpha';                  // a picture cut out on a clear ground: the clear part is water
+    if (mode === 'auto') {
+      const [lo, hi] = range(flat), t = lo + sl.t * (hi - lo);
+      let nd = 0, n = 0, ed = 0, en = 0; for (let i = 0; i < N; i++) if (has[i]) { n++; const d = flat[i] < t; if (d) nd++; if (edge(i)) { en++; if (d) ed++; } }
+      if (sb.eta > sl.eta + 0.05 && range(blue)[1] > 0.06) mode = 'blue';
+      else if (!n || nd / n < 0.1 || sl.eta < ETA_AREA) mode = 'line';
+      else mode = en && ed / en > 0.5 ? 'light' : 'dark';
+    }
+    const a = mode === 'blue' ? blue : mode === 'line' ? ink : flat, [lo, hi] = range(a), auto = split(a).t;
+    const cut = o.cut == null ? auto : Math.min(1, Math.max(0, o.cut)), t = lo + cut * (hi - lo);
+    const water = new Uint8Array(N);
+    if (mode === 'line') {
+      const q = []; for (let i = 0; i < N; i++) if (!has[i] || (edge(i) && a[i] <= t)) { water[i] = 1; q.push(i); }
+      for (let h = 0; h < q.length; h++) { const u = q[h]; for (let j = 0; j < 6; j++) { const v = L.NB[u * 6 + j]; if (v >= 0 && !water[v] && has[v] && a[v] <= t) { water[v] = 1; q.push(v); } } }
+    } else if (mode === 'alpha') for (let i = 0; i < N; i++) water[i] = has[i] ? 0 : 1;
+    else for (let i = 0; i < N; i++) water[i] = !has[i] ? 1 : mode === 'blue' ? +(a[i] > t) : mode === 'dark' ? +(a[i] >= t) : +(a[i] <= t);
+    if (o.invert) for (let i = 0; i < N; i++) if (has[i] || mode === 'alpha') water[i] ^= 1;
+    if (o.clean !== false) for (let pass = 0; pass < 2; pass++) for (let i = 0; i < N; i++) {     // lone hexes go with what is around them
+      let w = 0, n = 0; for (let j = 0; j < 6; j++) { const v = L.NB[i * 6 + j]; if (v >= 0) { n++; w += water[v]; } }
+      if (water[i] && w === 0 && n === 6) water[i] = 0; else if (!water[i] && w === n) water[i] = 1;
+    }
+    const cells = new Array(N).fill('.'), seen = new Uint8Array(N); let land = 0, lake = 0;
+    for (let i = 0; i < N; i++) if (!water[i]) { cells[i] = 'g'; land++; }
+    for (let s = 0; s < N; s++) {
+      if (!water[s] || seen[s]) continue; const comp = [s]; seen[s] = 1; let open = false;
+      for (let h = 0; h < comp.length; h++) { const u = comp[h]; if (edge(u) || !has[u]) open = true; for (let j = 0; j < 6; j++) { const v = L.NB[u * 6 + j]; if (v >= 0 && water[v] && !seen[v]) { seen[v] = 1; comp.push(v); } } }
+      if (!open && comp.length < 0.02 * N) for (const u of comp) { cells[u] = 'L'; lake++; }
+    }
+    return { cells: cells.join(''), land, lake, mode, cut, auto, eta: { blue: +sb.eta.toFixed(3), light: +sl.eta.toFixed(3) }, inPic: has.reduce((x, v) => x + v, 0) };
+  };
+
   // the ground a map's climate is read from when it has no survey of its own: height in metres and rain in millimetres a cycle
   MME.synthClimate = function (L, eff, elev, rain) {
     const N = L.N, dW = distFrom(L, i => WATER(eff(i))), dM = distFrom(L, i => eff(i) === 'M', 60), raw = new Float32Array(N);

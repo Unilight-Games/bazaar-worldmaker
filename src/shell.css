@@ -589,3 +589,7 @@ b.warn { color: var(--warn); font-weight: 600; }
   .uisize.fixed { position: static; margin: 12px 10px 4px; }
   #vtag { position: static; display: block; width: max-content; margin: 4px 10px 12px auto; }
 }
+#nmImage .rng { grid-template-columns: 1fr 84px; }
+#nmImage .rowx { align-items: center; flex-wrap: wrap; }
+#nmInv[aria-pressed=true] { background: var(--brass); color: #1a1508; }
+#nmSeedRow[hidden], #nmGenHint[hidden], #nmImage[hidden] { display: none; }

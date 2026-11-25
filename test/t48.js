@@ -25,8 +25,9 @@ let fails = 0; const ok = (c, m) => { console.log((c ? 'ok   ' : 'FAIL ') + m); 
   ok((await T(id => MME.shell.cur.rt.test.routes().find(r => r.id === id), pick.id)).via.length === pick.via, 'one undo takes the bend back');
   await p.keyboard.press('Control+Shift+z'); await p.waitForTimeout(400);
   // the end of the chosen road moves to another city
+  { let last = ''; for (let n = 0; n < 20; n++) { const v = await p.evaluate(() => MME.shell.cur.rt.test.mapXY(0, 0).map(Math.round).join(',')); if (v === last) break; last = v; await p.waitForTimeout(300); } }   /* v0.19.4: the map may still be gliding */
   const tgt = await T(pk => { const t = MME.shell.cur.rt.test, B = t.cityXY(pk.b), A = t.cityXY(pk.a); let best = null, bd = 1e9;
-    for (const c of t.cities()) { if (c.id === pk.a || c.id === pk.b) continue; const q = t.cityXY(c.id); if (!q || q[0] < 300 || q[0] > 1400 || q[1] < 120 || q[1] > 800) continue; const d = Math.hypot(q[0] - B[0], q[1] - B[1]); if (d > 60 && d < bd) { bd = d; best = { id: c.id, x: q[0], y: q[1] }; } }
+    for (const c of t.cities()) { if (c.id === pk.a || c.id === pk.b) continue; const q = t.cityXY(c.id); if (!q || q[0] < 300 || q[0] > 1400 || q[1] < 120 || q[1] > 800) continue; { const el = document.elementFromPoint(q[0], q[1]); if (!el || el.tagName !== 'CANVAS' || el.classList.contains('minimap')) continue; }   /* v0.19.4: not under a panel */ const d = Math.hypot(q[0] - B[0], q[1] - B[1]); if (d > 60 && d < bd) { bd = d; best = { id: c.id, x: q[0], y: q[1] }; } }
     return best && { ...best, bx: B[0], by: B[1], ax: A[0], ay: A[1] }; }, pick);
   ok(!!tgt, 'another city to move the end to ' + (tgt && tgt.id));
   ok(await T(() => !!MME.shell.cur.rt.test.rsel()), 'the road is still chosen, so its ends show');

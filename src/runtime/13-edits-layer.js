@@ -2,7 +2,7 @@
 const LS = 1.5, layer = document.createElement('canvas');
 layer.width = Math.round(G.w * LS); layer.height = Math.round(G.h * LS);
 const LC = layer.getContext('2d');
-let layerUsed = false;
+let layerUsed = false, layerVer = 0;           // layerVer: counts the repaints, so a copy of the layer (the minimap) knows it is stale
 let SDC = null;
 function seaDepths() {
   const d = new Uint8Array(N).fill(6), q = [];
@@ -130,7 +130,7 @@ function rebuild(x0, y0, x1, y1) {
     c.restore();
   }
   c.restore();
-  layerUsed = painted.size > 0 || ED.rivers.length > 0;
+  layerUsed = painted.size > 0 || ED.rivers.length > 0; layerVer++;
 }
 function rebuildAll() { SDC = seaDepths(); LC.setTransform(1, 0, 0, 1, 0, 0); LC.clearRect(0, 0, layer.width, layer.height); rebuild(0, 0, G.w, G.h); SDC = null; }
 function rebuildHexes(ids, flip) {
