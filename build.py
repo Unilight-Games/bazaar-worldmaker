@@ -42,6 +42,9 @@ if GRES:
 os.makedirs(os.path.join(DIST, 'assets', 'nem'), exist_ok=True)
 for f in sorted(os.listdir(os.path.join(ROOT, 'assets', 'nem'))):
     shutil.copy(os.path.join(ROOT, 'assets', 'nem', f), os.path.join(DIST, 'assets', 'nem', f))
+os.makedirs(os.path.join(DIST, 'assets', 'music'), exist_ok=True)  # the music of the map (the owner's own song, v0.19.2)
+for f in sorted(os.listdir(os.path.join(ROOT, 'assets', 'music'))):
+    shutil.copy(os.path.join(ROOT, 'assets', 'music', f), os.path.join(DIST, 'assets', 'music', f))
 os.makedirs(os.path.join(DIST, 'assets', 'bg'), exist_ok=True)     # the paintings behind the menu (the owner's own, from his asset folder)
 BG = sorted(os.listdir(os.path.join(ROOT, 'assets', 'bg')))
 for f in BG:
@@ -73,6 +76,7 @@ wr('index.html', index)
 def b64(path): return base64.b64encode(open(path, 'rb').read()).decode()
 off = index
 arts = {f[:-5]: 'data:image/webp;base64,' + b64(os.path.join(ROOT, 'assets', 'nem', f)) for f in sorted(os.listdir(os.path.join(ROOT, 'assets', 'nem')))}
+arts['music'] = 'data:audio/mpeg;base64,' + b64(os.path.join(ROOT, 'assets', 'music', 'worldbuilding.mp3'))
 head = ('<script>window.MME_OFFLINE = true; window.MME_ASSETS = ' + json.dumps(arts) + '; window.MME_EDITS = '
         + rd(os.path.join(SRC, 'maps', 'gresland-edits.json')) + ';</script>\n<script>\n' + rd(os.path.join(SRC, 'maps', 'gresland-base.js')) + '\n</script>\n') if GRES else (
         '<script>window.MME_OFFLINE = true; window.MME_NO_GRESLAND = true; window.MME_ASSETS = ' + json.dumps(arts) + ';</script>\n')

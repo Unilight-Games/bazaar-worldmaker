@@ -28,22 +28,19 @@ function sfx(k) {
   else if (k === 'coin') { tone(1318, t, 0.12, 'square', 0.04); tone(1760, t + 0.06, 0.18, 'square', 0.035); }
   else tone(900, t, 0.05, 'triangle', 0.05);
 }
-// music: a slow drone and a pentatonic line over it; the season makes it lower and darker in the cold
+// music: the owner's song "Worldbuilding" (v0.19.2, in place of the drone and the pentatonic line), played on a loop. It fades in
+// and out, follows the volume, and starts only after a press on the page, as browsers ask.
+const MUSIC_URL = () => (window.MME_ASSETS && window.MME_ASSETS.music) || 'assets/music/worldbuilding.mp3';
+const MUSIC_VOL = 0.55;                               // the song's share of the volume (Claude's number)
+function musicFade(a, to, ms, done) { clearInterval(a._fade); const from = a.volume, t0 = performance.now(); a._fade = setInterval(() => { const k = Math.min(1, (performance.now() - t0) / ms); a.volume = clamp(from + (to - from) * k, 0, 1); if (k >= 1) { clearInterval(a._fade); if (done) done(); } }, 50); }
 function musicStart() {
-  if (!sndCtx() || SND.music) return; const c = SND.ctx; if (c.state === 'suspended') c.resume();
-  const bus = c.createGain(); bus.gain.value = 0.0001; bus.gain.exponentialRampToValueAtTime(0.5, c.currentTime + 3); const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1400; bus.connect(lp); lp.connect(SND.out);
-  const drone = [0, 7].map(st => { const o = c.createOscillator(), g = c.createGain(); o.type = 'sine'; o.frequency.value = 110 * Math.pow(2, st / 12); g.gain.value = 0.06; o.connect(g); g.connect(bus); o.start(); return o; });
-  const scale = [0, 2, 4, 7, 9, 12, 14, 16], M = { bus, drone, lp, timer: 0 };
-  const step = () => {
-    if (!SND.music) return; const t = c.currentTime, sea = seasWarm(), root = sea < 0.35 ? 196 : 220;
-    lp.frequency.setTargetAtTime(900 + 900 * sea, t, 2);
-    for (const o of drone) o.frequency.setTargetAtTime((root / 2) * (o === drone[1] ? Math.pow(2, 7 / 12) : 1), t, 1.5);
-    const n = scale[Math.floor(Math.random() * scale.length)], f = root * Math.pow(2, n / 12), o = c.createOscillator(), g = c.createGain(); o.type = 'triangle'; o.frequency.value = f; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.07, t + 0.08); g.gain.exponentialRampToValueAtTime(0.0001, t + 2.4); o.connect(g); g.connect(bus); o.start(t); o.stop(t + 2.5);
-    M.timer = setTimeout(step, 900 + Math.random() * 1500);
-  };
-  SND.music = M; step();
+  if (SND.music) return; let a = SND.song; if (!a) { a = SND.song = new Audio(MUSIC_URL()); a.loop = true; a.preload = 'auto'; }
+  a.loop = true; a.volume = 0; SND.music = { a };
+  const p = a.play(); if (p && p.catch) p.catch(() => { if (SND.music && SND.music.a === a) SND.music = null; });
+  musicFade(a, MUSIC_VOL * (GAME.vol == null ? 1 : GAME.vol), 2500);
 }
-function musicStop() { const M = SND.music; if (!M) return; SND.music = null; clearTimeout(M.timer); const c = SND.ctx; M.bus.gain.setTargetAtTime(0.0001, c.currentTime, 0.4); setTimeout(() => { for (const o of M.drone) try { o.stop(); } catch (err) { /* stopped */ } }, 1500); }
+function musicStop() { const M = SND.music; if (!M) return; SND.music = null; musicFade(M.a, 0, 800, () => { if (!SND.music) M.a.pause(); }); }
+__offs.push(() => { if (SND.song) { clearInterval(SND.song._fade); SND.song.pause(); SND.song.removeAttribute('src'); SND.song.load(); } SND.music = null; });   // leaving the map stops the song
 const seasWarm = () => { const S = clSeasons(); if (!S || !clSeas) return 0.6; const s = S.find(x => x.id === clSeas); return s ? s.warm : 0.6; };
 // the edits make their sounds; undo and redo theirs; a change of mode turns a page
 { const d = doOp; doOp = function (op) { const r = d(op); const k = op && op.k; sfx(k === 'c+' ? 'stamp' : /^r/.test(k || '') || k === 'rh' ? 'water' : k === 'ft' || k === 'sz' || k === 'bel' || k === 'adm' ? 'brush' : k === 'm' && op.ops && op.ops.some(o => o.k === 'c+') ? 'stamp' : 'tick'); if (k === 'c+' && op.c) animStamp(op.c.x, op.c.y); return r; }; }

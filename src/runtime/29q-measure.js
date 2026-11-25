@@ -11,10 +11,19 @@ const VEH = {
   horse: { name: 'ขี่ม้า', kmd: 45, on: 'land' },
   cart: { name: 'เกวียนหรือรถม้า', kmd: 22, on: 'land', road: 1.8 },
   camel: { name: 'คาราวานอูฐ', kmd: 30, on: 'land', desert: 1 },
+  pack: { name: 'ขบวนล่อหรือลาต่าง', kmd: 26, on: 'land', hill: 0.45 },
+  courier: { name: 'ม้าเร็วผลัดม้า', kmd: 120, on: 'land', road: 1.3 },
+  army: { name: 'กองทัพเดินทัพ', kmd: 18, on: 'land', road: 1.4 },
   rail: { name: 'รถไฟ', kmd: 450, on: 'rail' },
   boat: { name: 'เรือแม่น้ำ', kmd: 60, on: 'river' },
   ship: { name: 'เรือเดินทะเล', kmd: 160, on: 'sea' },
+  mixed: { name: 'เดินเท้าต่อเรือโดยสารและรถไฟ', kmd: 25, on: 'mixed' },
+  fly: { name: 'บิน (สัตว์บินหรือเรือเหาะ)', kmd: 250, on: 'air' },
 };
+// v0.19.1: the owner asked why there was no passenger boat. A party that walks and buys passage changes at a community (a port
+// or a station): the mixed way walks at its own speed and rides the river boats, the sea ships and the trains at their speeds,
+// with a wait at each change. Boats, ships and trains on their own now start and stop at a community too, not only on the water.
+const TRIP_WAIT = 0.25;                                // days lost at each change of conveyance (Claude's number)
 const TERR = { g: 1, s: 1, v: 1, c: 0.9, h: 1, d: 0.65, t: 0.75, n: 0.4, f: 0.75, o: 0.8, k: 0.6, j: 0.5, a: 0.5, e: 0.9, w: 0.45, m: 0.55, p: 0.85, r: 1, y: 0.9, u: 0.65, M: 0.3 };
 const MS = { tool: null, ruler: [], trip: null, act: null, cache: null };
 const tripKey = () => 'mme-trip-' + ((ENV.meta && (ENV.meta.id || ENV.meta.title)) || 'map');
@@ -28,24 +37,41 @@ tripLoad();
 
 // ---- the roads, the rails and the waters a conveyance can use, and the time of one hex for it ----
 function tripNet() {
-  const key = routeStamp() + '|' + MS.trip.veh + '|' + MS.trip.sp[MS.trip.veh] + '|' + painted.size;
+  const key = routeStamp() + '|' + MS.trip.veh + '|' + (MS.trip.veh === 'mixed' ? ['mixed', 'rail', 'boat', 'ship'].map(k => MS.trip.sp[k]).join(',') : MS.trip.sp[MS.trip.veh]) + '|' + painted.size + '|' + visibleCities().length;
   if (MS.cache && MS.cache.key === key) return MS.cache;
   const road = new Uint8Array(N);                     // 1 road, 2 railway
   for (const r of visibleRoutes()) { const g = geoOf(r); if (!g || g.fail) continue; const v = r.cls === 'rail' ? 2 : 1; for (const q of g.q) { const h = hexAt(q[0], q[1]); if (h >= 0 && road[h] < v) road[h] = v; } }
+  const dock = new Uint8Array(N); for (const c of visibleCities()) { const h = hexAt(c.x, c.y); if (h >= 0) dock[h] = 1; }
   const V = VEH[MS.trip.veh], hexKm = (ENV.meta && +ENV.meta.kmPerHex || 34), kmd = MS.trip.sp[MS.trip.veh], step = new Float32Array(N).fill(Infinity);
   for (let i = 0; i < N; i++) {
     const b = eff(i), w = isW(b); let f = 0;
-    if (V.on === 'land') { if (!w || road[i]) f = (TERR[b] || 0.8) * (road[i] ? (V.road || 1.5) : 1); if (V.desert && (b === 'd' || b === 'y' || b === 'c')) f = Math.max(f, 0.95); }
-    else if (V.on === 'rail') f = road[i] === 2 ? 1 : 0;
-    else if (V.on === 'river') f = b === 'L' || (typeof NAVR !== 'undefined' && NAVR[i] > 0) || RV[i] === '1' ? 1 : 0;
-    else if (V.on === 'sea') f = isW(b) ? 1 : 0;
+    f = tripFactor(V, i, b, w, road, dock);
     if (f > 0) step[i] = hexKm / (kmd * f);           // days for one hex
   }
-  MS.cache = { key, step, road }; return MS.cache;
+  let steps = null;
+  if (V.on === 'mixed') {                              // walking, the trains, the river boats, the sea ships: one table each
+    steps = [step];
+    for (const k of ['rail', 'boat', 'ship']) { const s = new Float32Array(N).fill(Infinity), U = VEH[k], sp = MS.trip.sp[k]; for (let i = 0; i < N; i++) { const b = eff(i), f = tripFactor(U, i, b, isW(b), road, dock); if (f > 0) s[i] = hexKm / (sp * f); } steps.push(s); }
+  }
+  MS.cache = { key, step, steps, dock, road }; return MS.cache;
+}
+// how well a conveyance goes through a hex (0: it cannot); a community is a port and a station for those that keep to the water or the rails
+function tripFactor(V, i, b, w, road, dock) {
+  let f = 0;
+  if (V.on === 'land' || V.on === 'mixed') {
+    if (!w || road[i]) f = (TERR[b] || 0.8) * (road[i] ? (V.road || 1.5) : 1);
+    if (V.desert && (b === 'd' || b === 'y' || b === 'c')) f = Math.max(f, 0.95);
+    if (V.hill && f > 0 && f < 0.8) f += (0.8 - f) * V.hill;   // sure feet on hills and passes
+  } else if (V.on === 'rail') f = road[i] === 2 || dock[i] ? 1 : 0;
+  else if (V.on === 'river') f = b === 'L' || (typeof NAVR !== 'undefined' && NAVR[i] > 0) || RV[i] === '1' || dock[i] ? 1 : 0;
+  else if (V.on === 'sea') f = w ? 1 : (typeof NAVR !== 'undefined' && NAVR[i] >= 2) ? 0.6 : dock[i] ? 1 : 0;   // up the great rivers, slower
+  else if (V.on === 'air') f = b === 'M' ? 0.8 : 1;
+  return f;
 }
 const routeStamp = () => { let s = 0; for (const r of visibleRoutes()) s = (Math.imul(s, 31) + r.id.length + (r.via ? r.via.length : 0) + (r.cls === 'rail' ? 7 : 1)) | 0; return s; };
 // the time from one hex to every other, the cheapest way (half a step leaving, half arriving)
 function tripReach(from, stopAt) {
+  if (VEH[MS.trip.veh].on === 'mixed') return tripReachMixed(from, stopAt);
   const { step } = tripNet(), T = new Float64Array(N).fill(Infinity), prev = new Int32Array(N).fill(-1); if (from < 0 || !isFinite(step[from])) return { T, prev };
   const H = [[0, from]]; T[from] = 0;
   const push = x => { H.push(x); let k = H.length - 1; while (k) { const p = (k - 1) >> 1; if (H[p][0] <= H[k][0]) break; [H[p], H[k]] = [H[k], H[p]]; k = p; } };
@@ -54,6 +80,28 @@ function tripReach(from, stopAt) {
     const [t, i] = pop(); if (t > T[i]) continue; if (i === stopAt) break;
     for (let j = 0; j < 6; j++) { const v = NB[i * 6 + j]; if (v < 0 || !isFinite(step[v])) continue; const nt = t + (step[i] + step[v]) / 2; if (nt < T[v]) { T[v] = nt; prev[v] = i; push([nt, v]); } }
   }
+  return { T, prev };
+}
+// the mixed way: a state is a hex and the conveyance the party is on (0 walking, 1 train, 2 river boat, 3 sea ship); it changes
+// conveyance only at a community, losing TRIP_WAIT days. The answer is per hex, the best over the conveyances, like tripReach's.
+function tripReachMixed(from, stopAt) {
+  const { steps, dock } = tripNet(), M = steps.length, TT = new Float64Array(N * M).fill(Infinity), PR = new Int32Array(N * M).fill(-1);
+  const T = new Float64Array(N).fill(Infinity), prev = new Int32Array(N).fill(-1); if (from < 0 || !isFinite(steps[0][from])) return { T, prev };
+  const H = [[0, from]]; TT[from] = 0;
+  const push = x => { H.push(x); let k = H.length - 1; while (k) { const p = (k - 1) >> 1; if (H[p][0] <= H[k][0]) break; [H[p], H[k]] = [H[k], H[p]]; k = p; } };
+  const pop = () => { const top = H[0], last = H.pop(); if (H.length) { H[0] = last; let k = 0; for (;;) { const l = 2 * k + 1, r = l + 1; let m = k; if (l < H.length && H[l][0] < H[m][0]) m = l; if (r < H.length && H[r][0] < H[m][0]) m = r; if (m === k) break; [H[m], H[k]] = [H[k], H[m]]; k = m; } } return top; };
+  const relax = (s, ns, nt) => { if (nt < TT[ns]) { TT[ns] = nt; PR[ns] = s; push([nt, ns]); } };
+  let end = -1;
+  while (H.length) {
+    const [t, s] = pop(); if (t > TT[s]) continue; const m = (s / N) | 0, i = s - m * N;
+    if (i === stopAt && m === 0) { end = s; break; }
+    if (dock[i]) for (let m2 = 0; m2 < M; m2++) if (m2 !== m && isFinite(steps[m2][i])) relax(s, m2 * N + i, t + TRIP_WAIT);
+    const st = steps[m];
+    for (let j = 0; j < 6; j++) { const v = NB[i * 6 + j]; if (v < 0 || !isFinite(st[v])) continue; relax(s, m * N + v, t + (st[i] + st[v]) / 2); }
+  }
+  for (let s = 0; s < N * M; s++) { const i = s % N; if (TT[s] < T[i]) T[i] = TT[s]; }
+  // the way to the stop, as hexes (the party ends the leg on foot, so it steps off at a community or a bank it can walk from)
+  if (stopAt >= 0) { let best = -1; for (let m = 0; m < M; m++) { const s = m * N + stopAt; if (best < 0 || TT[s] < TT[best]) best = s; } T[stopAt] = best >= 0 ? TT[best] : Infinity; let last = -1; for (let s = best; s >= 0 && isFinite(TT[best]); s = PR[s]) { const i = s % N; if (last >= 0 && last !== i) prev[last] = i; last = i; } }
   return { T, prev };
 }
 function tripLegs() {                                  // from the pin through each mark in turn: the hexes and the days of each leg
@@ -85,7 +133,7 @@ function tripRingHexes() {
       const { on } = tripRingHexes(); c.beginPath(); for (let i = 0; i < N; i++) if (on[i]) hexPath(c, i, 1.01); c.fillStyle = 'rgba(120,200,255,.14)'; c.fill();
       c.beginPath(); for (let i = 0; i < N; i++) { if (!on[i]) continue; for (let a = 0; a < 6; a++) { const v = NB[i * 6 + a]; if (v >= 0 && on[v]) continue; const e = EDGE[a], t0 = e * Math.PI / 3, t1 = (e + 1) * Math.PI / 3; c.moveTo(CX[i] + R * Math.cos(t0), CY[i] + R * Math.sin(t0)); c.lineTo(CX[i] + R * Math.cos(t1), CY[i] + R * Math.sin(t1)); } }
       c.strokeStyle = 'rgba(140,210,255,.95)'; c.lineWidth = 1.6 * px; c.stroke();
-      const rad = tr.days * tr.sp[tr.veh] / kmU; c.beginPath(); c.arc(CX[tr.pin], CY[tr.pin], rad, 0, 2 * Math.PI); c.setLineDash([5 * px, 5 * px]); c.strokeStyle = 'rgba(255,255,255,.55)'; c.lineWidth = 1.2 * px; c.stroke(); c.setLineDash([]);
+      const rad = VEH[tr.veh].on === 'mixed' ? 0 : tr.days * tr.sp[tr.veh] / kmU; if (rad > 0) { c.beginPath(); c.arc(CX[tr.pin], CY[tr.pin], rad, 0, 2 * Math.PI); c.setLineDash([5 * px, 5 * px]); c.strokeStyle = 'rgba(255,255,255,.55)'; c.lineWidth = 1.2 * px; c.stroke(); c.setLineDash([]); }
     }
     const legs = tripLegs(); let sum = 0;
     for (const L of legs) {
