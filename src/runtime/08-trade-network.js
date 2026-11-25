@@ -36,7 +36,11 @@ const EHUB2 = {
   'sp-kavxos': 'จุดบรรจบของแม่น้ำใหญ่กลางดินแดนรกร้าง เรือข้าวขึ้นฝั่งที่นี่แล้วกระจายไปทั่วดินแดนรกร้างตอนใต้',
   'sp-baotarn': 'จุดบรรจบของลำน้ำฝั่งตะวันตก เมืองริมแม่น้ำของดินแดนรกร้างฝั่งตะวันตกส่งของผ่านที่นี่',
 };
-const autoRank = c => { const k = c.lk || c.kind; return EHUB[c.id] || k === 'capital' ? 3 : EHUB2[c.id] || k === 'city' ? 2 : k === 'town' ? 1 : 0; };
+const autoRank = c => {
+  const k = c.lk || c.kind; let r = EHUB[c.id] || k === 'capital' ? 3 : EHUB2[c.id] || k === 'city' ? 2 : k === 'town' ? 1 : 0;
+  const f = c.fx; if (f) { if (f.rank3) r = 3; else { if (f.portRank && c.port) r = Math.min(3, r + f.portRank); r = Math.max(r, f.rankMin); } }   // v0.18.5: the marks of a community (29k)
+  return r;
+};
 const hubRank = c => ED.hubs.has(c.id) ? ED.hubs.get(c.id) : autoRank(c);
 const linkKey = (a, b) => 'a:' + [a, b].sort().join('~');
 const plainLink = L => ({ id: L.id, a: L.a, b: L.b, mode: LMODE[L.mode] ? L.mode : 'auto', via: (L.via || []).map(p => [r1(p[0]), r1(p[1])]) });

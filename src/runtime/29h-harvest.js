@@ -36,7 +36,7 @@ function harvApply(cities, prod, own, dist) {         // the hands spread over t
   const n = cities.length, cnt = new Int32Array(n), ref = TU('effRef');   // measure holds whatever the level of people (fields laid out farther for a populous level feed their own share, v0.14.2)
   for (let i = 0; i < N; i++) { const k = own[i]; if (k >= 0 && k < n && dist[i] <= EREACH[cities[k].ki]) cnt[k]++; }
   cities.forEach((c, k) => {
-    const P = prod[k], hexes = Math.max(1, cnt[k]), made = c.pop * EIND[c.ki] * 0.5 * (c.work || 1);
+    const P = prod[k], hexes = Math.max(1, cnt[k]), made = c.pop * EIND[c.ki] * (c.fx ? c.fx.ind : 1) * 0.5 * (c.work || 1);
     let rent0 = 0; for (const [id, v] of P) { const cat = catOf(id); if (ECAT[cat]) rent0 += v * ECAT[cat].v; }
     const got = HARVL ? HARVL.get(c.id) : null; let L = 0, parts = null;
     if (got) { L = got.units; parts = got.parts; }

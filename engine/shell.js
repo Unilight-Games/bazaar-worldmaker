@@ -2,7 +2,7 @@
 // the sheet for a new map, and the room around an open map.
 (function () {
   const MME = window.MME;
-  MME.VERSION = '0.18.4';
+  MME.VERSION = '0.18.5';
   MME.NAME = 'Bazaar Worldmaker';
   MME.GRESLAND_KM = 34;   // canon: the continent is about 12 million square kilometres, and the map draws it on 12,208 hexes
   const $ = id => document.getElementById(id);
@@ -369,7 +369,7 @@
   try { const p = JSON.parse(LS.get('mme-panels') || 'null'); if (p) { PAN.side = p.side !== false; PAN.opts = p.opts !== false; PAN.fold = !!p.fold; if (Number.isFinite(p.ox) && Number.isFinite(p.oy)) { PAN.ox = p.ox; PAN.oy = p.oy; } } } catch (err) { /* both shown */ }
   const panSave = () => LS.set('mme-panels', JSON.stringify(PAN));
   let SHUT = {}; try { SHUT = JSON.parse(LS.get('mme-cards') || '{}') || {}; } catch (err) { SHUT = {}; }
-  const MODENAME = { view: 'ดูแผนที่', terrain: 'ระบายภูมิประเทศ', river: 'วาดแม่น้ำ', city: 'วางเมือง', label: 'ใส่ชื่อสถานที่', route: 'ถนน', trade: 'การค้า', climate: 'ภูมิอากาศ', econ: 'เศรษฐกิจ', info: 'แก้ข้อมูล' };
+  const MODENAME = { view: 'ดูแผนที่', terrain: 'ระบายภูมิประเทศ', river: 'วาดแม่น้ำ', city: 'วางชุมชน', label: 'ใส่ชื่อสถานที่', route: 'ถนน', trade: 'การค้า', climate: 'ภูมิอากาศ', econ: 'เศรษฐกิจ', info: 'สถานที่และข้อมูล' };
   function applyFit(first) {
     const scr = $('mapscreen'), box = $('mapbox'); if (!box) return;
     const on = !!(FITMQ && FITMQ.matches), teach = document.body.classList.contains('tutoring');

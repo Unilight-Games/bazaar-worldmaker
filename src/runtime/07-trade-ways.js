@@ -3,14 +3,19 @@
 // caravans: any land, cheap on a road and dear off it. A load changes from one to the other at a city's quay for little,
 // anywhere else for more.
 const NAVW = 2.2;
+// v0.18.5, the owner's rule: a river takes small boats and ferries only; a great river takes the merchant ships. NAVR marks a hex of
+// a navigable river 2 when a merchant ship gets up it (the user's great rivers, and the map's rivers at least NAVBIG wide) and 1 when
+// only small boats do (the user's rivers, and the map's narrower navigable ones). Goods carried up a small boat's river cost ESMALL
+// times a ship's river: small loads, slow going. Both numbers are Claude's.
+const NAVBIG = 3.3, ESMALL = 3.5;
 const WATR = new Uint8Array(N), NAVR = new Uint8Array(N), RIVM = new Uint8Array(N), PORTZ = new Uint8Array(N);
 const NPX = new Float32Array(N), NPY = new Float32Array(N), NPC = new Uint16Array(N);
 function eLink(u, v) { const k = nbIndex(u, v); if (k < 0) return; RIVM[u] |= 1 << k; RIVM[v] |= 1 << REVK[k]; }
-function eRiverRun(xs, ys, runs) {                // one navigable stretch: the hexes it passes, linked in order
+function eRiverRun(xs, ys, runs, cls) {           // one navigable stretch: the hexes it passes, linked in order; cls 2 ships, 1 small boats
   let prev = -1; const hs = [];
   for (let j = 0; j < xs.length; j++) {
     const h = hexAt(xs[j], ys[j]); if (h < 0) { prev = -1; continue; }
-    if (!WATR[h]) { NAVR[h] = 1; NPX[h] += xs[j]; NPY[h] += ys[j]; NPC[h]++; }
+    if (!WATR[h]) { NAVR[h] = Math.max(NAVR[h], cls || 2); NPX[h] += xs[j]; NPY[h] += ys[j]; NPC[h]++; }
     if (prev >= 0 && prev !== h) eLink(prev, h);
     if (prev !== h) hs.push(h);
     prev = h;
@@ -25,10 +30,10 @@ function eWaterways() {
     if (r.s || r.w < NAVW) continue;
     let xs = [], ys = [];
     for (let j = r.s0; j < r.s1; j++) {
-      if (sampleOff(j)) { if (xs.length > 1) eRiverRun(xs, ys, runs); xs = []; ys = []; continue; }
+      if (sampleOff(j)) { if (xs.length > 1) eRiverRun(xs, ys, runs, r.w >= NAVBIG ? 2 : 1); xs = []; ys = []; continue; }
       xs.push(BS.x[j]); ys.push(BS.y[j]);
     }
-    if (xs.length > 1) eRiverRun(xs, ys, runs);
+    if (xs.length > 1) eRiverRun(xs, ys, runs, r.w >= NAVBIG ? 2 : 1);
   }
   for (const r of ED.rivers) {
     if (r.kind !== 'big' && r.kind !== 'river') continue;
@@ -36,7 +41,7 @@ function eWaterways() {
     const xs = [], ys = [];                          // the drawn line, half a unit apart, so no hex on it is skipped
     for (let i = 0; i < d.q.length - 1; i++) { const a = d.q[i], b = d.q[i + 1], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.5)); for (let s = 0; s < n; s++) { xs.push(a[0] + (b[0] - a[0]) * s / n); ys.push(a[1] + (b[1] - a[1]) * s / n); } }
     const e = d.q[d.q.length - 1]; xs.push(e[0]); ys.push(e[1]);
-    eRiverRun(xs, ys, runs);
+    eRiverRun(xs, ys, runs, r.kind === 'big' ? 2 : 1);
   }
   for (let i = 0; i < N; i++) if (NPC[i]) { NPX[i] /= NPC[i]; NPY[i] /= NPC[i]; } else { NPX[i] = CX[i]; NPY[i] = CY[i]; }
   // a river that ends a step short of the sea, a lake or another river flows on into it: each end of a stretch is joined to the
@@ -153,7 +158,7 @@ function eNext(t, mode, near, f) {
     for (let k = 0; k < 6; k++) {
       const v = NB[h * 6 + k]; if (v < 0) continue;
       if (wet && WATR[v] && (LANE[h] >> k & 1)) f(v * 2 + 1, WCOST[eff(v)][SHORE[v]]);
-      else if (RIVM[h] >> k & 1) f(v * 2 + 1, ZO[v] === 'J' && !NEARC[v] ? ERIV * EWILDR : ERIV);
+      else if (RIVM[h] >> k & 1) f(v * 2 + 1, (ZO[v] === 'J' && !NEARC[v] ? ERIV * EWILDR : ERIV) * (NAVR[h] === 1 || NAVR[v] === 1 ? ESMALL : 1));   // v0.18.5: small boats only
     }
     if (!wet) f(h * 2, PORTZ[h] ? EQUAY : EBANK);
     else for (let k = 0; k < 6; k++) { const v = NB[h * 6 + k]; if (v >= 0 && !WATR[v]) f(v * 2, PORTZ[v] ? EQUAY : EBANK); }

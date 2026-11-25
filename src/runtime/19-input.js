@@ -147,7 +147,7 @@ cv.addEventListener('pointermove', e => {
     if (act.k === 'rend') {
       if (!act.moved && !far) return;
       act.moved = true; act.at = [mx, my];
-      const c = cityAt(mx, my); act.to = c ? c.id : endAt(mx, my);
+      const c = cityAt(mx, my); act.to = c ? c.id : endAt(mx, my, act.id);
       if (!act.pend) {
         act.pend = true;
         requestAnimationFrame(() => {
@@ -285,8 +285,18 @@ cv.addEventListener('dblclick', e => { if (mode === 'river' && rtool === 'draw' 
 __on(window, 'keydown', e => {
   const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
   const mod = e.ctrlKey || e.metaKey;
-  if (mod && !typing && editable && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
-  if (mod && !typing && editable && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
+  // v0.18.5: Ctrl+Z / Ctrl+Y by the key's place, so a Thai keyboard (where that key types ผ / ๆ) undoes too; a list, a tick box or a
+  // slider still holding the focus after a change no longer swallows it, only a box being typed in keeps its own undo; and in the
+  // economy, or the climate with a tool on, it steps that mode's own history, once
+  const uk = e.code === 'KeyZ' ? 'z' : e.code === 'KeyY' ? 'y' : String(e.key || '').toLowerCase();
+  const textBox = e.target.tagName === 'TEXTAREA' || e.target.isContentEditable || (e.target.tagName === 'INPUT' && /^(text|number|search|email|url|password|tel|)$/.test(e.target.type || ''));
+  if (mod && !e.altKey && !textBox && editable && (uk === 'z' || uk === 'y')) {
+    e.preventDefault(); if (typing) e.target.blur();
+    const back = uk === 'z' && !e.shiftKey, side = mode === 'econ' ? 'eco' : mode === 'climate' && clTool ? 'clim' : null;
+    if (side) { if (!sideStep(side, back)) flash(back ? 'ไม่มีอะไรให้ย้อนในหน้านี้แล้ว' : 'ไม่มีอะไรให้ทำซ้ำ'); }
+    else if (back) { if (!undoS.length && !(riv && riv.pts.length)) flash('ไม่มีอะไรให้ย้อนแล้ว'); undo(); } else { if (!redoS.length) flash('ไม่มีอะไรให้ทำซ้ำ'); redo(); }
+    return;
+  }
   if (typing) { if (e.key === 'Escape' || (e.key === 'Enter' && e.target.tagName === 'INPUT')) e.target.blur(); return; }
   if (PANKEY[e.code] && !mod && !e.altKey) { e.preventDefault(); panKeys.add(PANKEY[e.code]); panFast = e.shiftKey; panKick(); return; }
   if (e.key === ' ' && overMap && mode !== 'view') { spaceDown = true; e.preventDefault(); if (document.activeElement && document.activeElement.tagName === 'BUTTON') document.activeElement.blur(); return; }

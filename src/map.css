@@ -142,4 +142,12 @@ aside { display: flex; flex-direction: column; gap: 12px; }
 .method h3 { font-family: var(--display); font-size: .98rem; margin: 12px 0 4px; }
 .method ol { margin: 0; padding-left: 1.3em; }
 .method li { margin: 3px 0; max-width: 74ch; }
-.note { color: var(--muted); font-size: .85rem; margin-top: 8px; }
+.note { color: var(--muted); font-size: .85rem; margin-top: 8px; }/* v0.18.5: the list of points of interest places one */
+.lg.ptadd { grid-template-columns: 16px minmax(0, 1fr) auto auto; cursor: pointer; border-radius: 6px; padding: 1px 4px; margin: 0 -4px; }
+.lg.ptadd:hover, .lg.ptadd:focus-visible { background: rgba(255, 255, 255, .06); outline: none; }
+.lg.ptadd .add { font-size: .74rem; color: var(--brass, #cfa95e); }
+.ptwhy { margin: 6px 0 0; font-size: .78rem; line-height: 1.5; color: var(--muted, #a7a192); }
+/* v0.18.5: a community's marks */
+.optrow.traits { gap: 4px 12px; }
+.optrow.traits .trait { display: inline-flex; align-items: center; gap: 4px; font-size: .84rem; white-space: nowrap; cursor: pointer; }
+#cfFx { margin-top: 2px; }

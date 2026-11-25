@@ -92,10 +92,19 @@ function marker(c, px, v, selected) {
   if (v.kind === 'fort') {
     c.beginPath(); c.rect(x - r, y - r, 2 * r, 2 * r); c.fill(); c.stroke();
     c.beginPath(); c.rect(x - r * 0.42, y - r * 0.42, r * 0.84, r * 0.84); c.fillStyle = '#2a2116'; c.fill();
+  } else if (v.kind === 'camp') {                    // v0.18.5: a tent
+    c.beginPath(); c.moveTo(x, y - r * 1.15); c.lineTo(x + r * 1.1, y + r * 0.8); c.lineTo(x - r * 1.1, y + r * 0.8); c.closePath(); c.fill(); c.stroke();
+    c.beginPath(); c.moveTo(x, y - r * 0.1); c.lineTo(x + r * 0.32, y + r * 0.8); c.lineTo(x - r * 0.32, y + r * 0.8); c.closePath(); c.fillStyle = '#2a2116'; c.fill();
+  } else if (v.kind === 'waystation') {              // a diamond, like a milestone
+    c.beginPath(); c.moveTo(x, y - r * 1.15); c.lineTo(x + r * 1.15, y); c.lineTo(x, y + r * 1.15); c.lineTo(x - r * 1.15, y); c.closePath(); c.fill(); c.stroke();
+    c.beginPath(); c.arc(x, y, r * 0.3, 0, 2 * Math.PI); c.fillStyle = '#2a2116'; c.fill();
+  } else if (v.kind === 'monastery') {               // a round house with a cross over it
+    c.beginPath(); c.arc(x, y, r, 0, 2 * Math.PI); c.fill(); c.stroke();
+    c.beginPath(); c.moveTo(x, y - r * 0.62); c.lineTo(x, y + r * 0.62); c.moveTo(x - r * 0.45, y - r * 0.15); c.lineTo(x + r * 0.45, y - r * 0.15); c.lineWidth = 1.2 * px; c.stroke();
   } else {
     c.beginPath(); c.arc(x, y, r, 0, 2 * Math.PI); c.fill(); c.stroke();
     if (v.kind === 'capital') { c.beginPath(); c.arc(x, y, r * 0.58, 0, 2 * Math.PI); c.lineWidth = 1.1 * px; c.stroke(); c.beginPath(); c.arc(x, y, r * 0.24, 0, 2 * Math.PI); c.fillStyle = '#2a2116'; c.fill(); }
-    else if (v.kind !== 'town' && v.kind !== 'village') { c.beginPath(); c.arc(x, y, r * 0.42, 0, 2 * Math.PI); c.fillStyle = '#2a2116'; c.fill(); }
+    else if (v.kind !== 'town' && v.kind !== 'village' && v.kind !== 'hamlet') { c.beginPath(); c.arc(x, y, r * 0.42, 0, 2 * Math.PI); c.fillStyle = '#2a2116'; c.fill(); }
   }
   if (v.name && (selected || (c === ctx && (v.id === hoverCity || v.id === tapCity)) || (showCityNames && NAMED_KINDS.has(v.kind)))) {
     const ly = y - r - Math.max(7 * px, 3.5), lb = label(c, px, v.name, x, ly, scaled(st.f, nameSize.city), '#fbf3dc', 0, st.wt);

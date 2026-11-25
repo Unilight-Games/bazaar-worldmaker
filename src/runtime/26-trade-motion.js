@@ -56,7 +56,13 @@ function fxSprite(kind, cat) {                       // drawn once for each kind
   } else {
     s.width = 64; s.height = 48; c.scale(2, 2); c.lineJoin = 'round'; c.lineCap = 'round';
     c.fillStyle = 'rgba(8,10,14,.38)'; c.beginPath(); c.ellipse(16, 20.5, 13, 2.4, 0, 0, 2 * Math.PI); c.fill();
-    if (kind === 'ship') {                           // a merchant ship from the side: hull, mast, one square sail, a pennant
+    if (kind === 'boat') {                           // v0.18.5: a small river boat: a low hull, a boatman with his pole, a bundle in the goods' colour
+      c.beginPath(); c.moveTo(4, 15); c.lineTo(28, 15); c.lineTo(24.5, 19); c.lineTo(7.5, 19); c.closePath();
+      c.fillStyle = '#6b4528'; c.fill(); c.strokeStyle = '#1e140b'; c.lineWidth = 1; c.stroke();
+      c.fillStyle = col; c.strokeStyle = 'rgba(20,14,8,.8)'; c.lineWidth = 0.6; c.beginPath(); c.rect(15, 10.6, 8.5, 4.4); c.fill(); c.stroke();
+      c.fillStyle = '#2b1d12'; c.beginPath(); c.arc(9.5, 8.2, 1.7, 0, 2 * Math.PI); c.fill(); c.fillRect(8.4, 9.6, 2.2, 5.4);
+      c.strokeStyle = '#3a281a'; c.lineWidth = 0.9; c.beginPath(); c.moveTo(6.2, 3.6); c.lineTo(12.6, 21.4); c.stroke();
+    } else if (kind === 'ship') {                    // a merchant ship from the side: hull, mast, one square sail, a pennant
       c.beginPath(); c.moveTo(2.5, 14); c.lineTo(29.5, 14); c.lineTo(25.5, 19.5); c.lineTo(6.5, 19.5); c.closePath();
       c.fillStyle = '#6b4528'; c.fill(); c.strokeStyle = '#1e140b'; c.lineWidth = 1; c.stroke();
       c.beginPath(); c.moveTo(3.5, 15.6); c.lineTo(28.5, 15.6); c.strokeStyle = 'rgba(240,214,160,.55)'; c.lineWidth = 0.7; c.stroke();
@@ -109,7 +115,8 @@ function fxFrame(now) {
     if (flip) a = Math.atan2(Math.sin(a), -Math.cos(a));
     a = Math.max(-0.5, Math.min(0.5, a));
     fxc.save(); fxc.translate(x, y); fxc.rotate(flip ? -a : a); if (flip) fxc.scale(-1, 1);
-    fxc.drawImage(fxSprite(wet ? 'ship' : 'wagon', m.cat), -size * 0.667, -size * 0.8, size * 1.333, size);
+    const hh = wet ? hexAt(x, y) : -1, small = hh >= 0 && !WATR[hh] && NAVR[hh] === 1;   // up a small boat's river, a small boat
+    fxc.drawImage(fxSprite(wet ? (small ? 'boat' : 'ship') : 'wagon', m.cat), -size * 0.667, -size * 0.8, size * 1.333, size);
     fxc.restore();
   }
   fxc.globalAlpha = 1;

@@ -152,7 +152,16 @@ aside { display: flex; flex-direction: column; gap: 12px; }
 .method h3 { font-family: var(--display); font-size: .98rem; margin: 12px 0 4px; }
 .method ol { margin: 0; padding-left: 1.3em; }
 .method li { margin: 3px 0; max-width: 74ch; }
-.note { color: var(--muted); font-size: .85rem; margin-top: 8px; }
+.note { color: var(--muted); font-size: .85rem; margin-top: 8px; }/* v0.18.5: the list of points of interest places one */
+.lg.ptadd { grid-template-columns: 16px minmax(0, 1fr) auto auto; cursor: pointer; border-radius: 6px; padding: 1px 4px; margin: 0 -4px; }
+.lg.ptadd:hover, .lg.ptadd:focus-visible { background: rgba(255, 255, 255, .06); outline: none; }
+.lg.ptadd .add { font-size: .74rem; color: var(--brass, #cfa95e); }
+.ptwhy { margin: 6px 0 0; font-size: .78rem; line-height: 1.5; color: var(--muted, #a7a192); }
+/* v0.18.5: a community's marks */
+.optrow.traits { gap: 4px 12px; }
+.optrow.traits .trait { display: inline-flex; align-items: center; gap: 4px; font-size: .84rem; white-space: nowrap; cursor: pointer; }
+#cfFx { margin-top: 2px; }
+
 /* ---------- Bazaar Worldmaker: the menu, the library and the room, in the map's own ink and brass ---------- */
 :root { --good: #7cc47f; --warn: #e2748a; --panel2: #262a33; }
 body { min-height: 100vh; }
@@ -876,13 +885,13 @@ b.warn { color: var(--warn); font-weight: 600; }
           <button type="button" data-mode="view" aria-pressed="true">ดูแผนที่</button>
           <button type="button" data-mode="terrain" aria-pressed="false">ระบายภูมิประเทศ</button>
           <button type="button" data-mode="river" aria-pressed="false">วาดแม่น้ำ</button>
-          <button type="button" data-mode="city" aria-pressed="false">วางเมือง</button>
+          <button type="button" data-mode="city" aria-pressed="false">วางชุมชน</button>
           <button type="button" data-mode="label" aria-pressed="false">ใส่ชื่อสถานที่</button>
           <button type="button" data-mode="route" aria-pressed="false">ถนน</button>
           <button type="button" data-mode="trade" aria-pressed="false">การค้า</button>
           <button type="button" data-mode="climate" aria-pressed="false">ภูมิอากาศ</button>
           <button type="button" data-mode="econ" aria-pressed="false">เศรษฐกิจ</button>
-          <button type="button" data-mode="info" aria-pressed="false">แก้ข้อมูล</button>
+          <button type="button" data-mode="info" aria-pressed="false">สถานที่และข้อมูล</button>
         </div>
         <div class="seg" id="history">
           <button type="button" id="undo" title="ย้อน (Ctrl+Z)" disabled>↶ ย้อน</button>
@@ -918,18 +927,20 @@ b.warn { color: var(--warn); font-weight: 600; }
         <div data-for="city" hidden>
           <div class="panes">
           <div id="cityNew">
-            <div class="optrow" style="margin-top:0"><span class="lbl">ชนิดของเมืองใหม่</span><div class="seg" id="ckind"></div></div>
+            <div class="optrow" style="margin-top:0"><span class="lbl">ชนิดของชุมชนใหม่</span><div class="seg" id="ckind"></div></div>
             <p class="hint">คลิกที่ว่างเพื่อวางเมือง พิมพ์ชื่อแล้วกด Enter คลิกเมืองเพื่อแก้ชื่อและบันทึก ลากตัวเมืองหรือชื่อเมืองเพื่อย้าย ชื่อสถานที่กับภูเขาสแตนเทอร์ก็ลากย้ายได้ ลากที่ว่างเพื่อเลื่อนแผนที่ เมืองที่มากับแผนที่ก็ย้าย แก้ และลบได้เหมือนกัน</p>
           </div>
           <div id="cityForm" class="cf pane-off">
             <div class="optrow" style="margin-top:0">
               <label>ชื่อ <input id="cfName" maxlength="60" autocomplete="off"></label>
-              <label>ชนิด <select id="cfKind"></select></label>
+              <label>ชนิดของชุมชน <select id="cfKind"></select></label>
               <button type="button" class="btn warn" id="cfDel">ลบเมืองนี้</button>
               <button type="button" class="btn" id="cfDone">เสร็จ</button>
             </div>
             <label class="full">บันทึก <textarea id="cfNote" rows="2" maxlength="600"></textarea></label>
-            <div class="optrow"><label>ประชากร <input id="cfPop" type="number" min="0" step="100" style="width:8em" autocomplete="off"> คน</label><span class="lbl">เว้นว่างเพื่อใช้ค่าตามชนิดเมือง ประชากรกำหนดความต้องการ กำลังผลิตของโรงงาน และลำดับที่พ่อค้าเลือกมาขาย</span></div>
+            <div class="optrow"><label>ประชากร <input id="cfPop" type="number" min="0" step="100" style="width:8em" autocomplete="off"> คน</label><span class="lbl">เว้นว่างเพื่อใช้ค่าตามชนิดของชุมชนและคุณลักษณะ ประชากรกำหนดความต้องการ กำลังผลิตของโรงงาน และลำดับที่พ่อค้าเลือกมาขาย</span></div>
+            <div class="optrow"><label>ภาษี <input id="cfTax" type="number" min="0" max="90" step="1" style="width:5em" autocomplete="off"> %</label><span class="lbl" id="cfTaxNote"></span></div><div class="optrow traits" id="cfTraits"></div>
+            <p class="hint" id="cfFx" hidden></p>
             <p class="hint" id="cfHint"></p>
           </div>
           </div>
@@ -1003,7 +1014,7 @@ b.warn { color: var(--warn); font-weight: 600; }
         <div data-for="info" hidden>
           <div class="sidehint"><span>ช่องแก้ข้อมูลของสิ่งที่เลือกอยู่ในแผงข้างทางขวา ซึ่งตอนนี้ซ่อนอยู่</span><button type="button" class="btn" data-reveal="infocard">เปิดแผงข้าง</button></div>
           <div class="optrow" style="margin-top:0">
-            <div class="seg" id="ifTool"><button type="button" data-t="pick">เลือกข้อมูล</button><button type="button" data-t="point">วางจุดสำคัญ</button></div>
+            <div class="seg" id="ifTool"><button type="button" data-t="pick">เลือกข้อมูล</button><button type="button" data-t="point">วางสถานที่น่าสนใจ</button></div>
             <div class="seg" id="ifKind" hidden></div>
           </div>
           <p class="hint" id="ifHint"></p>
@@ -1013,7 +1024,7 @@ b.warn { color: var(--warn); font-weight: 600; }
     <div class="mapbox" id="mapbox" data-mode="view">
       <canvas id="map" aria-label="แผนที่ภูมิประเทศทวีปเกรสแลนด์"></canvas>
       <canvas id="fx" aria-hidden="true"></canvas>
-      <div class="ctl"><button id="names" type="button" aria-pressed="true">ชื่อสถานที่</button><button id="cnames" type="button" aria-pressed="true">ชื่อเมือง</button><button id="landBtn" type="button" aria-pressed="true" title="ไร่ ป่าที่ถูกถาง ป่าที่ถูกตัดไม้ และเหมือง ที่ประชากรของเมืองต้องใช้">ที่ดินของเมือง</button><label class="tierpick" title="จำนวนคนทั้งแผนที่ ขนาดเมือง GDP และที่ดินที่เมืองใช้เปลี่ยนตาม"><span>ประชากรรวมในแผนที่</span><select id="tierSel" aria-label="ประชากรรวมในแผนที่"></select><input id="tierNum" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" hidden aria-label="จำนวนคนทั้งแผนที่ที่กำหนดเอง" title="เขียนจำนวนคนทั้งแผนที่ เช่น 250,000,000 หรือ 250 ล้าน หรือ 2.5 พันล้าน"><span id="tierUnit" class="tu">คน</span></label><div class="setpick" role="group" aria-label="ตั้งค่าโลก" title="ตั้งค่ารัฐ สินค้า ประเภทสินค้า ค่าเงิน และองค์กรของแผนที่ เปิดในแผงข้างทางขวา"><span>ตั้งค่า</span><button type="button" data-eco="states" aria-pressed="false">รัฐ</button><button type="button" data-eco="goods" aria-pressed="false">สินค้า</button><button type="button" data-eco="cats" aria-pressed="false">ประเภทสินค้า</button><button type="button" data-eco="gdp" aria-pressed="false">ค่าเงิน</button><button type="button" data-eco="orgs" aria-pressed="false">องค์กร</button></div><button id="layersBtn" type="button" aria-expanded="false" aria-controls="layers">เส้นทาง</button><button id="nsizeBtn" type="button" aria-expanded="false" aria-controls="nsize">ขนาดชื่อ</button></div>
+      <div class="ctl"><button id="names" type="button" aria-pressed="true">ชื่อสถานที่</button><button id="cnames" type="button" aria-pressed="true">ชื่อเมือง</button><button id="seasonBtn" type="button" aria-pressed="false">ฤดู: ทั้งปี</button><button id="landBtn" type="button" aria-pressed="true" title="ไร่ ป่าที่ถูกถาง ป่าที่ถูกตัดไม้ และเหมือง ที่ประชากรของเมืองต้องใช้">ที่ดินของเมือง</button><label class="tierpick" title="จำนวนคนทั้งแผนที่ ขนาดเมือง GDP และที่ดินที่เมืองใช้เปลี่ยนตาม"><span>ประชากรรวมในแผนที่</span><select id="tierSel" aria-label="ประชากรรวมในแผนที่"></select><input id="tierNum" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" hidden aria-label="จำนวนคนทั้งแผนที่ที่กำหนดเอง" title="เขียนจำนวนคนทั้งแผนที่ เช่น 250,000,000 หรือ 250 ล้าน หรือ 2.5 พันล้าน"><span id="tierUnit" class="tu">คน</span></label><div class="setpick" role="group" aria-label="ตั้งค่าโลก" title="ตั้งค่ารัฐ สินค้า ประเภทสินค้า ค่าเงิน และองค์กรของแผนที่ เปิดในแผงข้างทางขวา"><span>ตั้งค่า</span><button type="button" data-eco="states" aria-pressed="false">รัฐ</button><button type="button" data-eco="goods" aria-pressed="false">สินค้า</button><button type="button" data-eco="cats" aria-pressed="false">ประเภทสินค้า</button><button type="button" data-eco="gdp" aria-pressed="false">ค่าเงิน</button><button type="button" data-eco="orgs" aria-pressed="false">องค์กร</button></div><button id="layersBtn" type="button" aria-expanded="false" aria-controls="layers">เส้นทาง</button><button id="nsizeBtn" type="button" aria-expanded="false" aria-controls="nsize">ขนาดชื่อ</button></div>
       <div class="layers" id="layers" hidden></div>
       <div class="layers nsize" id="nsize" hidden></div>
       <div class="zoom"><button id="zin" title="ซูมเข้า" aria-label="ซูมเข้า">+</button><button id="zout" title="ซูมออก" aria-label="ซูมออก">−</button><button id="zfit" title="ดูทั้งทวีป" aria-label="ดูทั้งทวีป">⤢</button></div>
@@ -1049,17 +1060,17 @@ b.warn { color: var(--warn); font-weight: 600; }
 <section class="method"><div class="card" id="method"></div></section>
 </template>
 <script>window.MME_BUILD = "web"; window.MME_NO_GRESLAND = true;</script>
-<script src="firebase-config.js?v=0.18.4"></script>
-<script src="engine/gen.js?v=0.18.4"></script>
-<script src="engine/store.js?v=0.18.4"></script>
-<script src="engine/backup.js?v=0.18.4"></script>
-<script src="engine/net.js?v=0.18.4"></script>
-<script src="engine/fire.js?v=0.18.4"></script>
-<script src="engine/defaults.js?v=0.18.4"></script>
-<script src="engine/runtime.js?v=0.18.4"></script>
-<script src="engine/shell.js?v=0.18.4"></script>
-<script src="engine/hub.js?v=0.18.4"></script>
-<script src="engine/tutor-lines.js?v=0.18.4"></script>
-<script src="engine/tutor.js?v=0.18.4"></script>
+<script src="firebase-config.js?v=0.18.5"></script>
+<script src="engine/gen.js?v=0.18.5"></script>
+<script src="engine/store.js?v=0.18.5"></script>
+<script src="engine/backup.js?v=0.18.5"></script>
+<script src="engine/net.js?v=0.18.5"></script>
+<script src="engine/fire.js?v=0.18.5"></script>
+<script src="engine/defaults.js?v=0.18.5"></script>
+<script src="engine/runtime.js?v=0.18.5"></script>
+<script src="engine/shell.js?v=0.18.5"></script>
+<script src="engine/hub.js?v=0.18.5"></script>
+<script src="engine/tutor-lines.js?v=0.18.5"></script>
+<script src="engine/tutor.js?v=0.18.5"></script>
 </body>
 </html>

@@ -103,13 +103,13 @@ function socPrep(cities) {
   for (const c of cities) {
     const s = ECOX.byKey.get(c.st) || null;
     c.reg = EREG[ECO.regime[c.id]] ? ECO.regime[c.id] : s && EREG[s.reg] ? s.reg : 'shift';
-    c.lab = clamp(cheap * Math.log10(Math.max(1, c.people) / ref) / 3, -0.1, cheap);              // how much cheaper a day's work is here than in a middling town
+    c.lab = clamp(cheap * Math.log10(Math.max(1, c.people) / ref) / 3, -0.1, cheap) + (c.fx ? c.fx.lab : 0);              // how much cheaper a day's work is here than in a middling town
     c.pol = POL && s ? POL.get(s.id) || null : null;
     c.work = (c.reg === 'home' ? TU('regHomeOut') : c.reg === 'sweat' ? TU('regSweatOut') : c.reg === 'care' ? TU('regCareOut') : 1) * (1 + TU('labMake') * c.lab);
     c.foodCut = 1 - TU('landFood') * (c.land ? c.land.lack : 0);                                   // a city short of land grows that much less of its food, and must buy the rest
     let seen = 0, sea = 0, lake = 0, ring = [c.h]; const sn = new Set(ring);                       // what there is to see: marks on the map within three hexes, the great peak, a sea shore, a lake
     for (let d = 0; d <= 3 && ring.length; d++) { const nx = []; for (const u of ring) { seen += pts.get(u) || 0; if (u === st) seen += 3; const b = eff(u); if (d <= 1 && isSea(b)) sea = 1; if (d <= 2 && b === 'L') lake = 1; for (let j = 0; j < 6; j++) { const v = NB[u * 6 + j]; if (v >= 0 && !sn.has(v)) { sn.add(v); nx.push(v); } } } ring = nx; }
-    c.att = clamp((seen + sea + lake) / 6, 0, 1);
+    c.att = clamp((seen + sea + lake) / 6 + (c.fx ? c.fx.att : 0), 0, 1);
   }
 }
 function socRaw(c, cat) { return (SOC_FOOD.has(cat) ? c.foodCut : 1) * (c.pol && c.pol.top.has(cat) ? 1 + polOn(c, 'subst') * TU('polSubst') : 1); }
@@ -174,6 +174,7 @@ function socApply(rows) {
     ra.exX = (ra.exX || 0) + v;
     if (B) { const b = book(B); b.inn += v; put(b, A ? A.id : '.', 1); }
   }
+  taxApply(rows, book);
   // well-being before the state's balance weighs on it
   rows.forEach((r, k) => {
     const c = r.c, why = []; r.met = socMet(E, k); r.rich = mean > 0 ? r.inc / r.people / mean : 1;
@@ -184,6 +185,7 @@ function socApply(rows) {
     add('องค์กรในเมือง', Math.min(15, 100 * orgWell(c)));
     add(EREG[c.reg][0], c.reg === 'sweat' ? -TU('regSweatWell') : c.reg === 'home' || c.reg === 'care' ? TU('regWell') : 0);
     if (c.pol) for (const t of c.pol.tools) add(EPOL[t][0], -c.pol.k * EPOL_COST[t][0]);
+    add(r.taxBack > 0 && taxUse(r.s) === 'svc' ? 'ภาษีหักบริการที่ได้คืน' : 'ภาษี', r.taxWell || 0);
     r.well0 = clamp(w, 0, 100); r.wellWhy = why;
   });
   // visitors
@@ -209,7 +211,8 @@ function socApply(rows) {
     const b = r.s ? books.get(r.s.id) : null, pen = b ? b.pen : 0, bon = b && b.stable ? TU('balWell') : 0; r.wellPen = pen; r.stable = !!(b && b.stable);
     if (pen >= 0.5) r.wellWhy.push(['รัฐขาดดุลการค้าหนัก', -pen]); if (bon >= 0.5) r.wellWhy.push(['รัฐค้าสมดุล', bon]);
     const tw = r.trvWell || 0; if (tw >= 0.5) r.wellWhy.push(['เดินทางแสวงบุญได้สะดวก', tw]);
-    r.well = clamp(r.well0 - pen + bon + tw, 0, 100);
+    const cw = r.c.fx ? r.c.fx.well : 0; if (cw) r.wellWhy.push(['ชนิดและคุณลักษณะของชุมชน', cw]);   // v0.18.5 (29k)
+    r.well = clamp(r.well0 - pen + bon + tw + cw, 0, 100);
     r.sur = b && b.net > 0 && b.out > 0 ? b.net * r.exX / b.out : 0;                                 // the city's part of its state's surplus
   });
   // people on the move
@@ -441,7 +444,7 @@ function classSplit(c, P) {                          // the city's money by clas
   return { w, land };
 }
 function classHeads(c, free, held, metB) {           // the free people by class, as shares of them
-  const sys = c.sto ? c.sto.sys : '', reg = c.reg || 'shift', hi = HI_N[c.ki] * (HI_SYS[sys] || 1), mid = MID_N[c.ki] * (MID_SYS[sys] || 1), rest = Math.max(0, 1 - hi - mid);
+  const sys = c.sto ? c.sto.sys : '', reg = c.reg || 'shift', hi = HI_N[c.ki] * (HI_SYS[sys] || 1), mid = MID_N[c.ki] * (MID_SYS[sys] || 1) + (c.fx ? c.fx.mid : 0), rest = Math.max(0, 1 - hi - mid);
   const out = clamp(TU('jobless') + 0.4 * Math.max(0, c.lab || 0) + 0.6 * held / Math.max(1, free + held) + 0.3 * (1 - (metB == null ? 1 : metB)) + (reg === 'sweat' ? -0.02 : reg === 'home' ? -0.01 : 0), 0.01, 0.6);
   return { hi, mid, low: rest * (1 - out), poor: rest * out };
 }
@@ -586,6 +589,7 @@ ecoStatesHTML = function () {
       + (s.sys === 'soc' ? ecoCapHTML(s) : '') + `</div>`
       + (anar ? '' : `<div class="ssec"><h5>ผู้คนและการทำงาน</h5>` + ecoIn('คนย้ายเข้ากระจายตัว', sel('sspread', ESPREAD, s.spread || 'nat')) + `<div class="tr w">${ESPREAD[s.spread || 'nat'][1]}</div>`
         + ecoIn('ระเบียบงานของโรงงาน', sel('sreg', EREG, s.reg || 'shift')) + `<div class="tr w">${EREG[s.reg || 'shift'][1]} เมืองที่ตั้งระเบียบของตัวเองในการ์ดเมืองใช้ของตัวเอง</div></div>`)
+      + (anar ? '' : `<div class="ssec"><h5>ภาษี</h5>${taxStateForm(s)}</div>`)   // v0.18.5 (29m)
       + (others.length ? `<div class="ssec"><h5>ความสัมพันธ์กับรัฐอื่น</h5><div class="srel">${others.map(o => `<label><i class="sdot" style="background:${o.color}"></i><span>${esc(o.name)}</span><select data-f="srel" data-o="${o.id}"${dis}><option value="">เป็นกลาง</option><option value="ally"${(s.rel[o.id] || o.rel[s.id]) === 'ally' ? ' selected' : ''}>พันธมิตร</option><option value="rival"${(s.rel[o.id] || o.rel[s.id]) === 'rival' ? ' selected' : ''}>คู่อริ</option></select></label>`).join('')}</div><div class="tr w">พันธมิตรไม่กดราคากัน คู่อริไม่ค้ากันและเส้นทางผ่านแดนกันแพงขึ้น</div></div>` : '')
       + (anar ? '' : `<div class="ssec"><h5>เมื่อขาดดุลการค้า</h5><div class="polset">` + Object.entries(EPOL).map(([k, z]) => `<label title="${esc(z[1] + ' ข้อเสีย: ' + z[2])}"><input type="checkbox" data-f="spol" data-k="${k}"${on.has(k) ? ' checked' : ''}${dis}> ${z[0]}</label>`).join('') + `</div>`
         + (list.length > 1 ? ecoIn('ใช้ข้อไหนก่อน', `<select data-f="spol1"${dis}>${list.map((k, i) => `<option value="${k}"${i === 0 ? ' selected' : ''}>${EPOL[k][0]}</option>`).join('')}</select>`) : '')

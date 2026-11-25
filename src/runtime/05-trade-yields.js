@@ -27,7 +27,7 @@ const ECAT = {   // name, colour, value of a load, bulk (what a load pays per un
 // on a map of our own world the class that is mana in Gresland is crude oil, priced with gems and gold as the owner ruled; coal burns with the other fuels
 if (BLANK) { ECAT.mana.name = 'น้ำมันดิบ'; ECAT.mana.v = ECAT.rare.v; ECAT.fuel.name = 'เชื้อเพลิง ถ่านหิน และยางไม้'; ECAT.tech.name = 'เครื่องจักรและเครื่องกล'; ECAT.rare.name = 'โลหะมีค่าและอัญมณี'; ECAT.herbs.name = 'สมุนไพร เครื่องเทศ และน้ำผึ้ง'; }
 const ECATS = Object.keys(ECAT), ERAW = ECATS.filter(c => !ECAT[c].made && !ECAT[c].people), EMADEC = ECATS.filter(c => ECAT[c].made);
-const KIX = { capital: 0, city: 1, town: 2, fort: 3, village: 4 };
+const KIX = { capital: 0, city: 1, town: 2, fort: 3, village: 4, hamlet: 4, monastery: 4, camp: 4, waystation: 4 };   // the level each kind works at (v0.18.5: the four new kinds at a village's)
 const EPOP = [12, 7, 4, 3, 1.6];                   // heads of a capital, a city, a town, a fort, a village
 const EREACH = [7, 6, 5, 4, 4];                    // how far out each works the land, in hexes of open ground
 const EIND = [1, 0.8, 0.4, 0.35, 0.1];             // workshops per head

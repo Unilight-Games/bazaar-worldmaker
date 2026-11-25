@@ -67,14 +67,14 @@ function setReadOnly() {
   $('history').hidden = true; $('clearAll').hidden = true; $('editcard').hidden = true; $('viewEditHint').hidden = true; setTtool('pick');
   document.querySelector('#editcard h2').textContent = 'งานแก้บนแผนที่นี้';
   $('editnote').textContent = 'แผนที่นี้แสดงงานแก้ของเจ้าของแผนที่ หน้านี้ให้ดูได้อย่างเดียว';
-  status(); updateHistory(); requestDraw();
+  status(); updateHistory(); updatePointsLegend(); requestDraw();
 }
 function unlock() {
   if (editable || readOnly) return;
   editable = true;
   for (const b of document.querySelectorAll('#modes button')) b.disabled = false;
   $('tdTool').hidden = false; $('tdReset').hidden = false; setTtool(ttool);
-  status(); updateStats(); updateHistory();
+  status(); updateStats(); updateHistory(); updatePointsLegend();   // v0.18.5: the points list gains its place-it rows
 }
 for (const b of document.querySelectorAll('#modes button')) if (b.dataset.mode !== 'view' && b.dataset.mode !== 'trade' && b.dataset.mode !== 'climate') b.disabled = true;
 // remote documents are untrusted: keep only well formed values

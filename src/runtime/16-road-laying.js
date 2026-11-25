@@ -1,9 +1,13 @@
 // ---------- laying roads ----------
 let rcls = 'royal', rsel = null, rpend = null, rprev = null;
 const ROADS_OF = id => visibleRoutes().filter(r => r.a === id || r.b === id);
-function endAt(mx, my) {                            // a city under the pointer, or the spot itself on land
+function endAt(mx, my, except) {                    // a city under the pointer, or the spot itself on land
   const c = cityAt(mx, my); if (c) return c.id;
   const h = hexAt(mx, my); if (h < 0 || isW(eff(h))) return null;
+  // v0.18.5: an end close to another road or railway goes onto it, so the two join (the owner's ask); except: the road being moved
+  let best = null, bd = Math.max(2, 10 / view.s);
+  for (const r of visibleRoutes()) { if (r.id === except) continue; const g = geoOf(r); if (!g || g.fail || !hits(g.bb || [-1e9, -1e9, 1e9, 1e9], mx - bd, my - bd, mx + bd, my + bd)) continue; for (const q of g.q) { const d = Math.hypot(q[0] - mx, q[1] - my); if (d < bd) { bd = d; best = q; } } }
+  if (best) { const hb = hexAt(best[0], best[1]); if (hb >= 0 && !isW(eff(hb))) return [r1(best[0]), r1(best[1])]; }
   return [r1(mx), r1(my)];
 }
 function makeRoute(cls, a, b) { return { id: uid('d'), t: 'road', cls, a, b, via: [] }; }

@@ -27,6 +27,7 @@ const CODES = 'SLigsvchdtnfokjaewmpryuM';
 const RK = {
   big: { name: 'แม่น้ำใหญ่', w: 4.0, s: 0 }, river: { name: 'แม่น้ำ', w: 2.5, s: 0 },
   stream: { name: 'ลำน้ำเล็ก', w: 1.5, s: 0 }, seasonal: { name: 'ลำน้ำตามฤดูกาล', w: 1.6, s: 1 },
+  searv: { name: 'แม่น้ำตามฤดูกาล', w: 2.4, s: 1 },   // v0.18.5: a river that runs only in the wet part of the year
 };
 const CK = {
   capital: { name: 'เมืองหลวง', r: 4.2, min: 3.6, f: { min: 11, max: 16, base: 14 }, wt: 700 },
@@ -34,5 +35,10 @@ const CK = {
   town: { name: 'เมืองเล็ก', r: 2.4, min: 2, f: { min: 9, max: 12.5, base: 10.5 }, wt: 500 },
   fort: { name: 'ป้อมปราการ', r: 2.9, min: 2.4, f: { min: 9.5, max: 13, base: 11 }, wt: 600 },
   village: { name: 'หมู่บ้าน', r: 1.8, min: 1.5, f: { min: 8.5, max: 11.5, base: 9.5 }, wt: 500 },
+  // v0.18.5: four more kinds of community; each works at a village's level, with the numbers of COMK (29k) on top
+  hamlet: { name: 'หมู่บ้านเล็ก', r: 1.4, min: 1.2, f: { min: 8, max: 10.5, base: 8.8 }, wt: 500 },
+  monastery: { name: 'อาราม', r: 2.2, min: 1.8, f: { min: 8.5, max: 11.5, base: 9.5 }, wt: 500 },
+  camp: { name: 'แคมป์ชนเผ่า', r: 2.1, min: 1.7, f: { min: 8.5, max: 11.5, base: 9.5 }, wt: 500 },
+  waystation: { name: 'จุดแวะพัก', r: 2.0, min: 1.6, f: { min: 8.5, max: 11.5, base: 9.5 }, wt: 500 },
 };
 

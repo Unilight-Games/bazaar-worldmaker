@@ -71,6 +71,7 @@ const CODES = 'SLigsvchdtnfokjaewmpryuM';
 const RK = {
   big: { name: 'แม่น้ำใหญ่', w: 4.0, s: 0 }, river: { name: 'แม่น้ำ', w: 2.5, s: 0 },
   stream: { name: 'ลำน้ำเล็ก', w: 1.5, s: 0 }, seasonal: { name: 'ลำน้ำตามฤดูกาล', w: 1.6, s: 1 },
+  searv: { name: 'แม่น้ำตามฤดูกาล', w: 2.4, s: 1 },   // v0.18.5: a river that runs only in the wet part of the year
 };
 const CK = {
   capital: { name: 'เมืองหลวง', r: 4.2, min: 3.6, f: { min: 11, max: 16, base: 14 }, wt: 700 },
@@ -78,6 +79,11 @@ const CK = {
   town: { name: 'เมืองเล็ก', r: 2.4, min: 2, f: { min: 9, max: 12.5, base: 10.5 }, wt: 500 },
   fort: { name: 'ป้อมปราการ', r: 2.9, min: 2.4, f: { min: 9.5, max: 13, base: 11 }, wt: 600 },
   village: { name: 'หมู่บ้าน', r: 1.8, min: 1.5, f: { min: 8.5, max: 11.5, base: 9.5 }, wt: 500 },
+  // v0.18.5: four more kinds of community; each works at a village's level, with the numbers of COMK (29k) on top
+  hamlet: { name: 'หมู่บ้านเล็ก', r: 1.4, min: 1.2, f: { min: 8, max: 10.5, base: 8.8 }, wt: 500 },
+  monastery: { name: 'อาราม', r: 2.2, min: 1.8, f: { min: 8.5, max: 11.5, base: 9.5 }, wt: 500 },
+  camp: { name: 'แคมป์ชนเผ่า', r: 2.1, min: 1.7, f: { min: 8.5, max: 11.5, base: 9.5 }, wt: 500 },
+  waystation: { name: 'จุดแวะพัก', r: 2.0, min: 1.6, f: { min: 8.5, max: 11.5, base: 9.5 }, wt: 500 },
 };
 
 // ---------- the renderer of repainted hexes: the same palette, noise and glyphs as the Python render of the map ----------
@@ -691,7 +697,7 @@ const ECAT = {   // name, colour, value of a load, bulk (what a load pays per un
 // on a map of our own world the class that is mana in Gresland is crude oil, priced with gems and gold as the owner ruled; coal burns with the other fuels
 if (BLANK) { ECAT.mana.name = 'น้ำมันดิบ'; ECAT.mana.v = ECAT.rare.v; ECAT.fuel.name = 'เชื้อเพลิง ถ่านหิน และยางไม้'; ECAT.tech.name = 'เครื่องจักรและเครื่องกล'; ECAT.rare.name = 'โลหะมีค่าและอัญมณี'; ECAT.herbs.name = 'สมุนไพร เครื่องเทศ และน้ำผึ้ง'; }
 const ECATS = Object.keys(ECAT), ERAW = ECATS.filter(c => !ECAT[c].made && !ECAT[c].people), EMADEC = ECATS.filter(c => ECAT[c].made);
-const KIX = { capital: 0, city: 1, town: 2, fort: 3, village: 4 };
+const KIX = { capital: 0, city: 1, town: 2, fort: 3, village: 4, hamlet: 4, monastery: 4, camp: 4, waystation: 4 };   // the level each kind works at (v0.18.5: the four new kinds at a village's)
 const EPOP = [12, 7, 4, 3, 1.6];                   // heads of a capital, a city, a town, a fort, a village
 const EREACH = [7, 6, 5, 4, 4];                    // how far out each works the land, in hexes of open ground
 const EIND = [1, 0.8, 0.4, 0.35, 0.1];             // workshops per head
@@ -1117,14 +1123,19 @@ function eStats(cities, own, wfn) {
 // caravans: any land, cheap on a road and dear off it. A load changes from one to the other at a city's quay for little,
 // anywhere else for more.
 const NAVW = 2.2;
+// v0.18.5, the owner's rule: a river takes small boats and ferries only; a great river takes the merchant ships. NAVR marks a hex of
+// a navigable river 2 when a merchant ship gets up it (the user's great rivers, and the map's rivers at least NAVBIG wide) and 1 when
+// only small boats do (the user's rivers, and the map's narrower navigable ones). Goods carried up a small boat's river cost ESMALL
+// times a ship's river: small loads, slow going. Both numbers are Claude's.
+const NAVBIG = 3.3, ESMALL = 3.5;
 const WATR = new Uint8Array(N), NAVR = new Uint8Array(N), RIVM = new Uint8Array(N), PORTZ = new Uint8Array(N);
 const NPX = new Float32Array(N), NPY = new Float32Array(N), NPC = new Uint16Array(N);
 function eLink(u, v) { const k = nbIndex(u, v); if (k < 0) return; RIVM[u] |= 1 << k; RIVM[v] |= 1 << REVK[k]; }
-function eRiverRun(xs, ys, runs) {                // one navigable stretch: the hexes it passes, linked in order
+function eRiverRun(xs, ys, runs, cls) {           // one navigable stretch: the hexes it passes, linked in order; cls 2 ships, 1 small boats
   let prev = -1; const hs = [];
   for (let j = 0; j < xs.length; j++) {
     const h = hexAt(xs[j], ys[j]); if (h < 0) { prev = -1; continue; }
-    if (!WATR[h]) { NAVR[h] = 1; NPX[h] += xs[j]; NPY[h] += ys[j]; NPC[h]++; }
+    if (!WATR[h]) { NAVR[h] = Math.max(NAVR[h], cls || 2); NPX[h] += xs[j]; NPY[h] += ys[j]; NPC[h]++; }
     if (prev >= 0 && prev !== h) eLink(prev, h);
     if (prev !== h) hs.push(h);
     prev = h;
@@ -1139,10 +1150,10 @@ function eWaterways() {
     if (r.s || r.w < NAVW) continue;
     let xs = [], ys = [];
     for (let j = r.s0; j < r.s1; j++) {
-      if (sampleOff(j)) { if (xs.length > 1) eRiverRun(xs, ys, runs); xs = []; ys = []; continue; }
+      if (sampleOff(j)) { if (xs.length > 1) eRiverRun(xs, ys, runs, r.w >= NAVBIG ? 2 : 1); xs = []; ys = []; continue; }
       xs.push(BS.x[j]); ys.push(BS.y[j]);
     }
-    if (xs.length > 1) eRiverRun(xs, ys, runs);
+    if (xs.length > 1) eRiverRun(xs, ys, runs, r.w >= NAVBIG ? 2 : 1);
   }
   for (const r of ED.rivers) {
     if (r.kind !== 'big' && r.kind !== 'river') continue;
@@ -1150,7 +1161,7 @@ function eWaterways() {
     const xs = [], ys = [];                          // the drawn line, half a unit apart, so no hex on it is skipped
     for (let i = 0; i < d.q.length - 1; i++) { const a = d.q[i], b = d.q[i + 1], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.5)); for (let s = 0; s < n; s++) { xs.push(a[0] + (b[0] - a[0]) * s / n); ys.push(a[1] + (b[1] - a[1]) * s / n); } }
     const e = d.q[d.q.length - 1]; xs.push(e[0]); ys.push(e[1]);
-    eRiverRun(xs, ys, runs);
+    eRiverRun(xs, ys, runs, r.kind === 'big' ? 2 : 1);
   }
   for (let i = 0; i < N; i++) if (NPC[i]) { NPX[i] /= NPC[i]; NPY[i] /= NPC[i]; } else { NPX[i] = CX[i]; NPY[i] = CY[i]; }
   // a river that ends a step short of the sea, a lake or another river flows on into it: each end of a stretch is joined to the
@@ -1267,7 +1278,7 @@ function eNext(t, mode, near, f) {
     for (let k = 0; k < 6; k++) {
       const v = NB[h * 6 + k]; if (v < 0) continue;
       if (wet && WATR[v] && (LANE[h] >> k & 1)) f(v * 2 + 1, WCOST[eff(v)][SHORE[v]]);
-      else if (RIVM[h] >> k & 1) f(v * 2 + 1, ZO[v] === 'J' && !NEARC[v] ? ERIV * EWILDR : ERIV);
+      else if (RIVM[h] >> k & 1) f(v * 2 + 1, (ZO[v] === 'J' && !NEARC[v] ? ERIV * EWILDR : ERIV) * (NAVR[h] === 1 || NAVR[v] === 1 ? ESMALL : 1));   // v0.18.5: small boats only
     }
     if (!wet) f(h * 2, PORTZ[h] ? EQUAY : EBANK);
     else for (let k = 0; k < 6; k++) { const v = NB[h * 6 + k]; if (v >= 0 && !WATR[v]) f(v * 2, PORTZ[v] ? EQUAY : EBANK); }
@@ -1333,7 +1344,11 @@ const EHUB2 = {
   'sp-kavxos': 'จุดบรรจบของแม่น้ำใหญ่กลางดินแดนรกร้าง เรือข้าวขึ้นฝั่งที่นี่แล้วกระจายไปทั่วดินแดนรกร้างตอนใต้',
   'sp-baotarn': 'จุดบรรจบของลำน้ำฝั่งตะวันตก เมืองริมแม่น้ำของดินแดนรกร้างฝั่งตะวันตกส่งของผ่านที่นี่',
 };
-const autoRank = c => { const k = c.lk || c.kind; return EHUB[c.id] || k === 'capital' ? 3 : EHUB2[c.id] || k === 'city' ? 2 : k === 'town' ? 1 : 0; };
+const autoRank = c => {
+  const k = c.lk || c.kind; let r = EHUB[c.id] || k === 'capital' ? 3 : EHUB2[c.id] || k === 'city' ? 2 : k === 'town' ? 1 : 0;
+  const f = c.fx; if (f) { if (f.rank3) r = 3; else { if (f.portRank && c.port) r = Math.min(3, r + f.portRank); r = Math.max(r, f.rankMin); } }   // v0.18.5: the marks of a community (29k)
+  return r;
+};
 const hubRank = c => ED.hubs.has(c.id) ? ED.hubs.get(c.id) : autoRank(c);
 const linkKey = (a, b) => 'a:' + [a, b].sort().join('~');
 const plainLink = L => ({ id: L.id, a: L.a, b: L.b, mode: LMODE[L.mode] ? L.mode : 'auto', via: (L.via || []).map(p => [r1(p[0]), r1(p[1])]) });
@@ -1538,10 +1553,10 @@ function econCompute() {
   ecoPrep(); ecoScale();
   const cities = visibleCities().map(c => {
     const h = landHex(hexAt(c.x, c.y)), ki0 = KIX[c.kind] != null ? KIX[c.kind] : 1, ki = ecoKi(c.id, c.kind);
-    return { id: c.id, name: c.name || 'เมืองไม่มีชื่อ', kind: c.kind, ki, x: c.x, y: c.y, h, zone: h >= 0 ? ZO[h] : '.', pop: ecoPop(c.id, ki0), lk: KIK[ki], st: h >= 0 ? ECO.cells[h] : '.' };
+    return { id: c.id, name: c.name || 'เมืองไม่มีชื่อ', kind: c.kind, ki, x: c.x, y: c.y, h, zone: h >= 0 ? ZO[h] : '.', pop: ecoPop(c.id, ki0) * comPop(c.id, c.kind), lk: KIK[ki], st: h >= 0 ? ECO.cells[h] : '.', fx: comFx(c.id, c.kind) };
   }).filter(c => c.h >= 0);
   const LP = landPlan(cities);                       // the land each city takes for its people: how far its fields reach, and how short it falls
-  cities.forEach((c, k) => { c.land = LP.rows[k]; c.people = c.pop * ECO.unit; c.reach = Math.max(EREACH[c.ki], Math.min(LAND_REACH, c.land.ring + 1)); });
+  cities.forEach((c, k) => { c.land = LP.rows[k]; c.people = c.pop * ECO.unit; c.reach = Math.max(EREACH[c.ki] + c.fx.reach, Math.min(LAND_REACH, c.land.ring + 1)); });
   { const ps = cities.map(c => c.pop).sort((a, b) => a - b), med = ps.length ? ps[ps.length >> 1] : 1; for (const c of cities) c.claim = clamp(Math.pow(c.pop / Math.max(1e-9, med), TU('claimPow')), 0.6, 2.5); }   // how hard a city presses on its neighbours' land
   socPrep(cities);
   PORTZ.fill(0);
@@ -1580,14 +1595,14 @@ function econCompute() {
   });
   // the workshops' plan: what each could make at full supply, and what that takes
   const plan = cities.map((c, k) => {
-    const H = Hs[k], cn = ECANON[c.id] || {}, z = c.zone, ind = c.pop * EIND[c.ki], p = {};
+    const H = Hs[k], cn = ECANON[c.id] || {}, z = c.zone, ind = c.pop * EIND[c.ki] * c.fx.ind, p = {};
     const ore = (prod[k].get('iron') || 0) + (prod[k].get('copper') || 0);
     const spec = {
       tools: 0.6 + (ore > 0.4 ? 0.8 : 0),
-      arms: [1.2, 1, 0.5, 1.4, 0][c.ki] * ({ S: 1.5, H: 1.4, X: 1.2, G: 0.8 }[z] || 0.6) * (z === 'Q' ? 0.3 : 1),
+      arms: [1.2, 1, 0.5, 1.4, 0][c.ki] * c.fx.arms * ({ S: 1.5, H: 1.4, X: 1.2, G: 0.8 }[z] || 0.6) * (z === 'Q' ? 0.3 : 1),
       tech: [1.2, 1, 0.3, 0.5, 0][c.ki] * ({ X: 1.3, S: 1.4, H: 1.2, G: 0.9, T: 0.5 }[z] || 0.1),
       ships: c.port === 2 ? 1 : c.port === 1 ? 0.4 : 0,
-      books: (z === 'T' ? 3 : 1) * [1, 0.5, 0.2, 0.1, 0][c.ki],
+      books: (z === 'T' ? 3 : 1) * ([1, 0.5, 0.2, 0.1, 0][c.ki] + c.fx.books),
     };
     for (const m of EMADEC) { const v = ind * EWORK[m].base * (spec[m] != null ? spec[m] : 1) * (cn[m] || 1) * orgProd(c, m) * socMake(c, m); if (v > 0.01) p[m] = v; }
     for (const m in p) for (const [cat, q] of Object.entries(EWORK[m].in)) need[k][cat] += p[m] * q;
@@ -2419,10 +2434,19 @@ function marker(c, px, v, selected) {
   if (v.kind === 'fort') {
     c.beginPath(); c.rect(x - r, y - r, 2 * r, 2 * r); c.fill(); c.stroke();
     c.beginPath(); c.rect(x - r * 0.42, y - r * 0.42, r * 0.84, r * 0.84); c.fillStyle = '#2a2116'; c.fill();
+  } else if (v.kind === 'camp') {                    // v0.18.5: a tent
+    c.beginPath(); c.moveTo(x, y - r * 1.15); c.lineTo(x + r * 1.1, y + r * 0.8); c.lineTo(x - r * 1.1, y + r * 0.8); c.closePath(); c.fill(); c.stroke();
+    c.beginPath(); c.moveTo(x, y - r * 0.1); c.lineTo(x + r * 0.32, y + r * 0.8); c.lineTo(x - r * 0.32, y + r * 0.8); c.closePath(); c.fillStyle = '#2a2116'; c.fill();
+  } else if (v.kind === 'waystation') {              // a diamond, like a milestone
+    c.beginPath(); c.moveTo(x, y - r * 1.15); c.lineTo(x + r * 1.15, y); c.lineTo(x, y + r * 1.15); c.lineTo(x - r * 1.15, y); c.closePath(); c.fill(); c.stroke();
+    c.beginPath(); c.arc(x, y, r * 0.3, 0, 2 * Math.PI); c.fillStyle = '#2a2116'; c.fill();
+  } else if (v.kind === 'monastery') {               // a round house with a cross over it
+    c.beginPath(); c.arc(x, y, r, 0, 2 * Math.PI); c.fill(); c.stroke();
+    c.beginPath(); c.moveTo(x, y - r * 0.62); c.lineTo(x, y + r * 0.62); c.moveTo(x - r * 0.45, y - r * 0.15); c.lineTo(x + r * 0.45, y - r * 0.15); c.lineWidth = 1.2 * px; c.stroke();
   } else {
     c.beginPath(); c.arc(x, y, r, 0, 2 * Math.PI); c.fill(); c.stroke();
     if (v.kind === 'capital') { c.beginPath(); c.arc(x, y, r * 0.58, 0, 2 * Math.PI); c.lineWidth = 1.1 * px; c.stroke(); c.beginPath(); c.arc(x, y, r * 0.24, 0, 2 * Math.PI); c.fillStyle = '#2a2116'; c.fill(); }
-    else if (v.kind !== 'town' && v.kind !== 'village') { c.beginPath(); c.arc(x, y, r * 0.42, 0, 2 * Math.PI); c.fillStyle = '#2a2116'; c.fill(); }
+    else if (v.kind !== 'town' && v.kind !== 'village' && v.kind !== 'hamlet') { c.beginPath(); c.arc(x, y, r * 0.42, 0, 2 * Math.PI); c.fillStyle = '#2a2116'; c.fill(); }
   }
   if (v.name && (selected || (c === ctx && (v.id === hoverCity || v.id === tapCity)) || (showCityNames && NAMED_KINDS.has(v.kind)))) {
     const ly = y - r - Math.max(7 * px, 3.5), lb = label(c, px, v.name, x, ly, scaled(st.f, nameSize.city), '#fbf3dc', 0, st.wt);
@@ -2747,8 +2771,88 @@ function finishRiver() {
   const pts = [];
   for (const p of riv.pts) if (!pts.length || Math.hypot(p[0] - pts[pts.length - 1][0], p[1] - pts[pts.length - 1][1]) >= 1.5) pts.push([r1(p[0]), r1(p[1])]);
   const kind = riv.kind; riv = null;
-  if (pts.length >= 2) doOp({ k: 'r+', r: { id: uid('r'), kind, pts } });
+  if (pts.length >= 2) { const ops = riverJoin(pts, kind); doOp(ops.length > 1 ? { k: 'm', ops } : ops[0]); }
   updateHistory(); requestDraw();
+}
+// v0.18.5, the owner's ask: rivers drawn to meet join up, and a river drawn over an older one takes its place along the stretch it
+// covers. The river drawn last is the one that stays: where it runs along an older river of the user's for at least JOIN_RUN, that
+// stretch of the older one goes and what is left of it is joined to the new one at the cut; a stretch of the map's own river under
+// it is hidden the way the eraser hides one. A new end close to a river (JOIN_SNAP on screen) is put on that river; close to the end
+// of a river of the same kind, the two become one line. A river that only crosses another is left alone. Distances are Claude's.
+const JOIN_SNAP = 12, JOIN_RUN = 1.2;
+function denseOf(pts, step) {
+  const out = []; for (let i = 0; i + 1 < pts.length; i++) { const a = pts[i], b = pts[i + 1], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / step)); for (let s = 0; s < n; s++) out.push([a[0] + (b[0] - a[0]) * s / n, a[1] + (b[1] - a[1]) * s / n]); }
+  if (pts.length) out.push([pts[pts.length - 1][0], pts[pts.length - 1][1]]); return out;
+}
+function nearGrid(ps) {                              // points by cells of 4 units, for the nearest point and its distance
+  const g = new Map(); ps.forEach((p, i) => { const k = Math.floor(p[0] / 4) * 8192 + Math.floor(p[1] / 4); let c = g.get(k); if (!c) g.set(k, c = []); c.push(i); });
+  return (x, y, lim) => { let bd = lim, bi = -1; const r = Math.ceil(lim / 4); for (let gx = Math.floor(x / 4) - r; gx <= Math.floor(x / 4) + r; gx++) for (let gy = Math.floor(y / 4) - r; gy <= Math.floor(y / 4) + r; gy++) { const c = g.get(gx * 8192 + gy); if (c) for (const i of c) { const d = Math.hypot(ps[i][0] - x, ps[i][1] - y); if (d < bd) { bd = d; bi = i; } } } return bi < 0 ? null : { i: bi, d: bd, p: ps[bi] }; };
+}
+const thin = ps => { const o = []; for (const p of ps) if (!o.length || Math.hypot(p[0] - o[o.length - 1][0], p[1] - o[o.length - 1][1]) >= 1.5) o.push([r1(p[0]), r1(p[1])]); if (ps.length && o.length) { const e = ps[ps.length - 1]; o[o.length - 1] = [r1(e[0]), r1(e[1])]; } return o; };
+function riverJoin(pts0, kind) {
+  const W = (RK[kind] || RK.river).w, rem = [], add = [], snap = Math.max(2.5, JOIN_SNAP / view.s), minRun = JOIN_RUN * R;
+  let pts = pts0.map(p => [p[0], p[1]]); const gone = new Set(); let merged = 0, cut = 0;
+  // the ends: onto a river close by; onto the end of one of the same kind, as one line
+  const lines = [];                                  // every river now shown, as points: the user's (with their ends) and the map's
+  for (const U of ED.rivers) { const d = RDER.get(U.id); if (d) lines.push({ U, q: d.q }); }
+  for (const r of BRIV) for (const u of riverRuns(r)) lines.push({ U: null, q: u.q });
+  const endSnap = (p, first) => {
+    let best = null;
+    for (const L of lines) {
+      if (L.U && gone.has(L.U.id)) continue;
+      if (L.U && L.U.kind === kind) for (const [e, atStart] of [[L.U.pts[0], true], [L.U.pts[L.U.pts.length - 1], false]]) { const d = Math.hypot(e[0] - p[0], e[1] - p[1]); if (d <= snap && (!best || d < best.d - 0.01 || !best.U)) best = { d, p: e, U: L.U, atStart }; }
+      for (const q of L.q) { const d = Math.hypot(q[0] - p[0], q[1] - p[1]); if (d <= snap && (!best || d < best.d - 0.5)) best = { d, p: q }; }
+    }
+    if (!best) return;
+    if (best.U) {                                    // the two become one: the old line, then the new
+      const U = best.U, up = U.pts.map(q => [q[0], q[1]]); gone.add(U.id); merged++;
+      rem.push(U);
+      if (first) pts = (best.atStart ? up.reverse() : up).concat(pts.slice(1));
+      else pts = pts.slice(0, -1).concat(best.atStart ? up : up.reverse());
+    } else { if (first) pts[0] = [best.p[0], best.p[1]]; else pts[pts.length - 1] = [best.p[0], best.p[1]]; merged++; }
+  };
+  endSnap(pts[0], true); endSnap(pts[pts.length - 1], false);
+  // the stretches the new river runs along
+  const dense = denseOf(smoothLine(pts), 0.6), near = nearGrid(dense);
+  const runsOf = (ps, covered) => {                  // the covered stretches long enough to count, as [from, to] in ps
+    const out = []; let a = -1;
+    for (let i = 0; i <= ps.length; i++) { const on = i < ps.length && covered[i]; if (on && a < 0) a = i; if (!on && a >= 0) { let len = 0; for (let k = a; k < i - 1; k++) len += Math.hypot(ps[k + 1][0] - ps[k][0], ps[k + 1][1] - ps[k][1]); if (len >= minRun) out.push([a, i - 1]); a = -1; } }
+    return out;
+  };
+  const order = ED.rivers.map((U, at) => ({ U, at })).filter(x => !gone.has(x.U.id)).sort((x, y) => y.at - x.at);   // last first: the places stay right
+  for (const { U, at } of order) {
+    const ovR = (W + (RK[U.kind] || RK.river).w) / 2 + 0.9, ps = denseOf(U.pts, 0.8), cov = ps.map(p => !!near(p[0], p[1], ovR)), runs = runsOf(ps, cov);
+    if (!runs.length) continue;
+    const off = new Uint8Array(ps.length); for (const [a, b] of runs) for (let i = a; i <= b; i++) off[i] = 1;
+    rem.push(U); cut++;
+    let cur = [], cutBefore = false;
+    const flush = cutAfter => {
+      if (cur.length) {
+        const piece = cur.slice();
+        if (cutBefore) { const m = near(piece[0][0], piece[0][1], 1e3); if (m) piece.unshift(m.p); }
+        if (cutAfter) { const m = near(piece[piece.length - 1][0], piece[piece.length - 1][1], 1e3); if (m) piece.push(m.p); }
+        const t = thin(piece); if (t.length >= 2) add.push({ k: 'r+', r: { id: uid('r'), kind: U.kind, pts: t } });
+      }
+      cur = [];
+    };
+    for (let i = 0; i < ps.length; i++) { if (off[i]) { if (cur.length) flush(true); cutBefore = true; continue; } cur.push(ps[i]); }
+    flush(false);
+  }
+  // the map's own rivers under the new one: their stretches hidden hex by hex, as the eraser does
+  const hide = new Set();
+  BRIV.forEach((r, k) => {
+    if (!hits(r.bb, ...bbox(dense, 6))) return;
+    const ovR = (W + r.w) / 2 + 0.9, idx = [], ps = [];
+    for (let j = r.s0; j < r.s1; j++) if (!sampleOff(j)) { idx.push(j); ps.push([BS.x[j], BS.y[j]]); }
+    const cov = ps.map(p => !!near(p[0], p[1], ovR));
+    for (const [a, b] of runsOf(ps, cov)) for (let i = a; i <= b; i++) { const h = BS.hex[idx[i]]; if (h >= 0) hide.add(k * N + h); }
+  });
+  const ops = rem.map(U => ({ U, at: ED.rivers.indexOf(U) })).sort((x, y) => y.at - x.at).map(({ U, at }) => ({ k: 'r-', r: { id: U.id, kind: U.kind, pts: U.pts }, at }));   // the highest place first, so each place holds
+  ops.push(...add);
+  if (hide.size) { const on = [...hide].filter(key => !HIDK.has(key)); if (on.length) { ops.push({ k: 'rh', on, off: [] }); cut++; } }
+  ops.push({ k: 'r+', r: { id: uid('r'), kind, pts: thin(pts) } });
+  if (cut) flash('แม่น้ำที่วาดใหม่แทนที่ช่วงที่วาดทับแล้ว'); else if (merged) flash('เชื่อมกับแม่น้ำเดิมแล้ว');
+  return ops;
 }
 function cancelRiver() { riv = null; updateHistory(); requestDraw(); }
 
@@ -2890,9 +2994,13 @@ function deleteCity() {
 // ---------- laying roads ----------
 let rcls = 'royal', rsel = null, rpend = null, rprev = null;
 const ROADS_OF = id => visibleRoutes().filter(r => r.a === id || r.b === id);
-function endAt(mx, my) {                            // a city under the pointer, or the spot itself on land
+function endAt(mx, my, except) {                    // a city under the pointer, or the spot itself on land
   const c = cityAt(mx, my); if (c) return c.id;
   const h = hexAt(mx, my); if (h < 0 || isW(eff(h))) return null;
+  // v0.18.5: an end close to another road or railway goes onto it, so the two join (the owner's ask); except: the road being moved
+  let best = null, bd = Math.max(2, 10 / view.s);
+  for (const r of visibleRoutes()) { if (r.id === except) continue; const g = geoOf(r); if (!g || g.fail || !hits(g.bb || [-1e9, -1e9, 1e9, 1e9], mx - bd, my - bd, mx + bd, my + bd)) continue; for (const q of g.q) { const d = Math.hypot(q[0] - mx, q[1] - my); if (d < bd) { bd = d; best = q; } } }
+  if (best) { const hb = hexAt(best[0], best[1]); if (hb >= 0 && !isW(eff(hb))) return [r1(best[0]), r1(best[1])]; }
   return [r1(mx), r1(my)];
 }
 function makeRoute(cls, a, b) { return { id: uid('d'), t: 'road', cls, a, b, via: [] }; }
@@ -3156,7 +3264,7 @@ function setIptool(t) {
   $('ifKind').innerHTML = Object.keys(D.pointKinds).map(k => `<button type="button" data-k="${k}">${esc(kindInfo(k).name)}</button>`).join('');
   segPick('ifKind', 'k', ipkind, k => { ipkind = k; setIptool(iptool); });
   $('ifHint').textContent = iptool === 'pick'
-    ? 'คลิกช่องบนแผนที่เพื่อแก้ชื่อและเรื่องของเขต กับชื่อและคำอธิบายของภูมิประเทศ ช่องแก้อยู่ในแถบด้านข้าง คลิกจุดสำคัญเพื่อแก้หรือลบ ลากจุดเพื่อย้าย'
+    ? 'คลิกช่องบนแผนที่เพื่อแก้ชื่อและเรื่องของเขต กับชื่อและคำอธิบายของภูมิประเทศ ช่องแก้อยู่ในแถบด้านข้าง คลิกสถานที่น่าสนใจเพื่อแก้หรือลบ ลากจุดเพื่อย้าย'
     : 'คลิกที่ว่างบนแผ่นดินเพื่อวางจุดชนิดที่เลือก ลากจุดเพื่อย้าย คลิกจุดเพื่อแก้ชื่อและบันทึกของจุดนั้น';
 }
 function renderInfoCard() {
@@ -3189,7 +3297,7 @@ function renderInfoCard() {
   }
   const p = visiblePoints().find(v => v.id === isel.id); if (!p) { isel = null; renderInfoCard(); return; }
   const ki = kindInfo(p.k);
-  body.innerHTML = `<h3>จุดสำคัญ: ${esc(p.name || ki.name)}</h3>
+  body.innerHTML = `<h3>สถานที่น่าสนใจ: ${esc(p.name || ki.name)}</h3>
     <label>ชนิด <select id="ipKind"${ro}>${Object.keys(D.pointKinds).map(k => `<option value="${k}"${k === p.k ? ' selected' : ''}>${esc(kindInfo(k).name)}</option>`).join('')}</select></label>
     <label class="full">ชื่อจุดนี้ <input id="ipName" maxlength="60" value="${esc(p.name || '')}" placeholder="${esc(ki.name)}"${ro}></label>
     <label class="full">บันทึกของจุดนี้ <textarea id="ipNote" rows="3" maxlength="600" placeholder="${esc(ki.note)}"${ro}>${esc(p.note || '')}</textarea></label>
@@ -3217,6 +3325,11 @@ function deletePoint(id) {
   isel = null; doOp(ops.length === 1 ? ops[0] : { k: 'm', ops }); renderInfoCard();
   flash('ลบจุดแล้ว กดย้อนเพื่อเอาคืน');
 }
+function startPlacePoint(k) {                       // v0.18.5: from the list of points of interest straight to placing one
+  if (!editable || !D.pointKinds[k]) return; ipkind = k; if (mode !== 'info') setMode('info'); setIptool('point'); flash('คลิกบนแผ่นดินเพื่อวาง' + kindInfo(k).name);
+}
+__on(document, 'click', e => { const el = e.target.closest ? e.target.closest('[data-ptk]') : null; if (el) startPlacePoint(el.dataset.ptk); });
+__on(document, 'keydown', e => { if (e.key !== 'Enter') return; const el = e.target.closest ? e.target.closest('[data-ptk]') : null; if (el) startPlacePoint(el.dataset.ptk); });
 function placePoint(x, y) {
   const h = hexAt(x, y); if (h < 0 || isW(eff(h))) { flash('วางจุดในน้ำไม่ได้'); return; }
   const o = { id: uid('p'), k: ipkind, x: r1(x), y: r1(y), name: '', note: '' };
@@ -3225,9 +3338,11 @@ function placePoint(x, y) {
 function paletteNames() { for (const s of document.querySelectorAll('#pal .sw')) if (s.dataset.b !== 'restore') s.lastChild.textContent = biomeInfo(s.dataset.b).name; }
 function updatePointsLegend() {
   const vis = visiblePoints();
+  // v0.18.5: a row per kind of point of interest; on a page the owner may change, a row puts that kind under the pointer to place
   $('points').innerHTML = Object.entries(D.pointKinds).map(([k, p]) =>
-    `<div class="lg"><span class="chip" style="background:${p.color}"></span><span>${esc(kindInfo(k).name)}</span><span class="n">${vis.filter(q => q.k === k).length}</span></div>`).join('')
-    + `<div class="lg"><span class="chip" style="background:radial-gradient(circle,#2a2116 30%,#f5e7b8 32%)"></span><span>เมือง</span><span class="n">${visibleCities().length}</span></div>`;
+    `<div class="lg${editable ? ' ptadd' : ''}"${editable ? ` data-ptk="${esc(k)}" role="button" tabindex="0" title="คลิกแล้วคลิกบนแผนที่เพื่อวาง${esc(kindInfo(k).name)}"` : ''}><span class="chip" style="background:${p.color}"></span><span>${esc(kindInfo(k).name)}</span><span class="n">${vis.filter(q => q.k === k).length}</span>${editable ? '<span class="add">+ วาง</span>' : ''}</div>`).join('')
+    + `<div class="lg"><span class="chip" style="background:radial-gradient(circle,#2a2116 30%,#f5e7b8 32%)"></span><span>ชุมชน</span><span class="n">${visibleCities().length}</span></div>`
+    + `<p class="ptwhy">สถานที่น่าสนใจดึงนักท่องเที่ยวไปยังชุมชนที่อยู่ห่างไม่เกินสามช่อง เสาหินกับซากปรักหักพังทำให้ชุมชนใกล้ ๆ ศักดิ์สิทธิ์ขึ้นจนมีคนมาแสวงบุญ และสินค้าที่ตั้งให้ผลิตจากสถานที่ชนิดใด จะผลิตได้ที่ชุมชนซึ่งมีสถานที่ชนิดนั้นในเขต${editable ? ' คลิกชนิดในรายการเพื่อวางบนแผนที่' : ''}</p>`;
 }
 
 // ---------- pointer, touch and keys ----------
@@ -3379,7 +3494,7 @@ cv.addEventListener('pointermove', e => {
     if (act.k === 'rend') {
       if (!act.moved && !far) return;
       act.moved = true; act.at = [mx, my];
-      const c = cityAt(mx, my); act.to = c ? c.id : endAt(mx, my);
+      const c = cityAt(mx, my); act.to = c ? c.id : endAt(mx, my, act.id);
       if (!act.pend) {
         act.pend = true;
         requestAnimationFrame(() => {
@@ -3517,8 +3632,18 @@ cv.addEventListener('dblclick', e => { if (mode === 'river' && rtool === 'draw' 
 __on(window, 'keydown', e => {
   const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
   const mod = e.ctrlKey || e.metaKey;
-  if (mod && !typing && editable && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
-  if (mod && !typing && editable && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
+  // v0.18.5: Ctrl+Z / Ctrl+Y by the key's place, so a Thai keyboard (where that key types ผ / ๆ) undoes too; a list, a tick box or a
+  // slider still holding the focus after a change no longer swallows it, only a box being typed in keeps its own undo; and in the
+  // economy, or the climate with a tool on, it steps that mode's own history, once
+  const uk = e.code === 'KeyZ' ? 'z' : e.code === 'KeyY' ? 'y' : String(e.key || '').toLowerCase();
+  const textBox = e.target.tagName === 'TEXTAREA' || e.target.isContentEditable || (e.target.tagName === 'INPUT' && /^(text|number|search|email|url|password|tel|)$/.test(e.target.type || ''));
+  if (mod && !e.altKey && !textBox && editable && (uk === 'z' || uk === 'y')) {
+    e.preventDefault(); if (typing) e.target.blur();
+    const back = uk === 'z' && !e.shiftKey, side = mode === 'econ' ? 'eco' : mode === 'climate' && clTool ? 'clim' : null;
+    if (side) { if (!sideStep(side, back)) flash(back ? 'ไม่มีอะไรให้ย้อนในหน้านี้แล้ว' : 'ไม่มีอะไรให้ทำซ้ำ'); }
+    else if (back) { if (!undoS.length && !(riv && riv.pts.length)) flash('ไม่มีอะไรให้ย้อนแล้ว'); undo(); } else { if (!redoS.length) flash('ไม่มีอะไรให้ทำซ้ำ'); redo(); }
+    return;
+  }
   if (typing) { if (e.key === 'Escape' || (e.key === 'Enter' && e.target.tagName === 'INPUT')) e.target.blur(); return; }
   if (PANKEY[e.code] && !mod && !e.altKey) { e.preventDefault(); panKeys.add(PANKEY[e.code]); panFast = e.shiftKey; panKick(); return; }
   if (e.key === ' ' && overMap && mode !== 'view') { spaceDown = true; e.preventDefault(); if (document.activeElement && document.activeElement.tagName === 'BUTTON') document.activeElement.blur(); return; }
@@ -3887,7 +4012,7 @@ function updateStats() {
     const rows = [['ช่องที่ระบาย', pc], ['ช่องที่ซ่อนแม่น้ำเดิม', hc], ['แม่น้ำที่วาด', ED.rivers.length], ['เมืองที่วางหรือแก้', ED.cities.length], ['เมืองเดิมที่ลบ', ED.bhid.size],
       ['ชื่อสถานที่ที่ใส่เพิ่ม', lc.add], ['ชื่อสถานที่เดิมที่แก้หรือย้าย', lc.edit], ['ชื่อสถานที่เดิมที่ลบ', ED.lhid.size], ['ภูเขาสแตนเทอร์', ED.stan == null ? 'ที่เดิม' : 'ย้ายแล้ว'],
       ['ถนนที่วาง', rc.add], ['ถนนเดิมที่แก้', rc.edit], ['ถนนเดิมที่ลบ', ED.rthid.size],
-      ['จุดสำคัญที่วางหรือแก้', ED.points.size], ['จุดสำคัญเดิมที่ลบ', ED.phid.size], ['ข้อความเขตและภูมิประเทศที่แก้', ED.zinfo.size + ED.binfo.size + ED.kinfo.size],
+      ['สถานที่น่าสนใจที่วางหรือแก้', ED.points.size], ['สถานที่น่าสนใจเดิมที่ลบ', ED.phid.size], ['ข้อความเขตและภูมิประเทศที่แก้', ED.zinfo.size + ED.binfo.size + ED.kinfo.size],
       ['เส้นการค้าที่วางหรือแก้', ED.tlinks.size], ['เส้นการค้าเดิมที่ลบ', ED.tlhid.size], ['ระดับศูนย์ที่ตั้งเอง', ED.hubs.size], ['ศูนย์ที่ส่งของให้ที่เลือกเอง', ED.tparent.size]];
     $('stats').innerHTML = (BLANK ? rows.filter(([k]) => !k.includes('เดิม') && !k.includes('สแตนเทอร์')) : rows).map(([k, v]) => `<span>${esc(k)}</span><span>${v}</span>`).join('');
     $('clearAll').disabled = !editable || !(pc + hc + ED.rivers.length + ED.cities.length + ED.bhid.size + ED.labels.size + ED.lhid.size + (ED.stan != null ? 1 : 0) + ED.routes.size + ED.rthid.size + ED.points.size + ED.phid.size + ED.zinfo.size + ED.binfo.size + ED.kinfo.size + ED.tlinks.size + ED.tlhid.size + ED.hubs.size + ED.tparent.size);
@@ -3997,14 +4122,14 @@ function setReadOnly() {
   $('history').hidden = true; $('clearAll').hidden = true; $('editcard').hidden = true; $('viewEditHint').hidden = true; setTtool('pick');
   document.querySelector('#editcard h2').textContent = 'งานแก้บนแผนที่นี้';
   $('editnote').textContent = 'แผนที่นี้แสดงงานแก้ของเจ้าของแผนที่ หน้านี้ให้ดูได้อย่างเดียว';
-  status(); updateHistory(); requestDraw();
+  status(); updateHistory(); updatePointsLegend(); requestDraw();
 }
 function unlock() {
   if (editable || readOnly) return;
   editable = true;
   for (const b of document.querySelectorAll('#modes button')) b.disabled = false;
   $('tdTool').hidden = false; $('tdReset').hidden = false; setTtool(ttool);
-  status(); updateStats(); updateHistory();
+  status(); updateStats(); updateHistory(); updatePointsLegend();   // v0.18.5: the points list gains its place-it rows
 }
 for (const b of document.querySelectorAll('#modes button')) if (b.dataset.mode !== 'view' && b.dataset.mode !== 'trade' && b.dataset.mode !== 'climate') b.disabled = true;
 // remote documents are untrusted: keep only well formed values
@@ -4298,7 +4423,13 @@ function fxSprite(kind, cat) {                       // drawn once for each kind
   } else {
     s.width = 64; s.height = 48; c.scale(2, 2); c.lineJoin = 'round'; c.lineCap = 'round';
     c.fillStyle = 'rgba(8,10,14,.38)'; c.beginPath(); c.ellipse(16, 20.5, 13, 2.4, 0, 0, 2 * Math.PI); c.fill();
-    if (kind === 'ship') {                           // a merchant ship from the side: hull, mast, one square sail, a pennant
+    if (kind === 'boat') {                           // v0.18.5: a small river boat: a low hull, a boatman with his pole, a bundle in the goods' colour
+      c.beginPath(); c.moveTo(4, 15); c.lineTo(28, 15); c.lineTo(24.5, 19); c.lineTo(7.5, 19); c.closePath();
+      c.fillStyle = '#6b4528'; c.fill(); c.strokeStyle = '#1e140b'; c.lineWidth = 1; c.stroke();
+      c.fillStyle = col; c.strokeStyle = 'rgba(20,14,8,.8)'; c.lineWidth = 0.6; c.beginPath(); c.rect(15, 10.6, 8.5, 4.4); c.fill(); c.stroke();
+      c.fillStyle = '#2b1d12'; c.beginPath(); c.arc(9.5, 8.2, 1.7, 0, 2 * Math.PI); c.fill(); c.fillRect(8.4, 9.6, 2.2, 5.4);
+      c.strokeStyle = '#3a281a'; c.lineWidth = 0.9; c.beginPath(); c.moveTo(6.2, 3.6); c.lineTo(12.6, 21.4); c.stroke();
+    } else if (kind === 'ship') {                    // a merchant ship from the side: hull, mast, one square sail, a pennant
       c.beginPath(); c.moveTo(2.5, 14); c.lineTo(29.5, 14); c.lineTo(25.5, 19.5); c.lineTo(6.5, 19.5); c.closePath();
       c.fillStyle = '#6b4528'; c.fill(); c.strokeStyle = '#1e140b'; c.lineWidth = 1; c.stroke();
       c.beginPath(); c.moveTo(3.5, 15.6); c.lineTo(28.5, 15.6); c.strokeStyle = 'rgba(240,214,160,.55)'; c.lineWidth = 0.7; c.stroke();
@@ -4351,7 +4482,8 @@ function fxFrame(now) {
     if (flip) a = Math.atan2(Math.sin(a), -Math.cos(a));
     a = Math.max(-0.5, Math.min(0.5, a));
     fxc.save(); fxc.translate(x, y); fxc.rotate(flip ? -a : a); if (flip) fxc.scale(-1, 1);
-    fxc.drawImage(fxSprite(wet ? 'ship' : 'wagon', m.cat), -size * 0.667, -size * 0.8, size * 1.333, size);
+    const hh = wet ? hexAt(x, y) : -1, small = hh >= 0 && !WATR[hh] && NAVR[hh] === 1;   // up a small boat's river, a small boat
+    fxc.drawImage(fxSprite(wet ? (small ? 'boat' : 'ship') : 'wagon', m.cat), -size * 0.667, -size * 0.8, size * 1.333, size);
     fxc.restore();
   }
   fxc.globalAlpha = 1;
@@ -4475,7 +4607,7 @@ const tierOk = k => typeof k === 'string' && Object.prototype.hasOwnProperty.cal
 function ecoScale() {
   if (!(ECO.total > 0)) return;
   let h0 = 0, own = 0, all = 0;
-  for (const c of visibleCities()) { const k = KIX[c.kind] != null ? KIX[c.kind] : 1; all += EPOP[k]; if (ECO.pop[c.id] > 0) own += ECO.pop[c.id]; else h0 += EPOP[k]; }
+  for (const c of visibleCities()) { const k = KIX[c.kind] != null ? KIX[c.kind] : 1, e = EPOP[k] * comPop(c.id, c.kind); all += e; if (ECO.pop[c.id] > 0) own += ECO.pop[c.id]; else h0 += e; }
   if (!(all > 0)) return;
   ECO.unit = clamp(h0 > 0 && ECO.total > own ? (ECO.total - own) / h0 : ECO.total / all, 0.01, 1e9);   // cities the owner counted keep their count; the rest share what is left
   ECO.central.per = ECO.unit * ECO.cpp;                // a person's year stays worth what it was, whatever the map holds
@@ -4822,7 +4954,7 @@ const ecoGood = id => EGOODS.find(g => g.id === id) || null;
 const ecoOver = id => ECO.goods[id] || (ECO.goods[id] = {});
 function ecoTermHTML(t, k) {
   const pt = t.on[0] === '@';
-  let h = `<div class="eterm" data-k="${k}"><div class="erow"><select data-f="src"><option value="g"${pt ? '' : ' selected'}>ภูมิประเทศ</option>${Object.keys(D.pointKinds).map(q => `<option value="@${q}"${t.on === '@' + q ? ' selected' : ''}>จุดสำคัญ: ${esc(kindInfo(q).name)}</option>`).join('')}</select>`
+  let h = `<div class="eterm" data-k="${k}"><div class="erow"><select data-f="src"><option value="g"${pt ? '' : ' selected'}>ภูมิประเทศ</option>${Object.keys(D.pointKinds).map(q => `<option value="@${q}"${t.on === '@' + q ? ' selected' : ''}>สถานที่น่าสนใจ: ${esc(kindInfo(q).name)}</option>`).join('')}</select>`
     + `<label>ได้ <input type="number" data-f="rate" min="0" max="20" step="0.005" value="${t.rate}"> ${pt ? 'ต่อจุด' : 'ต่อช่อง'}</label><button type="button" class="btn warn" data-a="tdel">ลบเงื่อนไข</button></div>`;
   if (!pt) {
     h += `<div class="echips">${[...CODES].map(b => `<button type="button" class="echip${t.on.includes(b) ? ' on' : ''}" data-a="code" data-b="${b}" title="${esc(biomeInfo(b).name)}"><i style="background:${chipColor(b)}"></i>${esc(biomeInfo(b).name)}</button>`).join('')}</div>`
@@ -5027,7 +5159,7 @@ $('ecobody').addEventListener('change', e => {
 $('cfPop').onchange = () => { if (!sel || !editable) return; const n = Math.round(+$('cfPop').value); if (n > 0) ECO.pop[sel] = Math.min(5e7, n); else delete ECO.pop[sel]; ecoChanged(false); ecoCityForm(); };
 function ecoCityForm() {
   if (!sel) return; const v = visibleCities().find(c => c.id === sel); if (!v) return;
-  const ki = KIX[v.kind] != null ? KIX[v.kind] : 1, def = Math.round(EPOP[ki] * ECO.unit);
+  const ki = KIX[v.kind] != null ? KIX[v.kind] : 1, def = Math.round(EPOP[ki] * comFx(sel, v.kind).pop * ECO.unit);
   $('cfPop').value = ECO.pop[sel] || ''; $('cfPop').placeholder = def.toLocaleString('en-US');
   const fit = KIK[ecoKi(sel, v.kind)];
   const note = ECO.pop[sel] && CK[fit] && fit !== v.kind ? ` ประชากรเท่านี้ทำให้เมืองนี้ผลิต บริโภค และค้าขายในระดับ${CK[fit].name}` : '';
@@ -5069,6 +5201,7 @@ const __ecoChanged = ecoChanged;
 ecoChanged = function (tables) { __ecoChanged(tables); sideNote('eco'); };
 $('ecoUndo').onclick = () => sideStep('eco', true); $('ecoRedo').onclick = () => sideStep('eco', false);
 __on(window, 'keydown', e => {
+  return;                                           // v0.18.5: the one key handler in the input code steps this history now
   if (!(e.ctrlKey || e.metaKey) || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || !editable) return;
   const k = mode === 'econ' ? 'eco' : mode === 'climate' && clTool ? 'clim' : null, key = e.key.toLowerCase(); if (!k || (key !== 'z' && key !== 'y')) return;
   e.preventDefault(); e.stopImmediatePropagation(); sideStep(k, key === 'z' && !e.shiftKey);
@@ -6065,13 +6198,13 @@ function socPrep(cities) {
   for (const c of cities) {
     const s = ECOX.byKey.get(c.st) || null;
     c.reg = EREG[ECO.regime[c.id]] ? ECO.regime[c.id] : s && EREG[s.reg] ? s.reg : 'shift';
-    c.lab = clamp(cheap * Math.log10(Math.max(1, c.people) / ref) / 3, -0.1, cheap);              // how much cheaper a day's work is here than in a middling town
+    c.lab = clamp(cheap * Math.log10(Math.max(1, c.people) / ref) / 3, -0.1, cheap) + (c.fx ? c.fx.lab : 0);              // how much cheaper a day's work is here than in a middling town
     c.pol = POL && s ? POL.get(s.id) || null : null;
     c.work = (c.reg === 'home' ? TU('regHomeOut') : c.reg === 'sweat' ? TU('regSweatOut') : c.reg === 'care' ? TU('regCareOut') : 1) * (1 + TU('labMake') * c.lab);
     c.foodCut = 1 - TU('landFood') * (c.land ? c.land.lack : 0);                                   // a city short of land grows that much less of its food, and must buy the rest
     let seen = 0, sea = 0, lake = 0, ring = [c.h]; const sn = new Set(ring);                       // what there is to see: marks on the map within three hexes, the great peak, a sea shore, a lake
     for (let d = 0; d <= 3 && ring.length; d++) { const nx = []; for (const u of ring) { seen += pts.get(u) || 0; if (u === st) seen += 3; const b = eff(u); if (d <= 1 && isSea(b)) sea = 1; if (d <= 2 && b === 'L') lake = 1; for (let j = 0; j < 6; j++) { const v = NB[u * 6 + j]; if (v >= 0 && !sn.has(v)) { sn.add(v); nx.push(v); } } } ring = nx; }
-    c.att = clamp((seen + sea + lake) / 6, 0, 1);
+    c.att = clamp((seen + sea + lake) / 6 + (c.fx ? c.fx.att : 0), 0, 1);
   }
 }
 function socRaw(c, cat) { return (SOC_FOOD.has(cat) ? c.foodCut : 1) * (c.pol && c.pol.top.has(cat) ? 1 + polOn(c, 'subst') * TU('polSubst') : 1); }
@@ -6136,6 +6269,7 @@ function socApply(rows) {
     ra.exX = (ra.exX || 0) + v;
     if (B) { const b = book(B); b.inn += v; put(b, A ? A.id : '.', 1); }
   }
+  taxApply(rows, book);
   // well-being before the state's balance weighs on it
   rows.forEach((r, k) => {
     const c = r.c, why = []; r.met = socMet(E, k); r.rich = mean > 0 ? r.inc / r.people / mean : 1;
@@ -6146,6 +6280,7 @@ function socApply(rows) {
     add('องค์กรในเมือง', Math.min(15, 100 * orgWell(c)));
     add(EREG[c.reg][0], c.reg === 'sweat' ? -TU('regSweatWell') : c.reg === 'home' || c.reg === 'care' ? TU('regWell') : 0);
     if (c.pol) for (const t of c.pol.tools) add(EPOL[t][0], -c.pol.k * EPOL_COST[t][0]);
+    add(r.taxBack > 0 && taxUse(r.s) === 'svc' ? 'ภาษีหักบริการที่ได้คืน' : 'ภาษี', r.taxWell || 0);
     r.well0 = clamp(w, 0, 100); r.wellWhy = why;
   });
   // visitors
@@ -6171,7 +6306,8 @@ function socApply(rows) {
     const b = r.s ? books.get(r.s.id) : null, pen = b ? b.pen : 0, bon = b && b.stable ? TU('balWell') : 0; r.wellPen = pen; r.stable = !!(b && b.stable);
     if (pen >= 0.5) r.wellWhy.push(['รัฐขาดดุลการค้าหนัก', -pen]); if (bon >= 0.5) r.wellWhy.push(['รัฐค้าสมดุล', bon]);
     const tw = r.trvWell || 0; if (tw >= 0.5) r.wellWhy.push(['เดินทางแสวงบุญได้สะดวก', tw]);
-    r.well = clamp(r.well0 - pen + bon + tw, 0, 100);
+    const cw = r.c.fx ? r.c.fx.well : 0; if (cw) r.wellWhy.push(['ชนิดและคุณลักษณะของชุมชน', cw]);   // v0.18.5 (29k)
+    r.well = clamp(r.well0 - pen + bon + tw + cw, 0, 100);
     r.sur = b && b.net > 0 && b.out > 0 ? b.net * r.exX / b.out : 0;                                 // the city's part of its state's surplus
   });
   // people on the move
@@ -6403,7 +6539,7 @@ function classSplit(c, P) {                          // the city's money by clas
   return { w, land };
 }
 function classHeads(c, free, held, metB) {           // the free people by class, as shares of them
-  const sys = c.sto ? c.sto.sys : '', reg = c.reg || 'shift', hi = HI_N[c.ki] * (HI_SYS[sys] || 1), mid = MID_N[c.ki] * (MID_SYS[sys] || 1), rest = Math.max(0, 1 - hi - mid);
+  const sys = c.sto ? c.sto.sys : '', reg = c.reg || 'shift', hi = HI_N[c.ki] * (HI_SYS[sys] || 1), mid = MID_N[c.ki] * (MID_SYS[sys] || 1) + (c.fx ? c.fx.mid : 0), rest = Math.max(0, 1 - hi - mid);
   const out = clamp(TU('jobless') + 0.4 * Math.max(0, c.lab || 0) + 0.6 * held / Math.max(1, free + held) + 0.3 * (1 - (metB == null ? 1 : metB)) + (reg === 'sweat' ? -0.02 : reg === 'home' ? -0.01 : 0), 0.01, 0.6);
   return { hi, mid, low: rest * (1 - out), poor: rest * out };
 }
@@ -6548,6 +6684,7 @@ ecoStatesHTML = function () {
       + (s.sys === 'soc' ? ecoCapHTML(s) : '') + `</div>`
       + (anar ? '' : `<div class="ssec"><h5>ผู้คนและการทำงาน</h5>` + ecoIn('คนย้ายเข้ากระจายตัว', sel('sspread', ESPREAD, s.spread || 'nat')) + `<div class="tr w">${ESPREAD[s.spread || 'nat'][1]}</div>`
         + ecoIn('ระเบียบงานของโรงงาน', sel('sreg', EREG, s.reg || 'shift')) + `<div class="tr w">${EREG[s.reg || 'shift'][1]} เมืองที่ตั้งระเบียบของตัวเองในการ์ดเมืองใช้ของตัวเอง</div></div>`)
+      + (anar ? '' : `<div class="ssec"><h5>ภาษี</h5>${taxStateForm(s)}</div>`)   // v0.18.5 (29m)
       + (others.length ? `<div class="ssec"><h5>ความสัมพันธ์กับรัฐอื่น</h5><div class="srel">${others.map(o => `<label><i class="sdot" style="background:${o.color}"></i><span>${esc(o.name)}</span><select data-f="srel" data-o="${o.id}"${dis}><option value="">เป็นกลาง</option><option value="ally"${(s.rel[o.id] || o.rel[s.id]) === 'ally' ? ' selected' : ''}>พันธมิตร</option><option value="rival"${(s.rel[o.id] || o.rel[s.id]) === 'rival' ? ' selected' : ''}>คู่อริ</option></select></label>`).join('')}</div><div class="tr w">พันธมิตรไม่กดราคากัน คู่อริไม่ค้ากันและเส้นทางผ่านแดนกันแพงขึ้น</div></div>` : '')
       + (anar ? '' : `<div class="ssec"><h5>เมื่อขาดดุลการค้า</h5><div class="polset">` + Object.entries(EPOL).map(([k, z]) => `<label title="${esc(z[1] + ' ข้อเสีย: ' + z[2])}"><input type="checkbox" data-f="spol" data-k="${k}"${on.has(k) ? ' checked' : ''}${dis}> ${z[0]}</label>`).join('') + `</div>`
         + (list.length > 1 ? ecoIn('ใช้ข้อไหนก่อน', `<select data-f="spol1"${dis}>${list.map((k, i) => `<option value="${k}"${i === 0 ? ' selected' : ''}>${EPOL[k][0]}</option>`).join('')}</select>`) : '')
@@ -6647,7 +6784,7 @@ function harvApply(cities, prod, own, dist) {         // the hands spread over t
   const n = cities.length, cnt = new Int32Array(n), ref = TU('effRef');   // measure holds whatever the level of people (fields laid out farther for a populous level feed their own share, v0.14.2)
   for (let i = 0; i < N; i++) { const k = own[i]; if (k >= 0 && k < n && dist[i] <= EREACH[cities[k].ki]) cnt[k]++; }
   cities.forEach((c, k) => {
-    const P = prod[k], hexes = Math.max(1, cnt[k]), made = c.pop * EIND[c.ki] * 0.5 * (c.work || 1);
+    const P = prod[k], hexes = Math.max(1, cnt[k]), made = c.pop * EIND[c.ki] * (c.fx ? c.fx.ind : 1) * 0.5 * (c.work || 1);
     let rent0 = 0; for (const [id, v] of P) { const cat = catOf(id); if (ECAT[cat]) rent0 += v * ECAT[cat].v; }
     const got = HARVL ? HARVL.get(c.id) : null; let L = 0, parts = null;
     if (got) { L = got.units; parts = got.parts; }
@@ -6920,14 +7057,33 @@ const FEATG = {
   isles(c, x, y) { for (const [dx, dy, r] of [[-2.2, -0.8, 1.2], [0.6, 0.9, 1.5], [2.4, -1.2, 0.9]]) { ell(c, x + dx, y + dy, r, r * 0.7, 'rgb(212,196,150)'); ell(c, x + dx, y + dy - 0.15, r * 0.65, r * 0.45, 'rgb(98,146,84)'); } },
   cave(c, x, y) { poly(c, [[x - 3.4, y + 1.8], [x - 2.4, y - 1.6], [x, y - 2.6], [x + 2.4, y - 1.6], [x + 3.4, y + 1.8]], 'rgb(130,122,110)', 'rgb(70,64,58)'); ell(c, x, y + 0.9, 1.4, 1.5, 'rgb(34,30,36)'); },
 };
+// v0.18.5: the owner found the features standing out too much, and asked for them to sit in the ground the way the fields and the
+// mines of the communities do. A feature now tints its hexes toward its colour on a small sheet laid over the map smoothly, so the
+// edges melt into the ground around and the trees and peaks under it still show; its sign is drawn smaller and fainter, and in a
+// wide patch only on about half of its hexes. FEAT_TINT is how far the ground goes toward the feature's colour (Claude's number).
+const FEAT_TINT = 0.55, FEAT_ALPHA = 0.5, FEAT_SHEET = 6;
+let featCv = null, featKey = '';
+const featRGB = h => { const n = parseInt(String(h).slice(1), 16); return [n >> 16, n >> 8 & 255, n & 255]; };
+const featGround = b => RCOL[b] || (b === 'S' ? [44, 74, 100] : b === 'L' ? [74, 118, 146] : RCOL.g);
+function featSheet() {
+  let hsh = 0; for (let i = 0; i < N; i++) if (ECO.feat[i] !== '.') hsh = (Math.imul(hsh, 31) + i * 131 + ECO.feat[i].charCodeAt(0)) | 0;   // a number, not a string: this runs every frame
+  const key = featStamp + '|' + painted.size + '|' + hsh;
+  if (key === featKey) return featCv;
+  featKey = key;
+  if (!featCv) { featCv = document.createElement('canvas'); featCv.width = Math.max(1, Math.ceil(G.w / FEAT_SHEET)); featCv.height = Math.max(1, Math.ceil(G.h / FEAT_SHEET)); }
+  const c = featCv.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, featCv.width, featCv.height); c.setTransform(1 / FEAT_SHEET, 0, 0, 1 / FEAT_SHEET, 0, 0);
+  for (let i = 0; i < N; i++) { const k = featAt(i); if (!k) continue; c.beginPath(); hexPath(c, i, 1.08); c.fillStyle = jit(landMix(featGround(eff(i)), featRGB(k.col), FEAT_TINT), i, 8); c.fill(); }
+  return featCv;
+}
 function featDraw(c) {
   let any = false; for (let i = 0; i < N; i++) if (ECO.feat[i] !== '.') { any = true; break; } if (!any) return;
-  c.save(); c.globalAlpha = 0.34;
-  for (let i = 0; i < N; i++) { const k = featAt(i); if (k) featHex(c, i, k.col); }
-  c.globalAlpha = 1;
+  const sh = featSheet();
+  c.save(); c.globalAlpha = FEAT_ALPHA; c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high'; c.drawImage(sh, 0, 0, sh.width * FEAT_SHEET, sh.height * FEAT_SHEET); c.globalAlpha = 0.85;
   for (let i = 0; i < N; i++) {
     const k = featAt(i); if (!k) continue; const fn = FEATG[k.g];
-    c.save(); c.translate(CX[i], CY[i]); c.scale(1.55, 1.55);   // a little larger than a point of lore: it stands for the hex
+    let same = 0; for (let j = 0; j < 6; j++) { const v = NB[i * 6 + j]; if (v >= 0 && ECO.feat[v] === ECO.feat[i]) same++; }
+    const r = rng(i * 13 + 5); if (same >= 3 && r() < 0.5) continue;             // in a wide patch, a sign on about half of it
+    c.save(); c.translate(CX[i] + (r() - 0.5) * 0.5 * R, CY[i] + (r() - 0.5) * 0.4 * R); c.scale(0.95, 0.95);
     if (fn) fn(c, 0, 0); else poly(c, [[0, -2.6], [2.2, 0], [0, 2.6], [-2.2, 0]], k.col, 'rgba(20,20,24,.8)');
     c.restore();
   }
@@ -7086,6 +7242,7 @@ function trvHoly(c, pts, st) {
   let near = 0; for (const p of pts) if (p.h >= 0 && (p.k === 'pillar' || p.k === 'ruin') && Math.hypot(CX[p.h] - c.x, CY[p.h] - c.y) <= 2.2 * DY) near += p.k === 'pillar' ? 0.5 : 0.25;
   if (near) { h += near; why.push(['เสาหินหรือซากโบราณใกล้เมือง', near]); }
   if (st >= 0 && Math.hypot(CX[st] - c.x, CY[st] - c.y) <= 3.2 * DY) { h += 2; why.push(['มองเห็นยอดเขาศักดิ์สิทธิ์', 2]); }
+  const fh = c.fx ? c.fx.holy : 0; if (fh) { h += fh; why.push([c.kind === 'monastery' && !comTr(c.id).includes('holy') ? 'เป็นอาราม' : 'ชนิดและคุณลักษณะของชุมชน', fh]); }   // v0.18.5 (29k)
   return { h, why };
 }
 function trvApply(E, rows, book, mean, tpairs) {
@@ -7216,6 +7373,247 @@ function railTest() {
   for (const r of visibleRoutes()) if (r.cls === 'rail') { const g = geoOf(r); out.push({ id: r.id, ok: !!(g && !g.fail), len: g && !g.fail ? g.len : 0, tunnels: g && !g.fail ? g.tunnels : 0, bridges: g && !g.fail ? g.bridges.length : 0, hexes: g && !g.fail ? g.hexes : [] }); }
   return { rails: out, edges: RAILE.size, step: RAIL_STEP };
 }
+// ---------- communities (v0.18.5): their kinds beyond the town, and the marks the owner gives them ----------
+// The owner asked for "ชนิดของชุมชน" in place of "ชนิดของเมือง", four more kinds (a monastery, a hamlet, a tribal camp, a way
+// station), and marks that any community may carry (a great port, a fortress, walls, the country's market, a seat of faith,
+// crowded quarters), each one working on that community. A kind past the old five works at the level of a village and differs
+// from it by the numbers in COMK; a mark's numbers are in COMT. The marks are kept in the economy's document, ECO.tr, by the
+// community's id, so they ride its undo, its saving and its room like the head counts and holy places do.
+//
+// What each number does (every one of them chosen by Claude, for the owner to tune):
+//   pop    the head count a community has when the owner has not counted it, times this
+//   rank   the lowest level it holds as a hub of the trade network; rank3 makes it a hub of the first level; portRank lifts a
+//          community with a quay one level
+//   holy   holiness, as the pilgrims count it (a regional shrine is 3)
+//   att    what there is to see, as the sightseers weigh it (0 to 1)
+//   well   points of well-being (0 to 100)
+//   ind    workshops per head, times this; arms: weapons made, times this; books: books made, added
+//   reach  hexes more of land worked
+//   lab    how much cheaper a day's work is (crowded quarters); mid: a larger middle class, as a share of the free people
+const COMK = {
+  hamlet: { pop: 0.4 },
+  monastery: { pop: 0.5, holy: 2, att: 0.15, books: 0.4, well: 2 },
+  camp: { pop: 0.7, reach: 1, ind: 0.5 },
+  waystation: { pop: 0.35, rankMin: 1, att: 0.1 },
+};
+const COMT = {
+  port: { name: 'เมืองท่าสำคัญ', pop: 1.1, portRank: 1, mid: 0.03, why: 'ศูนย์การค้าขึ้นหนึ่งระดับถ้ามีท่าเรือ คนเพิ่ม 10% ชนชั้นกลางมากขึ้น' },
+  fort: { name: 'มีป้อมปราการ', arms: 1.5, well: 2, why: 'ผลิตอาวุธมากขึ้นครึ่งเท่า คนอยู่ปลอดภัยขึ้น' },
+  wall: { name: 'มีกำแพงล้อมรอบ', pop: 0.95, well: 3, att: 0.05, why: 'คนอยู่ปลอดภัยขึ้น มีของให้ชมเพิ่ม ที่ในกำแพงจำกัด คนน้อยลง 5%' },
+  trade: { name: 'ศูนย์กลางการค้าของประเทศ', pop: 1.15, rank3: 1, mid: 0.05, why: 'เป็นศูนย์กระจายสินค้าระดับสูงสุด คนเพิ่ม 15% ชนชั้นกลางมากขึ้น' },
+  holy: { name: 'ศูนย์กลางศาสนา', holy: 3, att: 0.15, why: 'ศักดิ์สิทธิ์ขึ้นเท่าศูนย์แสวงบุญของภูมิภาค นักท่องเที่ยวสนใจขึ้น' },
+  slum: { name: 'มีย่านแออัด', pop: 1.25, well: -6, lab: 0.04, why: 'คนเพิ่ม 25% ค่าแรงถูกลง ความเป็นอยู่แย่ลง คนจนมากขึ้น' },
+};
+const COMKWHY = {
+  hamlet: 'คนน้อยกว่าหมู่บ้านราวครึ่งหนึ่ง',
+  monastery: 'คนน้อย ศักดิ์สิทธิ์ มีคนมาแสวงบุญและเที่ยวชม คัดลอกหนังสือ และช่วยให้คนรอบ ๆ อยู่ดีขึ้นเล็กน้อย',
+  camp: 'เลี้ยงสัตว์ไปไกลกว่าหมู่บ้านหนึ่งช่อง แต่งานช่างน้อยกว่าครึ่ง',
+  waystation: 'คนน้อยมาก แต่เป็นจุดพักของเส้นการค้าเสมอ และมีคนผ่านมาเที่ยวชม',
+};
+ECO.tr = {};
+const comTr = id => (ECO.tr[id] || []).filter(k => COMT[k]);
+function comFx(id, kind) {                          // everything a community's kind and marks do to it, summed
+  const f = { pop: 1, rank3: 0, portRank: 0, rankMin: 0, holy: 0, att: 0, well: 0, ind: 1, arms: 1, books: 0, reach: 0, lab: 0, mid: 0 };
+  const add = o => { if (!o) return; for (const k of Object.keys(o)) { if (!(k in f)) continue; if (k === 'pop' || k === 'ind' || k === 'arms') f[k] *= o[k]; else if (k === 'rankMin') f[k] = Math.max(f[k], o[k]); else f[k] += o[k]; } };
+  add(COMK[kind]); for (const k of comTr(id)) add(COMT[k]);
+  return f;
+}
+const comPop = (id, kind) => ECO.pop[id] > 0 ? 1 : comFx(id, kind).pop;   // a head count the owner typed stands as typed
+function comWhy(id, kind) {                         // the plain words for what the kind and the marks do
+  const out = []; if (COMKWHY[kind]) out.push((CK[kind] || CK.city).name + ': ' + COMKWHY[kind]);
+  for (const k of comTr(id)) out.push(COMT[k].name + ': ' + COMT[k].why);
+  return out;
+}
+
+// ---- the document ----
+{
+  const ld = ecoLoad, sr = ecoSerial;
+  ecoLoad = function (b) {
+    ld(b); b = b || {}; ECO.tr = {};
+    for (const [id, v] of Object.entries(b.tr || {}).slice(0, 4000)) { const a = [...new Set((Array.isArray(v) ? v : []).filter(k => COMT[k]))]; if (a.length) ECO.tr[ecoStr(id, 120)] = a; }
+  };
+  ecoSerial = function () { const o = sr(); if (Object.keys(ECO.tr).length) o.tr = JSON.parse(JSON.stringify(ECO.tr)); return o; };
+}
+
+// ---- the marks, in the community's own form ----
+function comForm() {
+  const box = $('cfTraits'); if (!box) return;
+  if (!sel) { box.innerHTML = ''; return; }
+  const v = visibleCities().find(c => c.id === sel); if (!v) { box.innerHTML = ''; return; }
+  const on = new Set(comTr(sel)), ro = editable ? '' : ' disabled';
+  box.innerHTML = `<span class="lbl">คุณลักษณะ</span>` + Object.entries(COMT).map(([k, t]) => `<label class="trait" title="${esc(t.why)}"><input type="checkbox" data-tr="${k}"${on.has(k) ? ' checked' : ''}${ro}> ${esc(t.name)}</label>`).join('');
+  const why = comWhy(sel, v.kind); $('cfFx').hidden = !why.length; $('cfFx').textContent = why.join(' · ');
+}
+__on(document, 'change', e => {
+  const el = e.target; if (!el || !el.dataset || !el.dataset.tr || !editable || !sel || !COMT[el.dataset.tr]) return;
+  const a = new Set(comTr(sel)); if (el.checked) a.add(el.dataset.tr); else a.delete(el.dataset.tr);
+  if (a.size) ECO.tr[sel] = [...a].filter(k => COMT[k]); else delete ECO.tr[sel];
+  ecoChanged(false); ecoCityForm(); comForm();
+});
+{ const rf = refreshForm; refreshForm = function () { rf(); comForm(); }; }
+// ---------- the season on the map itself (v0.18.5) ----------
+// The owner asked for a button on the map, beside the one for the names, that steps through the seasons; and for the waters that
+// run only part of the year (the seasonal streams and the seasonal rivers, the user's and the map's own) to fade as their season
+// dries. The button steps the same season the climate mode looks at (clSeas). A seasonal line fades by the rain where it runs:
+// the season's rain over the year's mean season, along its hexes. Below SEAS_DRY of it the line is a dry bed; between SEAS_DRY and
+// SEAS_LOW it fades part of the way. Both shares are Claude's, as the owner left them to Claude.
+const SEAS_DRY = 0.4, SEAS_LOW = 0.7;
+let seasCv = null, seasKey = '', seasAny = false;
+function seasRatio() {                              // the season's rain over the year's mean, hex by hex; null for the whole year
+  if (!clSeas) return null;
+  const A = climEnsure(), SE = A.seas; if (!SE || !A.S) return null;
+  const k = SE.findIndex(s => s.id === clSeas); if (k < 0) return null;
+  const tot = SE.reduce((a, s) => a + (s.len || 0), 0) || 1, out = new Float32Array(N);
+  for (let i = 0; i < N; i++) { let m = 0; SE.forEach((s, j) => { m += A.S[j].p[i] * (s.len || 0); }); m /= tot; out[i] = m > 0.01 ? A.S[k].p[i] / m : 1; }
+  return { k, r: out, stamp: A.stamp };
+}
+const seasFade = x => x < SEAS_DRY ? 1 : x < SEAS_LOW ? (SEAS_LOW - x) / (SEAS_LOW - SEAS_DRY) : 0;
+function seasLines() {                              // every seasonal line as points, with the width it is drawn at
+  const out = [];
+  for (const r of BRIV) if (r.s) for (const u of riverRuns(r)) out.push({ q: u.q, w: r.w });
+  for (const r of ED.rivers) { const k = RK[r.kind]; if (!k || !k.s) continue; const d = RDER.get(r.id); if (d) out.push({ q: d.q, w: d.w }); }
+  return out;
+}
+function seasSheet() {                              // the dry beds of the season shown, drawn once for each season and set of waters
+  const R = seasRatio(); if (!R) return null;
+  const key = clSeas + '|' + R.stamp + '|' + RIVSIG + '|' + ED.rivers.length + '|' + ED.rivers.reduce((a, r) => a + r.pts.length, 0) + '|' + painted.size;
+  if (key === seasKey) return seasAny ? seasCv : null;
+  seasKey = key; seasAny = false;
+  if (!seasCv) { seasCv = document.createElement('canvas'); seasCv.width = layer.width; seasCv.height = layer.height; }
+  const c = seasCv.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, seasCv.width, seasCv.height);
+  c.setTransform(seasCv.width / G.w, 0, 0, seasCv.height / G.h, 0, 0); c.lineCap = 'round'; c.lineJoin = 'round';
+  for (const L of seasLines()) {
+    let s = 0, n = 0; for (const p of L.q) { const h = hexAt(p[0], p[1]); if (h >= 0 && !isW(eff(h))) { s += R.r[h]; n++; } }
+    const f = n ? seasFade(s / n) : 0; if (!(f > 0.02)) continue; seasAny = true;
+    for (let i = 0; i + 1 < L.q.length; i++) {      // the ground's own colour over the water, piece by piece
+      const a = L.q[i], b = L.q[i + 1], h = hexAt((a[0] + b[0]) / 2, (a[1] + b[1]) / 2); if (h < 0 || isW(eff(h))) continue;
+      c.globalAlpha = f; c.strokeStyle = fillOf(h, eff(h)); c.lineWidth = L.w * 0.85 + 1.1; c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke();
+    }
+    c.globalAlpha = f * 0.75; c.strokeStyle = 'rgb(150,128,96)'; c.lineWidth = Math.max(0.35, L.w * 0.22); c.setLineDash([1.1, 1.3]);   // the dry bed
+    c.beginPath(); c.moveTo(L.q[0][0], L.q[0][1]); for (const p of L.q) c.lineTo(p[0], p[1]); c.stroke(); c.setLineDash([]);
+    if (f < 1) { c.globalAlpha = 1 - f; c.strokeStyle = 'rgb(124,166,190)'; c.lineWidth = L.w * 0.6; c.beginPath(); c.moveTo(L.q[0][0], L.q[0][1]); for (const p of L.q) c.lineTo(p[0], p[1]); c.stroke(); }   // what water is left
+  }
+  c.globalAlpha = 1;
+  return seasAny ? seasCv : null;
+}
+{ const og = drawOverGround; drawOverGround = function (c, w, h, live) { if (og) og(c, w, h, live); if (mode === 'river' || mode === 'terrain') return; const s = seasSheet(); if (s) c.drawImage(s, 0, 0, w, h); }; }
+
+// the button: whole year, then each season in turn
+const seasBtn = $('seasonBtn');
+function seasLabel() {
+  if (!seasBtn) return; const A = climEnsure(), SE = A.seas, s = SE && clSeas ? SE.find(x => x.id === clSeas) : null;
+  seasBtn.textContent = 'ฤดู: ' + (s ? s.name : 'ทั้งปี'); seasBtn.setAttribute('aria-pressed', s ? 'true' : 'false');
+  seasBtn.title = SE ? 'กดเพื่อเปลี่ยนฤดู ลำน้ำและแม่น้ำตามฤดูกาลจางลงในฤดูที่ฝนน้อย คลิกขวาเพื่อย้อนฤดู' : 'แผนที่นี้ยังไม่ได้แบ่งฤดู กดเพื่อไปแบ่งในโหมดภูมิอากาศ';
+}
+function seasStep(dir) {
+  const A = climEnsure(), SE = A.seas;
+  if (!SE || !SE.length) { if (editable) { setMode('climate'); flash('แผนที่นี้ยังไม่ได้แบ่งฤดู กดแบ่งปีเป็นฤดูได้ที่การ์ดภูมิอากาศ'); } else flash('แผนที่นี้ยังไม่ได้แบ่งฤดู'); return; }
+  const ids = ['', ...SE.map(s => s.id)], k = Math.max(0, ids.indexOf(clSeas)), nx = ids[(k + dir + ids.length) % ids.length];
+  setClSeas(nx); seasLabel(); flash(nx ? 'กำลังดู' + SE.find(s => s.id === nx).name : 'ดูทั้งปี');
+}
+if (seasBtn) {
+  seasBtn.onclick = () => seasStep(1);
+  seasBtn.addEventListener('contextmenu', e => { e.preventDefault(); seasStep(-1); });
+  { const sc = setClSeas; setClSeas = function (id) { sc(id); seasLabel(); requestDraw(); }; }
+  { const cc = clChanged; clChanged = function () { cc.apply(this, arguments); seasKey = ''; seasLabel(); }; }
+  seasLabel();
+}
+// ---------- taxes (v0.18.5): what a state takes from its communities, and what it does with it ----------
+// The owner asked to be able to set the taxes of a country and of a community. A state takes a share of every community's income
+// (its rate, or the community's own where the owner set one) and spends it one of three ways:
+//   svc    on its people: the take is shared back out by head over the whole state, so the poorer communities gain and the
+//          richer pay for it, and every community lives a little better for the services
+//   court  on the court and the lords: the whole take goes to the state's central community
+//   keep   into the treasury: it leaves the year's spending, and stands in the state's books as its reserve
+// Every rate costs the people some well-being, the higher the more; services give some back. A land with no state pays no tax.
+// The starting rate and use of each kind of state, and the three numbers in ETUNE, are Claude's, for the owner to change.
+Object.assign(ETUNE, {
+  taxWell: [30, 0, 200, 1, 'ภาษี: ความเป็นอยู่ที่ลดลง (แต้ม) ต่อการเก็บภาษีเต็มรายได้ ภาษีร้อยละ 20 ลด 6 แต้ม', 'ภาษี'],
+  taxSvc: [45, 0, 300, 1, 'ภาษีที่ใช้กับบริการประชาชน: ความเป็นอยู่ที่ได้คืน (แต้ม) ต่อการเก็บเต็มรายได้ ภาษีร้อยละ 20 ได้คืน 9 แต้ม', 'ภาษี'],
+});
+const TAXUSE = {
+  svc: ['บริการประชาชน', 'เงินภาษีกลับไปหาคนทั้งรัฐตามจำนวนหัว ชุมชนที่จนกว่าได้คืนมากกว่าที่จ่าย ชุมชนที่รวยจ่ายมากกว่าที่ได้ และทุกชุมชนอยู่ดีขึ้นจากบริการ'],
+  court: ['ราชสำนักและขุนนาง', 'เงินภาษีทั้งหมดไปอยู่ที่ชุมชนศูนย์กลางของรัฐ ชุมชนอื่นจ่ายอย่างเดียว'],
+  keep: ['เก็บเข้าคลัง', 'เงินภาษีออกจากการใช้จ่ายของปี ไปเป็นเงินคงคลังของรัฐ'],
+};
+const TAX0 = { trad: [0.08, 'court'], feud: [0.15, 'court'], merc: [0.18, 'keep'], cap: [0.12, 'svc'], soc: [0.3, 'svc'], anar: [0, 'keep'] };
+ECO.ctax = {};
+const taxOf = s => !s || s.sys === 'anar' ? 0 : s.tax != null ? s.tax : (TAX0[s.sys] || TAX0.merc)[0];
+const taxUse = s => !s ? 'keep' : TAXUSE[s.tuse] ? s.tuse : (TAX0[s.sys] || TAX0.merc)[1];
+const taxRate = (id, s) => !s || s.sys === 'anar' ? 0 : ECO.ctax[id] != null ? ECO.ctax[id] : taxOf(s);
+
+// in the year's books, after the trade and before the well-being (called from socApply)
+function taxApply(rows, book) {
+  for (const r of rows) { r.tax = 0; r.taxBack = 0; r.taxWell = 0; r.taxRate = 0; }
+  const pools = new Map();
+  for (const r of rows) {
+    const s = r.s, t = taxRate(r.c.id, s); if (!(t > 0) || !s) continue;
+    const T = t * Math.max(0, r.inc); r.inc -= T; r.tax = T; r.taxRate = t; r.taxWell = -TU('taxWell') * t;
+    const b = book(s); b.tax = (b.tax || 0) + T; let p = pools.get(s.id); if (!p) pools.set(s.id, p = { s, T: 0, ppl: 0, rows: [] }); p.T += T;
+  }
+  for (const r of rows) { const p = r.s && pools.get(r.s.id); if (p) { p.ppl += r.people; p.rows.push(r); } }
+  for (const p of pools.values()) {
+    const use = taxUse(p.s), b = book(p.s); b.taxUse = use; b.treasury = 0;
+    if (use === 'svc') { const rate = p.T / Math.max(1e-9, p.rows.reduce((a, r) => a + Math.max(0, r.inc + r.tax), 0)); for (const r of p.rows) { const back = p.T * r.people / Math.max(1e-9, p.ppl); r.inc += back; r.taxBack = back; r.taxWell += TU('taxSvc') * rate; } }
+    else if (use === 'court') { const k = ECOX.cap.get(p.s), id = k != null && ECOX.C[k] ? ECOX.C[k].id : p.s.cap, seat = id ? p.rows.find(r => r.c.id === id) : null, to = seat || p.rows.reduce((a, r) => !a || r.people > a.people ? r : a, null); if (to) { to.inc += p.T; to.taxBack = p.T; } }
+    else b.treasury = p.T;
+  }
+}
+
+// ---- the document ----
+{
+  const ld = ecoLoad, sr = ecoSerial;
+  ecoLoad = function (b) {
+    ld(b); b = b || {};
+    ECO.ctax = {}; for (const [id, v] of Object.entries(b.ctax || {}).slice(0, 4000)) if (Number.isFinite(+v)) ECO.ctax[ecoStr(id, 120)] = clamp(+v, 0, 0.9);
+    const by = new Map((Array.isArray(b.states) ? b.states : []).filter(s => s && typeof s.id === 'string').map(s => [s.id, s]));
+    for (const s of ECO.states) { const o = by.get(s.id) || {}; s.tax = o.tax != null && Number.isFinite(+o.tax) ? clamp(+o.tax, 0, 0.9) : null; s.tuse = TAXUSE[o.tuse] ? o.tuse : ''; }
+  };
+  ecoSerial = function () { const o = sr(); if (Object.keys(ECO.ctax).length) o.ctax = { ...ECO.ctax }; return o; };
+}
+
+// ---- on the screen: a state's taxes in its form, a community's own rate in its form ----
+const taxPc = x => Math.round(x * 1000) / 10;
+function taxStateForm(s) {
+  if (s.sys === 'anar') return `<div class="tr w">ภาษี: ดินแดนที่ไม่มีรัฐไม่เก็บภาษี</div>`;
+  const dis = editable ? '' : ' disabled', d = TAX0[s.sys] || TAX0.merc, b = SOC && SOC.books.get(s.id), use = taxUse(s);
+  let h = `<div class="erow"><label>ภาษี <input type="number" data-f="stax" min="0" max="90" step="1" value="${s.tax != null ? taxPc(s.tax) : ''}" placeholder="${taxPc(d[0])}" style="width:5em"${dis}> % ของรายได้</label>`
+    + `<label>ใช้เงินภาษีกับ <select data-f="stuse"${dis}>${Object.entries(TAXUSE).map(([k, z]) => `<option value="${k}"${k === use ? ' selected' : ''}>${z[0]}</option>`).join('')}</select></label></div>`
+    + `<div class="tr w">${TAXUSE[use][1]} เว้นช่องภาษีว่างเพื่อใช้อัตราตั้งต้นของระบอบ${ESYS[s.sys][0]} (ร้อยละ ${taxPc(d[0])}) ชุมชนที่ตั้งอัตราของตัวเองใช้อัตรานั้นแทน</div>`;
+  if (b && b.tax > 0) h += `<div class="tr w">ปีนี้เก็บภาษีได้ ${socN(b.tax)} ${esc(ECO.central.name)} คิดเป็น ${taxPc(b.tax / Math.max(1e-9, b.gdp))}% ของ GDP${b.taxUse === 'keep' ? ' เข้าคลังทั้งหมด' : b.taxUse === 'court' ? ' ไปที่ชุมชนศูนย์กลาง' : ' กลับไปเป็นบริการของคนทั้งรัฐ'}</div>`;
+  return h;
+}
+$('ecobody').addEventListener('change', e => {
+  const el = e.target, f = el && el.dataset ? el.dataset.f : ''; if (!editable || (f !== 'stax' && f !== 'stuse')) return;
+  const box = el.closest('[data-s]'), s = box ? ECO.states.find(x => x.id === box.dataset.s) : null; if (!s) return;
+  if (f === 'stax') { const v = el.value.trim(); s.tax = v === '' || !Number.isFinite(+v) ? null : clamp(+v / 100, 0, 0.9); }
+  else s.tuse = TAXUSE[el.value] && el.value !== (TAX0[s.sys] || TAX0.merc)[1] ? el.value : '';
+  ecoChanged(false); ecoRender();
+});
+// a community's own rate, under its head count
+function taxCityForm() {
+  const inp = $('cfTax'); if (!inp) return; if (!sel) return;
+  const v = visibleCities().find(c => c.id === sel); if (!v) return;
+  const ec = ECON ? ECON.cities.find(c => c.id === sel) : null, s = ec && ec.st ? ECO.states.find(x => x.id === ec.st) || null : null;
+  inp.value = ECO.ctax[sel] != null ? taxPc(ECO.ctax[sel]) : ''; inp.placeholder = String(taxPc(taxOf(s)));
+  inp.disabled = !editable || !s || s.sys === 'anar';
+  $('cfTaxNote').textContent = !s ? 'ชุมชนนอกรัฐไม่เสียภาษี' : s.sys === 'anar' ? 'ดินแดนที่ไม่มีรัฐไม่เก็บภาษี' : `เว้นว่างเพื่อใช้อัตราของ${s.name} (ร้อยละ ${taxPc(taxOf(s))}) เงินภาษีใช้กับ${TAXUSE[taxUse(s)][0]}`;
+}
+if ($('cfTax')) $('cfTax').onchange = () => {
+  if (!sel || !editable) return; const v = $('cfTax').value.trim();
+  if (v === '' || !Number.isFinite(+v)) delete ECO.ctax[sel]; else ECO.ctax[sel] = clamp(+v / 100, 0, 0.9);
+  ecoChanged(false); taxCityForm();
+};
+{ const rf = refreshForm; refreshForm = function () { rf(); taxCityForm(); }; }
+// the community's card in the trade view: what it paid and what came back
+{
+  const sc = socCityHTML;
+  socCityHTML = function (k) {
+    let h = sc(k); const rows = ecoIncome(ecoGdp()), r = rows[k]; if (!h || !r || !(r.tax > 0)) return h;
+    const use = taxUse(r.s), line = `<div class="tr">ภาษี <b>${socN(r.tax)}</b> ${esc(ECO.central.name)} <span class="w">ร้อยละ ${taxPc(r.taxRate)} ของรายได้${ECO.ctax[r.c.id] != null ? ' (อัตราของชุมชนเอง)' : ''} · ใช้กับ${TAXUSE[use][0]}${r.taxBack > 0 ? ' · ได้คืน ' + socN(r.taxBack) : ''}</span></div>`;
+    const at = h.indexOf('<div class="tr">ค่าแรง'); return at >= 0 ? h.slice(0, at) + line + h.slice(at) : h + line;
+  };
+}
 return {
   destroy() { __dead = true; for (const f of __offs) f(); cancelAnimationFrame(rq); cancelAnimationFrame(fxRaf); cancelAnimationFrame(panRaf); },
   async flush() { for (const k of Object.keys(DOCS)) { clearTimeout(saveT[k]); if (dirty[k] && !saving[k]) await save(k); } await ecoFlush(); },
@@ -7231,7 +7629,7 @@ return {
   },
   recalc: () => scheduleEcon(150),
   refit,
-  test: { trv: () => trvTest(), rail: () => railTest(), routes: () => { ensureRoutes(); return visibleRoutes().map(r => { const g = geoOf(r); return { id: r.id, cls: r.cls, a: r.a, b: r.b, via: (r.via || []).map(p => [p[0], p[1]]), ok: !!(g && !g.fail), mid: g && !g.fail ? g.q[g.q.length >> 1] : null, len: g && !g.fail ? g.len : 0 }; }); }, rsel: () => rsel, tlsel: () => tlsel, mapXY: (x, y) => { const r = cv.getBoundingClientRect(); return [r.left + view.x + x * view.s, r.top + view.y + y * view.s]; }, linkVia: id => { const L = ECON && ECON.links.find(x => x.id === id); return L ? (L.via || []).map(p => [p[0], p[1]]) : null; }, linkMidMap: id => { const L = ECON && ECON.links.find(x => x.id === id); if (!L || !L.geo) return null; const q = L.geo.runs[0].q; return q[q.length >> 1]; }, reach: () => REACH ? { n: REACH.n, cells: REACH.cells.length, all: REACH.all, tint: REACH.tint } : null, tip: () => ({ shown: tip.shown, fold: TIP.fold, x: TIP.x, y: TIP.y, text: tipBody.textContent }), avoid: v => { AVOID_ON = !!v; scheduleEcon(50); }, cities: () => ECON ? ECON.cities.map((c, k) => ({ id: c.id, name: c.name, kind: c.kind, h: c.h, st: c.st, rank: c.rank, pop: c.pop, through: c.through, seat: ECOX.seat[k], short: c.short ? Object.keys(c.short).length : 0 })) : [], econ: () => ECON ? { ms: Math.round(ECON.ms), ver: ECON.ver, rounds: ECON.rounds, flows: ECON.flows.length, vol: ECON.flows.reduce((x, f) => x + f.amt, 0), goods: ECON.flows.reduce((x, f) => x + (f.cat === 'labor' ? 0 : f.amt), 0), gflows: ECON.flows.filter(f => f.cat !== 'labor').length, val: ECON.flows.reduce((x, f) => x + f.amt * ECAT[f.cat].v, 0), via: ECON.flows.filter(f => f.via).length, broker: ECON.flows.filter(f => f.broker >= 0).length, hub: ECON.flows.filter(f => f.hub).length, links: ECON.links.length, hostile: ECON.links.filter(L => L.hostile > 0).length, bad: ECON.flows.filter(f => !isFinite(f.amt) || !isFinite(f.cost)).length, cross: ECON.flows.filter(f => ECON.cities[f.from].st !== ECON.cities[f.to].st).length, rivals: ECON.flows.filter(f => { const a = ECON.cities[f.from].sto, b = ECON.cities[f.to].sto; return a && b && a !== b && (a.rel[b.id] === 'rival' || b.rel[a.id] === 'rival'); }).length } : null, gdp: () => ecoIncome(ecoGdp()).map(r => ({ id: r.c.id, name: r.c.name, st: r.s ? r.s.id : '.', gdp: r.gdp, inc: r.inc, people: r.people, well: r.well, well0: r.well0, trvWell: r.trvWell || 0, met: r.met, rich: r.rich, reg: r.c.reg, lab: r.c.lab, reach: r.c.reach, lack: r.c.land ? r.c.land.lack : 0, att: r.c.att, work: r.c.work, cls: r.cls, clsW: r.clsW, metB: r.metB, metO: r.metO, rich0: r.c.rich0, stable: r.stable, sur: r.sur, why: r.wellWhy, made: r.made, tw: (() => { const A = climEnsure(); return A && A.tw ? A.tw[r.c.h] : null; })(), demo: r.demo, tourWhy: r.tourWhy, pol: r.c.pol ? { k: r.c.pol.k, tools: [...r.c.pol.tools], top: [...r.c.pol.top], def1: r.c.pol.def1 } : null })), soc: () => { ecoIncome(ecoGdp()); return SOC ? { mean: SOC.mean, tot: SOC.tot, cs: SOC.cls ? clsSum(SOC.cls) : null, fx: ECON && ECON.fx ? [...ECON.fx] : [], books: [...SOC.books.values()].map(b => ({ id: b.s.id, out: b.out, inn: b.inn, gdp: b.gdp, def: b.def, pen: b.pen, net: b.net, lost: b.lost, won: b.won, tourIn: b.tourIn, tourOut: b.tourOut, stable: b.stable, fx: b.fx, cs: b.cls ? clsSum(b.cls) : null, plan: b.plan ? { k: b.plan.k, tools: [...b.plan.tools], top: [...b.plan.top], def1: b.plan.def1 } : null })) } : null; }, grid: () => ({ N, COLS, ROWS }), labor: () => { const rows = ecoIncome(ecoGdp()); return SLAVE ? { tot: SLAVE.tot, price: SLAVE.price, mean: SLAVE.mean, flows: SLAVE.flows.map(f => ({ a: ECON.cities[f.a].id, b: ECON.cities[f.b].id, n: f.n, t: f.t, h: f.h, by: f.by, legs: f.way.length, mids: f.mids.map(k => ECON.cities[k].id) })), rows: rows.map(r => ({ id: r.c.id, st: r.c.st, people: r.people, inc: r.inc, held: r.slave ? r.slave.held : 0, out: r.slave ? r.slave.out : 0, bought: r.slave ? r.slave.bought : 0 })) } : null; }, fieldsOf: id => { if (!ECON || !ECON.land) return null; const k = ECON.cities.findIndex(c => c.id === id), L = ECON.land; let a = 0, b = 0; for (let i = 0; i < N; i++) if (L.own[i] === k && L.use[i] >= 1 && L.use[i] !== 5) { b++; if (ECON.hin[i] === k) a++; } return [a, b]; }, crossBasic: () => { if (!ECON) return null; let x = 0, all = 0; for (const f of ECON.flows) { if (!SOC_BASIC.has(f.cat)) continue; all += f.amt; const a = ECON.cities[f.from].sto, b = ECON.cities[f.to].sto; if (a !== b) x += f.amt; } return { cross: x, all }; }, reachOf: id => { if (!ECON || !ECON.hin) return null; const k = ECON.cities.findIndex(c => c.id === id); if (k < 0) return null; const P = reachOf(k); return { ni: P.ni, no: P.no, reach: ECON.cities[k].reach, sel: reachSel() }; }, cityBook: id => { if (!ECON) return null; const k = ECON.cities.findIndex(c => c.id === id); if (k < 0) return null; const o = {}; for (const cat of ECATS) { const b = ECON.MK[k][cat]; if (b && (b[0] || b[1])) o[cat] = Array.from(b, v => +v.toFixed(2)); } const c = ECON.cities[k]; return { o, foodCut: c.foodCut, land: c.land, pop: c.pop, unit: ECO.unit, cm: c.cm, ki: c.ki, kind: c.kind, goods: Object.fromEntries([...ECON.prod[k]].map(([g, v]) => [g, +v.toFixed(3)])), need: Object.fromEntries(Object.entries(ECON.need[k]).map(([g, v]) => [g, +v.toFixed(2)])) }; }, ptOwners: () => visiblePoints().map(p => { const h = p.h != null ? p.h : hexAt(p.x, p.y), k = ECON && ECON.hin && h >= 0 ? ECON.hin[h] : -1; return [p.k, p.name || '', h, h >= 0 ? eff(h) : '', k >= 0 ? ECON.cities[k].name : null]; }), climTw: () => { const A = climEnsure(); return Array.from(A.tw, v => Math.round(v)); }, ground: () => groundNow().join(''), harv: id => { if (!ECON) return null; const c = ECON.cities.find(c => c.id === id); return c && c.harv ? JSON.parse(JSON.stringify(c.harv)) : null; }, harvAll: () => ECON ? ECON.cities.map(c => c.harv ? [c.id, c.harv.L, c.harv.hexes, c.harv.d, c.harv.eff.grain, c.harv.est, c.pop] : null).filter(Boolean) : [], harvPasses: () => ECON ? !!ECON.harvL : null, worldBook: () => { if (!ECON) return null; const o = {}; for (const cat of ECATS) { const t = [0, 0, 0, 0]; for (let k = 0; k < ECON.cities.length; k++) { const b = ECON.MK[k][cat]; if (b) for (let q = 0; q < 4; q++) t[q] += b[q]; } if (t[0] || t[1]) o[cat] = t.map(v => +v.toFixed(1)); } return o; }, needOf: (id, cat) => { if (!ECON) return null; const k = ECON.cities.findIndex(c => c.id === id); return k < 0 ? null : ECON.need[k][cat]; }, market: id => { if (!ECON) return null; const k = ECON.cities.findIndex(c => c.id === id); if (k < 0) return null; const o = {}; for (const cat of ECATS) { const b = ECON.MK[k][cat]; if (b) o[cat] = Array.from(b); } return { book: o, prod: ECON.prod[k].size, price: Object.assign({}, ECON.P1[k]) }; }, nt: (a, b) => { if (!ECON) return null; const i = ECON.cities.findIndex(c => c.id === a), j = ECON.cities.findIndex(c => c.id === b); return i < 0 || j < 0 ? null : ECON.NT[i][j]; }, lines: () => ECON ? ECON.links.filter(L => !L.fail).map(L => ({ a: ECON.cities[L.ia].id, b: ECON.cities[L.ib].id, wet: L.wet, dry: L.dry })) : [], bridges: () => { const r = cv.getBoundingClientRect(), out = []; for (const rt of visibleRoutes()) { if (rt.t !== 'road') continue; const g = geoOf(rt); if (!g || g.fail) continue; for (const b of g.bridges) { let d = Infinity; for (let i = 0; i + 1 < g.q.length; i++) { const px = g.q[i][0], py = g.q[i][1], dx = g.q[i + 1][0] - px, dy = g.q[i + 1][1] - py, l2 = dx * dx + dy * dy, w = l2 > 0 ? Math.max(0, Math.min(1, ((b.x - px) * dx + (b.y - py) * dy) / l2)) : 0; d = Math.min(d, Math.hypot(px + dx * w - b.x, py + dy * w - b.y)); } out.push({ x: r.left + view.x + b.x * view.s, y: r.top + view.y + b.y * view.s, off: d, a: b.a }); } } return out; }, linkCard: li => { const d = document.createElement('div'); d.innerHTML = tradeLinkHTML(ECON.links[li]); return d.textContent; }, cityCard: k => { const d = document.createElement('div'); d.innerHTML = tradeCityHTML(k); return d.textContent; }, drawOrder: () => { const seq = {}; let n = 0; const g = drawOverGround, r = drawRoutes, t = drawTrade, m = drawNames; drawOverGround = function () { seq.ground = ++n; return g.apply(this, arguments); }; drawRoutes = function () { seq.routes = ++n; return r.apply(this, arguments); }; drawTrade = function () { seq.trade = ++n; return t.apply(this, arguments); }; drawNames = function () { seq.names = ++n; return m.apply(this, arguments); }; try { draw(); } finally { drawOverGround = g; drawRoutes = r; drawTrade = t; drawNames = m; } return seq; }, landSheet: () => { const cvs = landSheet(); return { on: !!cvs, any: landAny, key: landKey, w: cvs ? cvs.width : 0, ms: Math.round(landMs) }; }, landPx: i => { if (!landSheet()) return null; return Array.from(LLC.getImageData(Math.round(CX[i] * LS), Math.round(CY[i] * LS), 1, 1).data); }, landUse: () => { landCompute(); return LAND ? { use: Array.from(LAND.use), own: Array.from(LAND.own) } : null; }, slaveLoad: () => { if (!ECON) return null; const S = slaveNow().S; return S ? { links: [...S.load].map(([li, x]) => ({ li, fwd: x[0], back: x[1], a: ECON.links[li].ia, b: ECON.links[li].ib })), tRef: S.tRef, haul: S.tot.haul } : null; }, land: () => { landCompute(); return LAND ? { tot: LAND.tot, total: LAND.total, crop: LAND.crop, haHex: LAND.haHex, short: LAND.short, rows: LAND.rows.map((r, k) => ({ id: ECON.cities[k].id, people: Math.round(ECON.cities[k].pop * ECO.unit), ...r })) } : null; }, eco: () => JSON.parse(JSON.stringify(ecoSerial())), ecoSet: b => { ecoLoad(b); ecoChanged(true); ecoRender(); }, orgs: () => [...orgValues(ecoIncome(ecoGdp()))].map(([id, v]) => ({ id, ...v })), cityXY: id => { const c = visibleCities().find(x => x.id === id), r = cv.getBoundingClientRect(); return c ? [r.left + view.x + c.x * view.s, r.top + view.y + c.y * view.s] : null; }, hexXY: i => { const r = cv.getBoundingClientRect(); return [r.left + view.x + CX[i] * view.s, r.top + view.y + CY[i] * view.s]; }, flowsOf: () => ECON ? ECON.flows.map(f => ({ a: ECON.cities[f.from].id, b: ECON.cities[f.to].id, cat: f.cat, amt: f.amt, org: f.org || null, broker: f.broker })) : [], tune: () => ({ ...ECO.tune }), pt: (fx, fy) => { const r = cv.getBoundingClientRect(); return [r.left + view.x + fx * G.w * view.s, r.top + view.y + fy * G.h * view.s]; }, way: (a, b) => { const C = ECON.cities, i = C.findIndex(c => c.name === a), j = C.findIndex(c => c.name === b); if (i < 0 || j < 0 || !ECOX.on) return null; const w = ecoWay(i, j); return [a, ...(w.mids || []).map(k => C[k].name), b].join('>') + ' t=' + w.t.toFixed(1) + ' direct=' + ECOX.NT[i][j].toFixed(1); }, linkAt: k => { const L = ECON && ECON.links[k]; if (!L || !L.states) return null; const t = L.states[L.states.length >> 1], h = t >> 1, r = cv.getBoundingClientRect(); return [r.left + view.x + (t & 1 && NAVR[h] ? NPX[h] : CX[h]) * view.s, r.top + view.y + (t & 1 && NAVR[h] ? NPY[h] : CY[h]) * view.s, L.id, L.danger, L.dauto ? L.dauto.lv : -1]; } },
+  test: { trv: () => trvTest(), rail: () => railTest(), seas: () => ({ any: seasAny, on: clSeas, lines: seasLines().length, R: (() => { const R = seasRatio(); if (!R) return null; let lo = 9, hi = 0; for (let i = 0; i < N; i++) if (!isW(eff(i))) { lo = Math.min(lo, R.r[i]); hi = Math.max(hi, R.r[i]); } return [lo, hi]; })() }), nav: () => { let a = 0, b = 0; for (let i = 0; i < N; i++) { if (NAVR[i] === 1) a++; else if (NAVR[i] === 2) b++; } return { small: a, big: b }; }, comFx: id => { const c = visibleCities().find(v => v.id === id); return c ? comFx(id, c.kind) : null; }, routes: () => { ensureRoutes(); return visibleRoutes().map(r => { const g = geoOf(r); return { id: r.id, cls: r.cls, a: r.a, b: r.b, via: (r.via || []).map(p => [p[0], p[1]]), ok: !!(g && !g.fail), mid: g && !g.fail ? g.q[g.q.length >> 1] : null, len: g && !g.fail ? g.len : 0 }; }); }, rsel: () => rsel, tlsel: () => tlsel, mapXY: (x, y) => { const r = cv.getBoundingClientRect(); return [r.left + view.x + x * view.s, r.top + view.y + y * view.s]; }, linkVia: id => { const L = ECON && ECON.links.find(x => x.id === id); return L ? (L.via || []).map(p => [p[0], p[1]]) : null; }, linkMidMap: id => { const L = ECON && ECON.links.find(x => x.id === id); if (!L || !L.geo) return null; const q = L.geo.runs[0].q; return q[q.length >> 1]; }, reach: () => REACH ? { n: REACH.n, cells: REACH.cells.length, all: REACH.all, tint: REACH.tint } : null, tip: () => ({ shown: tip.shown, fold: TIP.fold, x: TIP.x, y: TIP.y, text: tipBody.textContent }), avoid: v => { AVOID_ON = !!v; scheduleEcon(50); }, cities: () => ECON ? ECON.cities.map((c, k) => ({ id: c.id, name: c.name, kind: c.kind, h: c.h, st: c.st, rank: c.rank, pop: c.pop, through: c.through, seat: ECOX.seat[k], short: c.short ? Object.keys(c.short).length : 0 })) : [], econ: () => ECON ? { ms: Math.round(ECON.ms), ver: ECON.ver, rounds: ECON.rounds, flows: ECON.flows.length, vol: ECON.flows.reduce((x, f) => x + f.amt, 0), goods: ECON.flows.reduce((x, f) => x + (f.cat === 'labor' ? 0 : f.amt), 0), gflows: ECON.flows.filter(f => f.cat !== 'labor').length, val: ECON.flows.reduce((x, f) => x + f.amt * ECAT[f.cat].v, 0), via: ECON.flows.filter(f => f.via).length, broker: ECON.flows.filter(f => f.broker >= 0).length, hub: ECON.flows.filter(f => f.hub).length, links: ECON.links.length, hostile: ECON.links.filter(L => L.hostile > 0).length, bad: ECON.flows.filter(f => !isFinite(f.amt) || !isFinite(f.cost)).length, cross: ECON.flows.filter(f => ECON.cities[f.from].st !== ECON.cities[f.to].st).length, rivals: ECON.flows.filter(f => { const a = ECON.cities[f.from].sto, b = ECON.cities[f.to].sto; return a && b && a !== b && (a.rel[b.id] === 'rival' || b.rel[a.id] === 'rival'); }).length } : null, gdp: () => ecoIncome(ecoGdp()).map(r => ({ id: r.c.id, name: r.c.name, st: r.s ? r.s.id : '.', gdp: r.gdp, inc: r.inc, people: r.people, well: r.well, well0: r.well0, trvWell: r.trvWell || 0, met: r.met, rich: r.rich, reg: r.c.reg, lab: r.c.lab, reach: r.c.reach, lack: r.c.land ? r.c.land.lack : 0, att: r.c.att, work: r.c.work, cls: r.cls, clsW: r.clsW, metB: r.metB, metO: r.metO, rich0: r.c.rich0, stable: r.stable, sur: r.sur, why: r.wellWhy, made: r.made, tw: (() => { const A = climEnsure(); return A && A.tw ? A.tw[r.c.h] : null; })(), demo: r.demo, tourWhy: r.tourWhy, pol: r.c.pol ? { k: r.c.pol.k, tools: [...r.c.pol.tools], top: [...r.c.pol.top], def1: r.c.pol.def1 } : null })), soc: () => { ecoIncome(ecoGdp()); return SOC ? { mean: SOC.mean, tot: SOC.tot, cs: SOC.cls ? clsSum(SOC.cls) : null, fx: ECON && ECON.fx ? [...ECON.fx] : [], books: [...SOC.books.values()].map(b => ({ id: b.s.id, out: b.out, inn: b.inn, gdp: b.gdp, def: b.def, pen: b.pen, net: b.net, lost: b.lost, won: b.won, tourIn: b.tourIn, tourOut: b.tourOut, stable: b.stable, fx: b.fx, cs: b.cls ? clsSum(b.cls) : null, plan: b.plan ? { k: b.plan.k, tools: [...b.plan.tools], top: [...b.plan.top], def1: b.plan.def1 } : null })) } : null; }, grid: () => ({ N, COLS, ROWS }), labor: () => { const rows = ecoIncome(ecoGdp()); return SLAVE ? { tot: SLAVE.tot, price: SLAVE.price, mean: SLAVE.mean, flows: SLAVE.flows.map(f => ({ a: ECON.cities[f.a].id, b: ECON.cities[f.b].id, n: f.n, t: f.t, h: f.h, by: f.by, legs: f.way.length, mids: f.mids.map(k => ECON.cities[k].id) })), rows: rows.map(r => ({ id: r.c.id, st: r.c.st, people: r.people, inc: r.inc, held: r.slave ? r.slave.held : 0, out: r.slave ? r.slave.out : 0, bought: r.slave ? r.slave.bought : 0 })) } : null; }, fieldsOf: id => { if (!ECON || !ECON.land) return null; const k = ECON.cities.findIndex(c => c.id === id), L = ECON.land; let a = 0, b = 0; for (let i = 0; i < N; i++) if (L.own[i] === k && L.use[i] >= 1 && L.use[i] !== 5) { b++; if (ECON.hin[i] === k) a++; } return [a, b]; }, crossBasic: () => { if (!ECON) return null; let x = 0, all = 0; for (const f of ECON.flows) { if (!SOC_BASIC.has(f.cat)) continue; all += f.amt; const a = ECON.cities[f.from].sto, b = ECON.cities[f.to].sto; if (a !== b) x += f.amt; } return { cross: x, all }; }, reachOf: id => { if (!ECON || !ECON.hin) return null; const k = ECON.cities.findIndex(c => c.id === id); if (k < 0) return null; const P = reachOf(k); return { ni: P.ni, no: P.no, reach: ECON.cities[k].reach, sel: reachSel() }; }, cityBook: id => { if (!ECON) return null; const k = ECON.cities.findIndex(c => c.id === id); if (k < 0) return null; const o = {}; for (const cat of ECATS) { const b = ECON.MK[k][cat]; if (b && (b[0] || b[1])) o[cat] = Array.from(b, v => +v.toFixed(2)); } const c = ECON.cities[k]; return { o, foodCut: c.foodCut, land: c.land, pop: c.pop, unit: ECO.unit, cm: c.cm, ki: c.ki, kind: c.kind, goods: Object.fromEntries([...ECON.prod[k]].map(([g, v]) => [g, +v.toFixed(3)])), need: Object.fromEntries(Object.entries(ECON.need[k]).map(([g, v]) => [g, +v.toFixed(2)])) }; }, ptOwners: () => visiblePoints().map(p => { const h = p.h != null ? p.h : hexAt(p.x, p.y), k = ECON && ECON.hin && h >= 0 ? ECON.hin[h] : -1; return [p.k, p.name || '', h, h >= 0 ? eff(h) : '', k >= 0 ? ECON.cities[k].name : null]; }), climTw: () => { const A = climEnsure(); return Array.from(A.tw, v => Math.round(v)); }, ground: () => groundNow().join(''), harv: id => { if (!ECON) return null; const c = ECON.cities.find(c => c.id === id); return c && c.harv ? JSON.parse(JSON.stringify(c.harv)) : null; }, harvAll: () => ECON ? ECON.cities.map(c => c.harv ? [c.id, c.harv.L, c.harv.hexes, c.harv.d, c.harv.eff.grain, c.harv.est, c.pop] : null).filter(Boolean) : [], harvPasses: () => ECON ? !!ECON.harvL : null, worldBook: () => { if (!ECON) return null; const o = {}; for (const cat of ECATS) { const t = [0, 0, 0, 0]; for (let k = 0; k < ECON.cities.length; k++) { const b = ECON.MK[k][cat]; if (b) for (let q = 0; q < 4; q++) t[q] += b[q]; } if (t[0] || t[1]) o[cat] = t.map(v => +v.toFixed(1)); } return o; }, needOf: (id, cat) => { if (!ECON) return null; const k = ECON.cities.findIndex(c => c.id === id); return k < 0 ? null : ECON.need[k][cat]; }, market: id => { if (!ECON) return null; const k = ECON.cities.findIndex(c => c.id === id); if (k < 0) return null; const o = {}; for (const cat of ECATS) { const b = ECON.MK[k][cat]; if (b) o[cat] = Array.from(b); } return { book: o, prod: ECON.prod[k].size, price: Object.assign({}, ECON.P1[k]) }; }, nt: (a, b) => { if (!ECON) return null; const i = ECON.cities.findIndex(c => c.id === a), j = ECON.cities.findIndex(c => c.id === b); return i < 0 || j < 0 ? null : ECON.NT[i][j]; }, lines: () => ECON ? ECON.links.filter(L => !L.fail).map(L => ({ a: ECON.cities[L.ia].id, b: ECON.cities[L.ib].id, wet: L.wet, dry: L.dry })) : [], bridges: () => { const r = cv.getBoundingClientRect(), out = []; for (const rt of visibleRoutes()) { if (rt.t !== 'road') continue; const g = geoOf(rt); if (!g || g.fail) continue; for (const b of g.bridges) { let d = Infinity; for (let i = 0; i + 1 < g.q.length; i++) { const px = g.q[i][0], py = g.q[i][1], dx = g.q[i + 1][0] - px, dy = g.q[i + 1][1] - py, l2 = dx * dx + dy * dy, w = l2 > 0 ? Math.max(0, Math.min(1, ((b.x - px) * dx + (b.y - py) * dy) / l2)) : 0; d = Math.min(d, Math.hypot(px + dx * w - b.x, py + dy * w - b.y)); } out.push({ x: r.left + view.x + b.x * view.s, y: r.top + view.y + b.y * view.s, off: d, a: b.a }); } } return out; }, linkCard: li => { const d = document.createElement('div'); d.innerHTML = tradeLinkHTML(ECON.links[li]); return d.textContent; }, cityCard: k => { const d = document.createElement('div'); d.innerHTML = tradeCityHTML(k); return d.textContent; }, drawOrder: () => { const seq = {}; let n = 0; const g = drawOverGround, r = drawRoutes, t = drawTrade, m = drawNames; drawOverGround = function () { seq.ground = ++n; return g.apply(this, arguments); }; drawRoutes = function () { seq.routes = ++n; return r.apply(this, arguments); }; drawTrade = function () { seq.trade = ++n; return t.apply(this, arguments); }; drawNames = function () { seq.names = ++n; return m.apply(this, arguments); }; try { draw(); } finally { drawOverGround = g; drawRoutes = r; drawTrade = t; drawNames = m; } return seq; }, landSheet: () => { const cvs = landSheet(); return { on: !!cvs, any: landAny, key: landKey, w: cvs ? cvs.width : 0, ms: Math.round(landMs) }; }, landPx: i => { if (!landSheet()) return null; return Array.from(LLC.getImageData(Math.round(CX[i] * LS), Math.round(CY[i] * LS), 1, 1).data); }, landUse: () => { landCompute(); return LAND ? { use: Array.from(LAND.use), own: Array.from(LAND.own) } : null; }, slaveLoad: () => { if (!ECON) return null; const S = slaveNow().S; return S ? { links: [...S.load].map(([li, x]) => ({ li, fwd: x[0], back: x[1], a: ECON.links[li].ia, b: ECON.links[li].ib })), tRef: S.tRef, haul: S.tot.haul } : null; }, land: () => { landCompute(); return LAND ? { tot: LAND.tot, total: LAND.total, crop: LAND.crop, haHex: LAND.haHex, short: LAND.short, rows: LAND.rows.map((r, k) => ({ id: ECON.cities[k].id, people: Math.round(ECON.cities[k].pop * ECO.unit), ...r })) } : null; }, eco: () => JSON.parse(JSON.stringify(ecoSerial())), rivers: () => ED.rivers.map(U => ({ id: U.id, kind: U.kind, n: U.pts.length, pts: U.pts.map(q => [q[0], q[1]]) })), riverDraw: (pts, kind) => { const ops = riverJoin(pts, kind); doOp(ops.length > 1 ? { k: 'm', ops } : ops[0]); return ops.length; }, endAt: (x, y, ex) => endAt(x, y, ex), pts: () => ED.points.size, iptool: () => iptool, cityAt: id => { const c = visibleCities().find(x => x.id === id); return c ? [c.x, c.y] : null; }, R: () => R, vs: () => view.s, tax: () => { const rows = ecoIncome(ecoGdp()); return { rows: rows.map(r => ({ id: r.c.id, kind: r.c.kind, s: r.s ? r.s.id : null, tax: r.tax || 0, back: r.taxBack || 0, rate: r.taxRate || 0, well: r.well, inc: r.inc, gdp: r.gdp, people: r.people, tw: r.taxWell || 0 })), books: SOC ? [...SOC.books.values()].map(b => ({ id: b.s.id, sys: b.s.sys, tax: b.tax || 0, use: b.taxUse || '', tr: b.treasury || 0, gdp: b.gdp })) : [] }; }, ecoSet: b => { ecoLoad(b); ecoChanged(true); ecoRender(); }, orgs: () => [...orgValues(ecoIncome(ecoGdp()))].map(([id, v]) => ({ id, ...v })), cityXY: id => { const c = visibleCities().find(x => x.id === id), r = cv.getBoundingClientRect(); return c ? [r.left + view.x + c.x * view.s, r.top + view.y + c.y * view.s] : null; }, hexXY: i => { const r = cv.getBoundingClientRect(); return [r.left + view.x + CX[i] * view.s, r.top + view.y + CY[i] * view.s]; }, flowsOf: () => ECON ? ECON.flows.map(f => ({ a: ECON.cities[f.from].id, b: ECON.cities[f.to].id, cat: f.cat, amt: f.amt, org: f.org || null, broker: f.broker })) : [], tune: () => ({ ...ECO.tune }), pt: (fx, fy) => { const r = cv.getBoundingClientRect(); return [r.left + view.x + fx * G.w * view.s, r.top + view.y + fy * G.h * view.s]; }, way: (a, b) => { const C = ECON.cities, i = C.findIndex(c => c.name === a), j = C.findIndex(c => c.name === b); if (i < 0 || j < 0 || !ECOX.on) return null; const w = ecoWay(i, j); return [a, ...(w.mids || []).map(k => C[k].name), b].join('>') + ' t=' + w.t.toFixed(1) + ' direct=' + ECOX.NT[i][j].toFixed(1); }, linkAt: k => { const L = ECON && ECON.links[k]; if (!L || !L.states) return null; const t = L.states[L.states.length >> 1], h = t >> 1, r = cv.getBoundingClientRect(); return [r.left + view.x + (t & 1 && NAVR[h] ? NPX[h] : CX[h]) * view.s, r.top + view.y + (t & 1 && NAVR[h] ? NPY[h] : CY[h]) * view.s, L.id, L.danger, L.dauto ? L.dauto.lv : -1]; } },
   clim: () => { const A = climEnsure(), land = []; for (let i = 0; i < N; i++) if (!isNaN(A.h[i])) land.push(i); const mean = f => land.reduce((a, i) => a + f(i), 0) / (land.length || 1), band = (f, lo, hi) => { const q = land.filter(i => CY[i] / G.h >= lo && CY[i] / G.h < hi); return q.length ? q.reduce((a, i) => a + f(i), 0) / q.length : null; };
     return { seasons: A.seas ? A.seas.map((s, k) => ({ id: s.id, name: s.name, t: mean(i => A.S[k].t[i]), p: mean(i => A.S[k].p[i]), north: band(i => A.S[k].t[i], 0, 0.33), south: band(i => A.S[k].t[i], 0.67, 1.01), wind: clWindOf(s) })) : null, p: mean(i => A.p[i]), ai: mean(i => Math.min(5, A.ai[i])), f: mean(i => A.f[i]), grow: A.grow ? mean(i => A.grow[i]) : null, lat: [clLat0(), clLat1()], land: land.length, bad: land.filter(i => !isFinite(A.ts[i]) || !isFinite(A.tw[i]) || !isFinite(A.p[i]) || !isFinite(A.f[i])).length, sum: A.S ? mean(i => Math.abs(A.S.reduce((a, S) => a + S.p[i], 0) - A.p[i])) : 0 }; },
   climHex: i => { const A = climEnsure(); return isNaN(A.h[i]) ? null : { h: A.h[i], ts: A.ts[i], tw: A.tw[i], p: A.p[i], ai: A.ai[i], f: A.f[i], grow: A.grow ? A.grow[i] : null, s: A.S ? A.S.map(S => [Math.round(S.t[i] * 10) / 10, Math.round(S.p[i])]) : null }; },

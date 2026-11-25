@@ -233,8 +233,88 @@ function finishRiver() {
   const pts = [];
   for (const p of riv.pts) if (!pts.length || Math.hypot(p[0] - pts[pts.length - 1][0], p[1] - pts[pts.length - 1][1]) >= 1.5) pts.push([r1(p[0]), r1(p[1])]);
   const kind = riv.kind; riv = null;
-  if (pts.length >= 2) doOp({ k: 'r+', r: { id: uid('r'), kind, pts } });
+  if (pts.length >= 2) { const ops = riverJoin(pts, kind); doOp(ops.length > 1 ? { k: 'm', ops } : ops[0]); }
   updateHistory(); requestDraw();
+}
+// v0.18.5, the owner's ask: rivers drawn to meet join up, and a river drawn over an older one takes its place along the stretch it
+// covers. The river drawn last is the one that stays: where it runs along an older river of the user's for at least JOIN_RUN, that
+// stretch of the older one goes and what is left of it is joined to the new one at the cut; a stretch of the map's own river under
+// it is hidden the way the eraser hides one. A new end close to a river (JOIN_SNAP on screen) is put on that river; close to the end
+// of a river of the same kind, the two become one line. A river that only crosses another is left alone. Distances are Claude's.
+const JOIN_SNAP = 12, JOIN_RUN = 1.2;
+function denseOf(pts, step) {
+  const out = []; for (let i = 0; i + 1 < pts.length; i++) { const a = pts[i], b = pts[i + 1], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / step)); for (let s = 0; s < n; s++) out.push([a[0] + (b[0] - a[0]) * s / n, a[1] + (b[1] - a[1]) * s / n]); }
+  if (pts.length) out.push([pts[pts.length - 1][0], pts[pts.length - 1][1]]); return out;
+}
+function nearGrid(ps) {                              // points by cells of 4 units, for the nearest point and its distance
+  const g = new Map(); ps.forEach((p, i) => { const k = Math.floor(p[0] / 4) * 8192 + Math.floor(p[1] / 4); let c = g.get(k); if (!c) g.set(k, c = []); c.push(i); });
+  return (x, y, lim) => { let bd = lim, bi = -1; const r = Math.ceil(lim / 4); for (let gx = Math.floor(x / 4) - r; gx <= Math.floor(x / 4) + r; gx++) for (let gy = Math.floor(y / 4) - r; gy <= Math.floor(y / 4) + r; gy++) { const c = g.get(gx * 8192 + gy); if (c) for (const i of c) { const d = Math.hypot(ps[i][0] - x, ps[i][1] - y); if (d < bd) { bd = d; bi = i; } } } return bi < 0 ? null : { i: bi, d: bd, p: ps[bi] }; };
+}
+const thin = ps => { const o = []; for (const p of ps) if (!o.length || Math.hypot(p[0] - o[o.length - 1][0], p[1] - o[o.length - 1][1]) >= 1.5) o.push([r1(p[0]), r1(p[1])]); if (ps.length && o.length) { const e = ps[ps.length - 1]; o[o.length - 1] = [r1(e[0]), r1(e[1])]; } return o; };
+function riverJoin(pts0, kind) {
+  const W = (RK[kind] || RK.river).w, rem = [], add = [], snap = Math.max(2.5, JOIN_SNAP / view.s), minRun = JOIN_RUN * R;
+  let pts = pts0.map(p => [p[0], p[1]]); const gone = new Set(); let merged = 0, cut = 0;
+  // the ends: onto a river close by; onto the end of one of the same kind, as one line
+  const lines = [];                                  // every river now shown, as points: the user's (with their ends) and the map's
+  for (const U of ED.rivers) { const d = RDER.get(U.id); if (d) lines.push({ U, q: d.q }); }
+  for (const r of BRIV) for (const u of riverRuns(r)) lines.push({ U: null, q: u.q });
+  const endSnap = (p, first) => {
+    let best = null;
+    for (const L of lines) {
+      if (L.U && gone.has(L.U.id)) continue;
+      if (L.U && L.U.kind === kind) for (const [e, atStart] of [[L.U.pts[0], true], [L.U.pts[L.U.pts.length - 1], false]]) { const d = Math.hypot(e[0] - p[0], e[1] - p[1]); if (d <= snap && (!best || d < best.d - 0.01 || !best.U)) best = { d, p: e, U: L.U, atStart }; }
+      for (const q of L.q) { const d = Math.hypot(q[0] - p[0], q[1] - p[1]); if (d <= snap && (!best || d < best.d - 0.5)) best = { d, p: q }; }
+    }
+    if (!best) return;
+    if (best.U) {                                    // the two become one: the old line, then the new
+      const U = best.U, up = U.pts.map(q => [q[0], q[1]]); gone.add(U.id); merged++;
+      rem.push(U);
+      if (first) pts = (best.atStart ? up.reverse() : up).concat(pts.slice(1));
+      else pts = pts.slice(0, -1).concat(best.atStart ? up : up.reverse());
+    } else { if (first) pts[0] = [best.p[0], best.p[1]]; else pts[pts.length - 1] = [best.p[0], best.p[1]]; merged++; }
+  };
+  endSnap(pts[0], true); endSnap(pts[pts.length - 1], false);
+  // the stretches the new river runs along
+  const dense = denseOf(smoothLine(pts), 0.6), near = nearGrid(dense);
+  const runsOf = (ps, covered) => {                  // the covered stretches long enough to count, as [from, to] in ps
+    const out = []; let a = -1;
+    for (let i = 0; i <= ps.length; i++) { const on = i < ps.length && covered[i]; if (on && a < 0) a = i; if (!on && a >= 0) { let len = 0; for (let k = a; k < i - 1; k++) len += Math.hypot(ps[k + 1][0] - ps[k][0], ps[k + 1][1] - ps[k][1]); if (len >= minRun) out.push([a, i - 1]); a = -1; } }
+    return out;
+  };
+  const order = ED.rivers.map((U, at) => ({ U, at })).filter(x => !gone.has(x.U.id)).sort((x, y) => y.at - x.at);   // last first: the places stay right
+  for (const { U, at } of order) {
+    const ovR = (W + (RK[U.kind] || RK.river).w) / 2 + 0.9, ps = denseOf(U.pts, 0.8), cov = ps.map(p => !!near(p[0], p[1], ovR)), runs = runsOf(ps, cov);
+    if (!runs.length) continue;
+    const off = new Uint8Array(ps.length); for (const [a, b] of runs) for (let i = a; i <= b; i++) off[i] = 1;
+    rem.push(U); cut++;
+    let cur = [], cutBefore = false;
+    const flush = cutAfter => {
+      if (cur.length) {
+        const piece = cur.slice();
+        if (cutBefore) { const m = near(piece[0][0], piece[0][1], 1e3); if (m) piece.unshift(m.p); }
+        if (cutAfter) { const m = near(piece[piece.length - 1][0], piece[piece.length - 1][1], 1e3); if (m) piece.push(m.p); }
+        const t = thin(piece); if (t.length >= 2) add.push({ k: 'r+', r: { id: uid('r'), kind: U.kind, pts: t } });
+      }
+      cur = [];
+    };
+    for (let i = 0; i < ps.length; i++) { if (off[i]) { if (cur.length) flush(true); cutBefore = true; continue; } cur.push(ps[i]); }
+    flush(false);
+  }
+  // the map's own rivers under the new one: their stretches hidden hex by hex, as the eraser does
+  const hide = new Set();
+  BRIV.forEach((r, k) => {
+    if (!hits(r.bb, ...bbox(dense, 6))) return;
+    const ovR = (W + r.w) / 2 + 0.9, idx = [], ps = [];
+    for (let j = r.s0; j < r.s1; j++) if (!sampleOff(j)) { idx.push(j); ps.push([BS.x[j], BS.y[j]]); }
+    const cov = ps.map(p => !!near(p[0], p[1], ovR));
+    for (const [a, b] of runsOf(ps, cov)) for (let i = a; i <= b; i++) { const h = BS.hex[idx[i]]; if (h >= 0) hide.add(k * N + h); }
+  });
+  const ops = rem.map(U => ({ U, at: ED.rivers.indexOf(U) })).sort((x, y) => y.at - x.at).map(({ U, at }) => ({ k: 'r-', r: { id: U.id, kind: U.kind, pts: U.pts }, at }));   // the highest place first, so each place holds
+  ops.push(...add);
+  if (hide.size) { const on = [...hide].filter(key => !HIDK.has(key)); if (on.length) { ops.push({ k: 'rh', on, off: [] }); cut++; } }
+  ops.push({ k: 'r+', r: { id: uid('r'), kind, pts: thin(pts) } });
+  if (cut) flash('แม่น้ำที่วาดใหม่แทนที่ช่วงที่วาดทับแล้ว'); else if (merged) flash('เชื่อมกับแม่น้ำเดิมแล้ว');
+  return ops;
 }
 function cancelRiver() { riv = null; updateHistory(); requestDraw(); }
 

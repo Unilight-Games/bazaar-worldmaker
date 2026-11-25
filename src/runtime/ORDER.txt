@@ -37,4 +37,7 @@
 29h-harvest.js
 29i-features.js
 29j-travel.js
+29k-community.js
+29l-season-view.js
+29m-tax.js
 30-api.js

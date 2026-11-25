@@ -8,10 +8,10 @@ function econCompute() {
   ecoPrep(); ecoScale();
   const cities = visibleCities().map(c => {
     const h = landHex(hexAt(c.x, c.y)), ki0 = KIX[c.kind] != null ? KIX[c.kind] : 1, ki = ecoKi(c.id, c.kind);
-    return { id: c.id, name: c.name || 'เมืองไม่มีชื่อ', kind: c.kind, ki, x: c.x, y: c.y, h, zone: h >= 0 ? ZO[h] : '.', pop: ecoPop(c.id, ki0), lk: KIK[ki], st: h >= 0 ? ECO.cells[h] : '.' };
+    return { id: c.id, name: c.name || 'เมืองไม่มีชื่อ', kind: c.kind, ki, x: c.x, y: c.y, h, zone: h >= 0 ? ZO[h] : '.', pop: ecoPop(c.id, ki0) * comPop(c.id, c.kind), lk: KIK[ki], st: h >= 0 ? ECO.cells[h] : '.', fx: comFx(c.id, c.kind) };
   }).filter(c => c.h >= 0);
   const LP = landPlan(cities);                       // the land each city takes for its people: how far its fields reach, and how short it falls
-  cities.forEach((c, k) => { c.land = LP.rows[k]; c.people = c.pop * ECO.unit; c.reach = Math.max(EREACH[c.ki], Math.min(LAND_REACH, c.land.ring + 1)); });
+  cities.forEach((c, k) => { c.land = LP.rows[k]; c.people = c.pop * ECO.unit; c.reach = Math.max(EREACH[c.ki] + c.fx.reach, Math.min(LAND_REACH, c.land.ring + 1)); });
   { const ps = cities.map(c => c.pop).sort((a, b) => a - b), med = ps.length ? ps[ps.length >> 1] : 1; for (const c of cities) c.claim = clamp(Math.pow(c.pop / Math.max(1e-9, med), TU('claimPow')), 0.6, 2.5); }   // how hard a city presses on its neighbours' land
   socPrep(cities);
   PORTZ.fill(0);
@@ -50,14 +50,14 @@ function econCompute() {
   });
   // the workshops' plan: what each could make at full supply, and what that takes
   const plan = cities.map((c, k) => {
-    const H = Hs[k], cn = ECANON[c.id] || {}, z = c.zone, ind = c.pop * EIND[c.ki], p = {};
+    const H = Hs[k], cn = ECANON[c.id] || {}, z = c.zone, ind = c.pop * EIND[c.ki] * c.fx.ind, p = {};
     const ore = (prod[k].get('iron') || 0) + (prod[k].get('copper') || 0);
     const spec = {
       tools: 0.6 + (ore > 0.4 ? 0.8 : 0),
-      arms: [1.2, 1, 0.5, 1.4, 0][c.ki] * ({ S: 1.5, H: 1.4, X: 1.2, G: 0.8 }[z] || 0.6) * (z === 'Q' ? 0.3 : 1),
+      arms: [1.2, 1, 0.5, 1.4, 0][c.ki] * c.fx.arms * ({ S: 1.5, H: 1.4, X: 1.2, G: 0.8 }[z] || 0.6) * (z === 'Q' ? 0.3 : 1),
       tech: [1.2, 1, 0.3, 0.5, 0][c.ki] * ({ X: 1.3, S: 1.4, H: 1.2, G: 0.9, T: 0.5 }[z] || 0.1),
       ships: c.port === 2 ? 1 : c.port === 1 ? 0.4 : 0,
-      books: (z === 'T' ? 3 : 1) * [1, 0.5, 0.2, 0.1, 0][c.ki],
+      books: (z === 'T' ? 3 : 1) * ([1, 0.5, 0.2, 0.1, 0][c.ki] + c.fx.books),
     };
     for (const m of EMADEC) { const v = ind * EWORK[m].base * (spec[m] != null ? spec[m] : 1) * (cn[m] || 1) * orgProd(c, m) * socMake(c, m); if (v > 0.01) p[m] = v; }
     for (const m in p) for (const [cat, q] of Object.entries(EWORK[m].in)) need[k][cat] += p[m] * q;

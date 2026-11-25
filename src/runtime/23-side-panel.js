@@ -19,7 +19,7 @@ function updateStats() {
     const rows = [['ช่องที่ระบาย', pc], ['ช่องที่ซ่อนแม่น้ำเดิม', hc], ['แม่น้ำที่วาด', ED.rivers.length], ['เมืองที่วางหรือแก้', ED.cities.length], ['เมืองเดิมที่ลบ', ED.bhid.size],
       ['ชื่อสถานที่ที่ใส่เพิ่ม', lc.add], ['ชื่อสถานที่เดิมที่แก้หรือย้าย', lc.edit], ['ชื่อสถานที่เดิมที่ลบ', ED.lhid.size], ['ภูเขาสแตนเทอร์', ED.stan == null ? 'ที่เดิม' : 'ย้ายแล้ว'],
       ['ถนนที่วาง', rc.add], ['ถนนเดิมที่แก้', rc.edit], ['ถนนเดิมที่ลบ', ED.rthid.size],
-      ['จุดสำคัญที่วางหรือแก้', ED.points.size], ['จุดสำคัญเดิมที่ลบ', ED.phid.size], ['ข้อความเขตและภูมิประเทศที่แก้', ED.zinfo.size + ED.binfo.size + ED.kinfo.size],
+      ['สถานที่น่าสนใจที่วางหรือแก้', ED.points.size], ['สถานที่น่าสนใจเดิมที่ลบ', ED.phid.size], ['ข้อความเขตและภูมิประเทศที่แก้', ED.zinfo.size + ED.binfo.size + ED.kinfo.size],
       ['เส้นการค้าที่วางหรือแก้', ED.tlinks.size], ['เส้นการค้าเดิมที่ลบ', ED.tlhid.size], ['ระดับศูนย์ที่ตั้งเอง', ED.hubs.size], ['ศูนย์ที่ส่งของให้ที่เลือกเอง', ED.tparent.size]];
     $('stats').innerHTML = (BLANK ? rows.filter(([k]) => !k.includes('เดิม') && !k.includes('สแตนเทอร์')) : rows).map(([k, v]) => `<span>${esc(k)}</span><span>${v}</span>`).join('');
     $('clearAll').disabled = !editable || !(pc + hc + ED.rivers.length + ED.cities.length + ED.bhid.size + ED.labels.size + ED.lhid.size + (ED.stan != null ? 1 : 0) + ED.routes.size + ED.rthid.size + ED.points.size + ED.phid.size + ED.zinfo.size + ED.binfo.size + ED.kinfo.size + ED.tlinks.size + ED.tlhid.size + ED.hubs.size + ED.tparent.size);

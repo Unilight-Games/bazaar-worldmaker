@@ -204,14 +204,33 @@ const FEATG = {
   isles(c, x, y) { for (const [dx, dy, r] of [[-2.2, -0.8, 1.2], [0.6, 0.9, 1.5], [2.4, -1.2, 0.9]]) { ell(c, x + dx, y + dy, r, r * 0.7, 'rgb(212,196,150)'); ell(c, x + dx, y + dy - 0.15, r * 0.65, r * 0.45, 'rgb(98,146,84)'); } },
   cave(c, x, y) { poly(c, [[x - 3.4, y + 1.8], [x - 2.4, y - 1.6], [x, y - 2.6], [x + 2.4, y - 1.6], [x + 3.4, y + 1.8]], 'rgb(130,122,110)', 'rgb(70,64,58)'); ell(c, x, y + 0.9, 1.4, 1.5, 'rgb(34,30,36)'); },
 };
+// v0.18.5: the owner found the features standing out too much, and asked for them to sit in the ground the way the fields and the
+// mines of the communities do. A feature now tints its hexes toward its colour on a small sheet laid over the map smoothly, so the
+// edges melt into the ground around and the trees and peaks under it still show; its sign is drawn smaller and fainter, and in a
+// wide patch only on about half of its hexes. FEAT_TINT is how far the ground goes toward the feature's colour (Claude's number).
+const FEAT_TINT = 0.55, FEAT_ALPHA = 0.5, FEAT_SHEET = 6;
+let featCv = null, featKey = '';
+const featRGB = h => { const n = parseInt(String(h).slice(1), 16); return [n >> 16, n >> 8 & 255, n & 255]; };
+const featGround = b => RCOL[b] || (b === 'S' ? [44, 74, 100] : b === 'L' ? [74, 118, 146] : RCOL.g);
+function featSheet() {
+  let hsh = 0; for (let i = 0; i < N; i++) if (ECO.feat[i] !== '.') hsh = (Math.imul(hsh, 31) + i * 131 + ECO.feat[i].charCodeAt(0)) | 0;   // a number, not a string: this runs every frame
+  const key = featStamp + '|' + painted.size + '|' + hsh;
+  if (key === featKey) return featCv;
+  featKey = key;
+  if (!featCv) { featCv = document.createElement('canvas'); featCv.width = Math.max(1, Math.ceil(G.w / FEAT_SHEET)); featCv.height = Math.max(1, Math.ceil(G.h / FEAT_SHEET)); }
+  const c = featCv.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, featCv.width, featCv.height); c.setTransform(1 / FEAT_SHEET, 0, 0, 1 / FEAT_SHEET, 0, 0);
+  for (let i = 0; i < N; i++) { const k = featAt(i); if (!k) continue; c.beginPath(); hexPath(c, i, 1.08); c.fillStyle = jit(landMix(featGround(eff(i)), featRGB(k.col), FEAT_TINT), i, 8); c.fill(); }
+  return featCv;
+}
 function featDraw(c) {
   let any = false; for (let i = 0; i < N; i++) if (ECO.feat[i] !== '.') { any = true; break; } if (!any) return;
-  c.save(); c.globalAlpha = 0.34;
-  for (let i = 0; i < N; i++) { const k = featAt(i); if (k) featHex(c, i, k.col); }
-  c.globalAlpha = 1;
+  const sh = featSheet();
+  c.save(); c.globalAlpha = FEAT_ALPHA; c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high'; c.drawImage(sh, 0, 0, sh.width * FEAT_SHEET, sh.height * FEAT_SHEET); c.globalAlpha = 0.85;
   for (let i = 0; i < N; i++) {
     const k = featAt(i); if (!k) continue; const fn = FEATG[k.g];
-    c.save(); c.translate(CX[i], CY[i]); c.scale(1.55, 1.55);   // a little larger than a point of lore: it stands for the hex
+    let same = 0; for (let j = 0; j < 6; j++) { const v = NB[i * 6 + j]; if (v >= 0 && ECO.feat[v] === ECO.feat[i]) same++; }
+    const r = rng(i * 13 + 5); if (same >= 3 && r() < 0.5) continue;             // in a wide patch, a sign on about half of it
+    c.save(); c.translate(CX[i] + (r() - 0.5) * 0.5 * R, CY[i] + (r() - 0.5) * 0.4 * R); c.scale(0.95, 0.95);
     if (fn) fn(c, 0, 0); else poly(c, [[0, -2.6], [2.2, 0], [0, 2.6], [-2.2, 0]], k.col, 'rgba(20,20,24,.8)');
     c.restore();
   }

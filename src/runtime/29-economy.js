@@ -21,7 +21,7 @@ const tierOk = k => typeof k === 'string' && Object.prototype.hasOwnProperty.cal
 function ecoScale() {
   if (!(ECO.total > 0)) return;
   let h0 = 0, own = 0, all = 0;
-  for (const c of visibleCities()) { const k = KIX[c.kind] != null ? KIX[c.kind] : 1; all += EPOP[k]; if (ECO.pop[c.id] > 0) own += ECO.pop[c.id]; else h0 += EPOP[k]; }
+  for (const c of visibleCities()) { const k = KIX[c.kind] != null ? KIX[c.kind] : 1, e = EPOP[k] * comPop(c.id, c.kind); all += e; if (ECO.pop[c.id] > 0) own += ECO.pop[c.id]; else h0 += e; }
   if (!(all > 0)) return;
   ECO.unit = clamp(h0 > 0 && ECO.total > own ? (ECO.total - own) / h0 : ECO.total / all, 0.01, 1e9);   // cities the owner counted keep their count; the rest share what is left
   ECO.central.per = ECO.unit * ECO.cpp;                // a person's year stays worth what it was, whatever the map holds
@@ -368,7 +368,7 @@ const ecoGood = id => EGOODS.find(g => g.id === id) || null;
 const ecoOver = id => ECO.goods[id] || (ECO.goods[id] = {});
 function ecoTermHTML(t, k) {
   const pt = t.on[0] === '@';
-  let h = `<div class="eterm" data-k="${k}"><div class="erow"><select data-f="src"><option value="g"${pt ? '' : ' selected'}>ภูมิประเทศ</option>${Object.keys(D.pointKinds).map(q => `<option value="@${q}"${t.on === '@' + q ? ' selected' : ''}>จุดสำคัญ: ${esc(kindInfo(q).name)}</option>`).join('')}</select>`
+  let h = `<div class="eterm" data-k="${k}"><div class="erow"><select data-f="src"><option value="g"${pt ? '' : ' selected'}>ภูมิประเทศ</option>${Object.keys(D.pointKinds).map(q => `<option value="@${q}"${t.on === '@' + q ? ' selected' : ''}>สถานที่น่าสนใจ: ${esc(kindInfo(q).name)}</option>`).join('')}</select>`
     + `<label>ได้ <input type="number" data-f="rate" min="0" max="20" step="0.005" value="${t.rate}"> ${pt ? 'ต่อจุด' : 'ต่อช่อง'}</label><button type="button" class="btn warn" data-a="tdel">ลบเงื่อนไข</button></div>`;
   if (!pt) {
     h += `<div class="echips">${[...CODES].map(b => `<button type="button" class="echip${t.on.includes(b) ? ' on' : ''}" data-a="code" data-b="${b}" title="${esc(biomeInfo(b).name)}"><i style="background:${chipColor(b)}"></i>${esc(biomeInfo(b).name)}</button>`).join('')}</div>`
@@ -573,7 +573,7 @@ $('ecobody').addEventListener('change', e => {
 $('cfPop').onchange = () => { if (!sel || !editable) return; const n = Math.round(+$('cfPop').value); if (n > 0) ECO.pop[sel] = Math.min(5e7, n); else delete ECO.pop[sel]; ecoChanged(false); ecoCityForm(); };
 function ecoCityForm() {
   if (!sel) return; const v = visibleCities().find(c => c.id === sel); if (!v) return;
-  const ki = KIX[v.kind] != null ? KIX[v.kind] : 1, def = Math.round(EPOP[ki] * ECO.unit);
+  const ki = KIX[v.kind] != null ? KIX[v.kind] : 1, def = Math.round(EPOP[ki] * comFx(sel, v.kind).pop * ECO.unit);
   $('cfPop').value = ECO.pop[sel] || ''; $('cfPop').placeholder = def.toLocaleString('en-US');
   const fit = KIK[ecoKi(sel, v.kind)];
   const note = ECO.pop[sel] && CK[fit] && fit !== v.kind ? ` ประชากรเท่านี้ทำให้เมืองนี้ผลิต บริโภค และค้าขายในระดับ${CK[fit].name}` : '';
@@ -615,6 +615,7 @@ const __ecoChanged = ecoChanged;
 ecoChanged = function (tables) { __ecoChanged(tables); sideNote('eco'); };
 $('ecoUndo').onclick = () => sideStep('eco', true); $('ecoRedo').onclick = () => sideStep('eco', false);
 __on(window, 'keydown', e => {
+  return;                                           // v0.18.5: the one key handler in the input code steps this history now
   if (!(e.ctrlKey || e.metaKey) || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || !editable) return;
   const k = mode === 'econ' ? 'eco' : mode === 'climate' && clTool ? 'clim' : null, key = e.key.toLowerCase(); if (!k || (key !== 'z' && key !== 'y')) return;
   e.preventDefault(); e.stopImmediatePropagation(); sideStep(k, key === 'z' && !e.shiftKey);

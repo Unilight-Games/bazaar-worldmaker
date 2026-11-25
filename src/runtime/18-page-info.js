@@ -78,7 +78,7 @@ function setIptool(t) {
   $('ifKind').innerHTML = Object.keys(D.pointKinds).map(k => `<button type="button" data-k="${k}">${esc(kindInfo(k).name)}</button>`).join('');
   segPick('ifKind', 'k', ipkind, k => { ipkind = k; setIptool(iptool); });
   $('ifHint').textContent = iptool === 'pick'
-    ? 'คลิกช่องบนแผนที่เพื่อแก้ชื่อและเรื่องของเขต กับชื่อและคำอธิบายของภูมิประเทศ ช่องแก้อยู่ในแถบด้านข้าง คลิกจุดสำคัญเพื่อแก้หรือลบ ลากจุดเพื่อย้าย'
+    ? 'คลิกช่องบนแผนที่เพื่อแก้ชื่อและเรื่องของเขต กับชื่อและคำอธิบายของภูมิประเทศ ช่องแก้อยู่ในแถบด้านข้าง คลิกสถานที่น่าสนใจเพื่อแก้หรือลบ ลากจุดเพื่อย้าย'
     : 'คลิกที่ว่างบนแผ่นดินเพื่อวางจุดชนิดที่เลือก ลากจุดเพื่อย้าย คลิกจุดเพื่อแก้ชื่อและบันทึกของจุดนั้น';
 }
 function renderInfoCard() {
@@ -111,7 +111,7 @@ function renderInfoCard() {
   }
   const p = visiblePoints().find(v => v.id === isel.id); if (!p) { isel = null; renderInfoCard(); return; }
   const ki = kindInfo(p.k);
-  body.innerHTML = `<h3>จุดสำคัญ: ${esc(p.name || ki.name)}</h3>
+  body.innerHTML = `<h3>สถานที่น่าสนใจ: ${esc(p.name || ki.name)}</h3>
     <label>ชนิด <select id="ipKind"${ro}>${Object.keys(D.pointKinds).map(k => `<option value="${k}"${k === p.k ? ' selected' : ''}>${esc(kindInfo(k).name)}</option>`).join('')}</select></label>
     <label class="full">ชื่อจุดนี้ <input id="ipName" maxlength="60" value="${esc(p.name || '')}" placeholder="${esc(ki.name)}"${ro}></label>
     <label class="full">บันทึกของจุดนี้ <textarea id="ipNote" rows="3" maxlength="600" placeholder="${esc(ki.note)}"${ro}>${esc(p.note || '')}</textarea></label>
@@ -139,6 +139,11 @@ function deletePoint(id) {
   isel = null; doOp(ops.length === 1 ? ops[0] : { k: 'm', ops }); renderInfoCard();
   flash('ลบจุดแล้ว กดย้อนเพื่อเอาคืน');
 }
+function startPlacePoint(k) {                       // v0.18.5: from the list of points of interest straight to placing one
+  if (!editable || !D.pointKinds[k]) return; ipkind = k; if (mode !== 'info') setMode('info'); setIptool('point'); flash('คลิกบนแผ่นดินเพื่อวาง' + kindInfo(k).name);
+}
+__on(document, 'click', e => { const el = e.target.closest ? e.target.closest('[data-ptk]') : null; if (el) startPlacePoint(el.dataset.ptk); });
+__on(document, 'keydown', e => { if (e.key !== 'Enter') return; const el = e.target.closest ? e.target.closest('[data-ptk]') : null; if (el) startPlacePoint(el.dataset.ptk); });
 function placePoint(x, y) {
   const h = hexAt(x, y); if (h < 0 || isW(eff(h))) { flash('วางจุดในน้ำไม่ได้'); return; }
   const o = { id: uid('p'), k: ipkind, x: r1(x), y: r1(y), name: '', note: '' };
@@ -147,8 +152,10 @@ function placePoint(x, y) {
 function paletteNames() { for (const s of document.querySelectorAll('#pal .sw')) if (s.dataset.b !== 'restore') s.lastChild.textContent = biomeInfo(s.dataset.b).name; }
 function updatePointsLegend() {
   const vis = visiblePoints();
+  // v0.18.5: a row per kind of point of interest; on a page the owner may change, a row puts that kind under the pointer to place
   $('points').innerHTML = Object.entries(D.pointKinds).map(([k, p]) =>
-    `<div class="lg"><span class="chip" style="background:${p.color}"></span><span>${esc(kindInfo(k).name)}</span><span class="n">${vis.filter(q => q.k === k).length}</span></div>`).join('')
-    + `<div class="lg"><span class="chip" style="background:radial-gradient(circle,#2a2116 30%,#f5e7b8 32%)"></span><span>เมือง</span><span class="n">${visibleCities().length}</span></div>`;
+    `<div class="lg${editable ? ' ptadd' : ''}"${editable ? ` data-ptk="${esc(k)}" role="button" tabindex="0" title="คลิกแล้วคลิกบนแผนที่เพื่อวาง${esc(kindInfo(k).name)}"` : ''}><span class="chip" style="background:${p.color}"></span><span>${esc(kindInfo(k).name)}</span><span class="n">${vis.filter(q => q.k === k).length}</span>${editable ? '<span class="add">+ วาง</span>' : ''}</div>`).join('')
+    + `<div class="lg"><span class="chip" style="background:radial-gradient(circle,#2a2116 30%,#f5e7b8 32%)"></span><span>ชุมชน</span><span class="n">${visibleCities().length}</span></div>`
+    + `<p class="ptwhy">สถานที่น่าสนใจดึงนักท่องเที่ยวไปยังชุมชนที่อยู่ห่างไม่เกินสามช่อง เสาหินกับซากปรักหักพังทำให้ชุมชนใกล้ ๆ ศักดิ์สิทธิ์ขึ้นจนมีคนมาแสวงบุญ และสินค้าที่ตั้งให้ผลิตจากสถานที่ชนิดใด จะผลิตได้ที่ชุมชนซึ่งมีสถานที่ชนิดนั้นในเขต${editable ? ' คลิกชนิดในรายการเพื่อวางบนแผนที่' : ''}</p>`;
 }
 
