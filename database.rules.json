@@ -101,7 +101,7 @@
       "users": {
         ".read": "auth != null && (root.child('bw/admin/' + auth.uid).val() === true || (auth.token.email_verified === true && auth.token.email === 'ADMIN_EMAIL'))",
         "$uid": {
-          ".write": "auth != null && auth.uid === $uid",
+          ".write": "(auth != null && auth.uid === $uid) || (auth != null && (root.child('bw/admin/' + auth.uid).val() === true || (auth.token.email_verified === true && auth.token.email === 'ADMIN_EMAIL')) && !newData.exists())",
           ".validate": "newData.hasChildren(['t']) && newData.child('t').isNumber() && (!newData.child('n').exists() || (newData.child('n').isString() && newData.child('n').val().length <= 60)) && (!newData.child('g').exists() || newData.child('g').val() === (auth.token.firebase.sign_in_provider === 'google.com'))",
           "$o": {
             ".validate": "$o === 't' || $o === 'f' || $o === 'n' || $o === 'g' || $o === 'cloud'"

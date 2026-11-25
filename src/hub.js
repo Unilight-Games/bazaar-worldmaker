@@ -244,6 +244,7 @@
     else if (a === 'dl' && admin) dlMap(el.dataset.u, el.dataset.m, el.dataset.t);
     else if (a === 'dlall' && admin) dlAll();
     else if (a === 'logjson' && admin) dlLog();
+    else if (a === 'stale' && admin) { if (el.dataset.sure) { el.disabled = true; staleSweep().then(n => { say(n.users < n.n ? `ลบสำเนาแผนที่ของ ${n.n} บัญชีแล้ว ข้อมูลบัญชี ${n.n - n.users} รายการลบไม่ได้ กฎของฐานข้อมูลยังไม่ให้แอดมินลบ` : `ลบข้อมูลและสำเนาแผนที่ของ ${n.n} บัญชีแล้ว`); boView('maps'); }, () => say('ลบไม่สำเร็จ')); } else { el.dataset.sure = '1'; el.textContent = 'กดอีกครั้งเพื่อลบ ย้อนคืนไม่ได้'; } }
     else if (a === 'logclear' && admin) { if (el.dataset.sure) { H.remove('bw/log').then(() => { say('ล้างบันทึกการเข้าออกแล้ว'); boView('stat'); }, () => say('ล้างไม่สำเร็จ')); } else { el.dataset.sure = '1'; el.textContent = 'กดอีกครั้งเพื่อล้างบันทึกทั้งหมด'; } }
     else if (a === 'mapdel' && admin) { if (el.dataset.sure) H.update({ ['bw/maps/' + el.dataset.u + '/' + el.dataset.m]: null, ['bw/mapix/' + el.dataset.u + '/' + el.dataset.m]: null }).then(() => boView('maps'), () => say('ลบไม่สำเร็จ')); else { el.dataset.sure = '1'; el.textContent = 'กดอีกครั้งเพื่อลบ'; } }
   });
@@ -252,6 +253,12 @@
   // ---------- the back office: the owner's account alone ----------
   const BO = { view: 'dash', offOn: null };
   function file(name, text) { try { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); } catch (err) { say('บันทึกไฟล์ไม่ได้'); } }
+  const STALE_MS = 3 * 365.25 * 86400000;
+  async function staleSweep() {
+    const us = await H.get('bw/users') || {}, ids = Object.entries(us).filter(([, x]) => x && typeof x.t === 'number' && H.now() - x.t > STALE_MS).map(([k]) => k); let users = 0;
+    for (const u of ids) { await H.remove('bw/maps/' + u); await H.remove('bw/mapix/' + u); try { await H.remove('bw/users/' + u); users++; } catch (err) { /* the rules before v0.19.1 let only the account itself write its record */ } }
+    return { n: ids.length, users };
+  }
   async function boView(v) {
     BO.view = v; const body = $('hubBo'); if (!body || !admin) return;
     for (const b of document.querySelectorAll('#hubBoTabs button')) b.setAttribute('aria-pressed', String(b.dataset.v === v));
@@ -283,7 +290,10 @@
         const owners = Object.values(per).sort((a, b) => b.size - a.size);
         const ownerT = owners.length ? `<div class="tr">ที่ฝากของแต่ละบัญชี (ไม่เกิน ${kb(QUOTA)} ต่อบัญชี)</div><div class="hubt hub4"><div class="hubh"><span>เจ้าของ</span><span>ใช้ไป</span><span>ผืน</span><span></span></div>`
           + owners.map(o => `<div><span>${esc(o.who || o.u.slice(0, 10))}</span><span><span class="minibar"><i style="width:${Math.min(100, o.size / QUOTA * 100).toFixed(1)}%"></i></span> ${kb(o.size)}</span><span>${o.n}</span><span>${cb[o.u] === true ? `<b class="warn">ห้ามฝาก</b> <button type="button" class="lnk" data-hub="cloudunban" data-u="${esc(o.u)}">ให้ฝากได้อีก</button>` : `<button type="button" class="lnk" data-hub="cloudban" data-u="${esc(o.u)}">ห้ามฝาก</button>`}</span></div>`).join('') + `</div>` : '';
-        body.innerHTML = ownerT + `<div class="tr">สำเนาแผนที่ <b>${rows.length}</b> ผืน จาก ${new Set(rows.map(r => r.u)).size} บัญชี · รวม ${kb(rows.reduce((a, r) => a + (r.size || 0), 0))}</div><div class="hubt hub5"><div class="hubh"><span>แผนที่</span><span>เจ้าของ</span><span>ส่งมาเมื่อ</span><span>ขนาด</span><span></span></div>`
+        // accounts not seen for three years: the terms of use (10, the table) say their records and copies are deleted (25 Nov 2026)
+        const stale = Object.entries(us || {}).filter(([, x]) => x && typeof x.t === 'number' && H.now() - x.t > STALE_MS).map(([k]) => k);
+        const staleT = `<div class="tr">บัญชีที่ไม่ได้เข้ามาเกิน 3 ปี <b>${stale.length}</b> บัญชี${stale.length ? ` <button type="button" class="btn" data-hub="stale">ลบข้อมูลและสำเนาแผนที่ของบัญชีเหล่านี้</button>` : ''}</div>${stale.length ? `<p class="note2">บัญชีใน Firebase Authentication ของบัญชีเหล่านี้ ลบต่อเองในคอนโซล Firebase แท็บ Authentication รหัสบัญชี: <code>${stale.map(esc).join(' ')}</code></p>` : ''}`;
+        body.innerHTML = staleT + ownerT + `<div class="tr">สำเนาแผนที่ <b>${rows.length}</b> ผืน จาก ${new Set(rows.map(r => r.u)).size} บัญชี · รวม ${kb(rows.reduce((a, r) => a + (r.size || 0), 0))}</div><div class="hubt hub5"><div class="hubh"><span>แผนที่</span><span>เจ้าของ</span><span>ส่งมาเมื่อ</span><span>ขนาด</span><span></span></div>`
           + rows.map(r => `<div><span>${esc(r.title)} <small>${r.cols}×${r.rows}</small></span><span>${esc(r.who)}</span><span>${new Date(r.at).toLocaleString('th-TH')}</span><span>${kb(r.size || 0)}</span><span><button type="button" class="lnk" data-hub="dl" data-u="${esc(r.u)}" data-m="${esc(r.m)}" data-t="${esc(r.title)}">ดาวน์โหลด</button> <button type="button" class="lnk" data-hub="mapdel" data-u="${esc(r.u)}" data-m="${esc(r.m)}">ลบ</button></span></div>`).join('') + `</div>`
           + (rows.length ? `<div class="rowx"><button type="button" class="btn" data-hub="dlall">ดาวน์โหลดทั้งหมดเป็นไฟล์เดียว</button></div>` : '') + `<p class="note2">ไฟล์ที่ดาวน์โหลดนำเข้าหน้านี้ได้ด้วยปุ่มนำเข้าไฟล์แผนที่ สำเนามาถึงเมื่อเจ้าของออกจากแผนที่ ไม่ใช่ขณะที่เขากำลังแก้</p>`;
       } else if (v === 'chat') {

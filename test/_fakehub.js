@@ -33,7 +33,7 @@ module.exports = function makeHubFake(opts) {
     if ((m = /^bw\/chatlast\/([^/]+)$/.exec(path))) { const last = get(path); return m[1] === u && (last == null || last < Date.now() - 3000); }
     if (/^bw\/(chatban|cloudban)\//.test(path)) return isAdmin();
     if ((m = /^bw\/(maps|mapix)\/([^/]+)\/[^/]+$/.exec(path)) && m[2] === u && val != null && get('bw/cloudban/' + u) === true) return false;   // v0.18.3: an account an admin stopped
-    if ((m = /^bw\/(users|maps|mapix)\/([^/]+)/.exec(path))) return m[2] === u || (m[1] !== 'users' && val == null && isAdmin());
+    if ((m = /^bw\/(users|maps|mapix)\/([^/]+)/.exec(path))) return m[2] === u || (val == null && isAdmin());   // v0.19.1: an admin may delete an account's record too (idle accounts)
     if (/^bw\/log\/[^/]+\/[^/]+$/.test(path)) return val == null ? isAdmin() : !get(path) && val.u === u;
     if (path === 'bw/log') return isAdmin();
     return false;
