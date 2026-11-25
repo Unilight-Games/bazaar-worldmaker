@@ -99,7 +99,7 @@ const polOn = (c, tool) => c.pol && c.pol.tools.has(tool) ? c.pol.k : 0;
 // ---- before the year's trade: what each city brings to it ----
 function socPrep(cities) {
   const ref = TU('labRef'), cheap = TU('labCheap'), pts = new Map(), st = stPeak();
-  for (const p of visiblePoints()) if (p.h >= 0) pts.set(p.h, (pts.get(p.h) || 0) + 1);
+  for (const p of ptLike()) if (p.h >= 0) pts.set(p.h, (pts.get(p.h) || 0) + 1);
   for (const c of cities) {
     const s = ECOX.byKey.get(c.st) || null;
     c.reg = EREG[ECO.regime[c.id]] ? ECO.regime[c.id] : s && EREG[s.reg] ? s.reg : 'shift';
@@ -149,6 +149,7 @@ function socNear() {                                 // which states touch
 }
 const socTouch = (a, b) => socNear().has(a < b ? a + b : b + a);
 function socTRef(E) { let s = 0, m = 0; const n = E.cities.length; for (let a = 0; a < n; a++) for (let b = a + 1; b < n; b++) { const t = E.NT[a][b]; if (isFinite(t) && t > 0) { s += t; m++; } } return m ? s / m : 1; }
+let pressPow = (s, b) => b.gdp;
 function socApply(rows) {
   const E = ECON, n = rows.length; SOC = null; if (!E || !n) return rows;
   let ppl = 0, inc = 0; for (const r of rows) { ppl += r.people; inc += r.inc; } const mean = ppl > 0 ? inc / ppl : 0, per = ECO.central.per;
@@ -166,7 +167,7 @@ function socApply(rows) {
     if (f.cat === 'labor') continue; const ra = rows[f.from], rb = rows[f.to], A = ra.s, B = rb.s; if (A === B) continue;
     let v = f.amt * ECAT[f.cat].v * (E.P1[f.to][f.cat] || 1) * per;
     if (A && B && A.sys !== 'anar' && B.sys !== 'anar' && (A.rel[B.id] || B.rel[A.id]) !== 'ally' && socTouch(A.id, B.id)) {
-      const ga = book(A).gdp, gb = book(B).gdp;
+      const ga = pressPow(A, book(A)), gb = pressPow(B, book(B));   // v0.19.0: the army's strength where both have one (29w), else the economy's size
       if (gb > ga && ga > 0) { const x = clamp(TU('pressStep') * Math.log2(gb / ga), 0, TU('pressMax')) * v; ra.inc -= x; rb.inc += x; v -= x; const ba = book(A), bb = book(B); ba.lost += x; bb.won += x; ba.sq.set(B.id, (ba.sq.get(B.id) || 0) + x); }
     }
     const put = (b, other, side) => { const P = b.byP.get(other) || b.byP.set(other, [0, 0]).get(other), C = b.byC.get(f.cat) || b.byC.set(f.cat, [0, 0]).get(f.cat); P[side] += v; C[side] += v; };
@@ -185,7 +186,7 @@ function socApply(rows) {
     add('องค์กรในเมือง', Math.min(15, 100 * orgWell(c)));
     add(EREG[c.reg][0], c.reg === 'sweat' ? -TU('regSweatWell') : c.reg === 'home' || c.reg === 'care' ? TU('regWell') : 0);
     if (c.pol) for (const t of c.pol.tools) add(EPOL[t][0], -c.pol.k * EPOL_COST[t][0]);
-    add(r.taxBack > 0 && taxUse(r.s) === 'svc' ? 'ภาษีหักบริการที่ได้คืน' : 'ภาษี', r.taxWell || 0);
+    for (const [w, v] of r.taxWhy || []) add(w, v);   // v0.19.0: taxes, the state's spending and its order (29m)
     r.well0 = clamp(w, 0, 100); r.wellWhy = why;
   });
   // visitors
@@ -589,7 +590,7 @@ ecoStatesHTML = function () {
       + (s.sys === 'soc' ? ecoCapHTML(s) : '') + `</div>`
       + (anar ? '' : `<div class="ssec"><h5>ผู้คนและการทำงาน</h5>` + ecoIn('คนย้ายเข้ากระจายตัว', sel('sspread', ESPREAD, s.spread || 'nat')) + `<div class="tr w">${ESPREAD[s.spread || 'nat'][1]}</div>`
         + ecoIn('ระเบียบงานของโรงงาน', sel('sreg', EREG, s.reg || 'shift')) + `<div class="tr w">${EREG[s.reg || 'shift'][1]} เมืองที่ตั้งระเบียบของตัวเองในการ์ดเมืองใช้ของตัวเอง</div></div>`)
-      + (anar ? '' : `<div class="ssec"><h5>ภาษี</h5>${taxStateForm(s)}</div>`)   // v0.18.5 (29m)
+      + (anar ? '' : `<div class="ssec"><h5 data-sec="fisc">การคลัง ภาษีศุลกากร และการคว่ำบาตร</h5>${taxStateForm(s)}</div>`)   // v0.19.0 (29m)
       + (others.length ? `<div class="ssec"><h5>ความสัมพันธ์กับรัฐอื่น</h5><div class="srel">${others.map(o => `<label><i class="sdot" style="background:${o.color}"></i><span>${esc(o.name)}</span><select data-f="srel" data-o="${o.id}"${dis}><option value="">เป็นกลาง</option><option value="ally"${(s.rel[o.id] || o.rel[s.id]) === 'ally' ? ' selected' : ''}>พันธมิตร</option><option value="rival"${(s.rel[o.id] || o.rel[s.id]) === 'rival' ? ' selected' : ''}>คู่อริ</option></select></label>`).join('')}</div><div class="tr w">พันธมิตรไม่กดราคากัน คู่อริไม่ค้ากันและเส้นทางผ่านแดนกันแพงขึ้น</div></div>` : '')
       + (anar ? '' : `<div class="ssec"><h5>เมื่อขาดดุลการค้า</h5><div class="polset">` + Object.entries(EPOL).map(([k, z]) => `<label title="${esc(z[1] + ' ข้อเสีย: ' + z[2])}"><input type="checkbox" data-f="spol" data-k="${k}"${on.has(k) ? ' checked' : ''}${dis}> ${z[0]}</label>`).join('') + `</div>`
         + (list.length > 1 ? ecoIn('ใช้ข้อไหนก่อน', `<select data-f="spol1"${dis}>${list.map((k, i) => `<option value="${k}"${i === 0 ? ' selected' : ''}>${EPOL[k][0]}</option>`).join('')}</select>`) : '')

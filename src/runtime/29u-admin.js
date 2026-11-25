@@ -1,0 +1,272 @@
+// ---------- the units that govern a state, from the smallest up (v0.19.0) ----------
+// The owner asked for a state's government in tiers, from the smallest unit up: Manor, County, Duchy (a March where it holds a
+// border or is first of all a military charge, a Principality where it stands nearly or half on its own, as a special region),
+// and the Sovereign state at the top; the names may be changed. The units inside a state can be set by hand; a unit is annexed to a
+// greater authority with Shift and a click; and when two states are joined, the old one can stay as a unit under the new.
+// How it is held: a manor owns hexes; a county holds manors, a duchy holds counties, and the state holds whatever has no holder
+// above it. A unit with no holder belongs to the state most of its land lies in. A unit's seat is a community inside it.
+// What a tier does today: a March makes the arms of its communities and keeps watch on its border; a Principality runs its own
+// affairs and its people live a little better for it. The public purse (batch 4) collects up these tiers.
+// The starting names follow the owner's own; the Thai set beside them is Claude's offer.
+const ADMN0 = { 0: 'แมเนอร์', 1: 'เคาน์ตี', 2: 'ดัชชี', march: 'มาร์ช', princ: 'ราชรัฐ', 3: 'รัฐอธิปไตย' };
+const ADMN_TH = { 0: 'ตำบล', 1: 'เมือง', 2: 'มณฑล', march: 'หัวเมืองชายแดน', princ: 'ประเทศราช', 3: 'ราชอาณาจักร' };
+const ADMFX = { march: { arms: 1.25, well: -1 }, princ: { well: 2 } };
+ECO.adm = []; ECO.admc = new Array(N).fill(''); ECO.admn = { ...ADMN0 };
+const ADM = { stamp: 0, idx: null, lv: 2, sel: null, paint: false, cityKey: -1, city: new Map() };
+const admById = id => id ? ECO.adm.find(u => u.id === id) || null : null;
+const admTier = u => u.t === 2 && u.type ? ECO.admn[u.type] || ADMN0[u.type] : ECO.admn[u.t] || ADMN0[u.t];
+const admTitle = u => admTier(u) + (u.name ? ' ' + u.name : '');
+function admChanged(tables) { ADM.stamp++; ADM.idx = null; ADM.city.clear(); admSheetKey = ''; ecoChanged(!!tables); requestDraw(); if (mode === 'econ' && ecoTab === 'adm') ecoRender(); }
+// everything about the units at once: their hexes, their holders, their state, their communities and people
+function admIndex() {
+  if (ADM.idx && ADM.idx.stamp === ADM.stamp && ADM.idx.ecs === ecoStampAdm()) return ADM.idx;
+  const by = new Map(ECO.adm.map(u => [u.id, u])), kids = new Map(), hexes = new Map(), st = new Map(), cities = new Map(), people = new Map();
+  for (const u of ECO.adm) { kids.set(u.id, []); hexes.set(u.id, []); cities.set(u.id, []); people.set(u.id, 0); }
+  const upOf = u => { const p = by.get(u.up); return p && p.t > u.t ? p : null; };
+  for (const u of ECO.adm) { const p = upOf(u); if (p) kids.get(p.id).push(u.id); }
+  for (let i = 0; i < N; i++) { const id = ECO.admc[i]; if (!id) continue; const u = by.get(id); if (!u || u.t !== 0) continue; for (let x = u; x; x = upOf(x)) hexes.get(x.id).push(i); }
+  for (const u of ECO.adm) { const n = {}; for (const i of hexes.get(u.id)) { const z = ECO.cells[i]; if (z && z !== '.') n[z] = (n[z] || 0) + 1; } let best = '', bn = 0; for (const [z, c] of Object.entries(n)) if (c > bn) { bn = c; best = z; } st.set(u.id, best); }
+  for (const c of visibleCities()) { const h = hexAt(c.x, c.y), id = h >= 0 ? ECO.admc[h] : ''; let u = by.get(id); while (u) { cities.get(u.id).push(c.id); u = upOf(u); } }
+  if (ECON) for (const c of ECON.cities) { const h = c.h != null ? c.h : hexAt(c.x, c.y), id = h >= 0 ? ECO.admc[h] : ''; let u = by.get(id); while (u) { people.set(u.id, people.get(u.id) + c.pop * ECO.unit); u = upOf(u); } }
+  ADM.idx = { stamp: ADM.stamp, ecs: ecoStampAdm(), by, kids, hexes, st, cities, people, upOf }; return ADM.idx;
+}
+const ecoStampAdm = () => { let s = 0; for (let i = 0; i < N; i += 7) s = (Math.imul(s, 31) + ECO.cells[i].charCodeAt(0)) | 0; return s + (ECON ? ECON.ver * 7919 : 0); };
+// the chain over a hex: its manor, county, duchy (each may be missing)
+function admChain(h) {
+  const X = admIndex(), out = { 0: null, 1: null, 2: null }; let u = X.by.get(ECO.admc[h] || ''); if (!u || u.t !== 0) return out;
+  while (u) { out[u.t] = u; u = X.upOf(u); } return out;
+}
+function admCity(id) {
+  const k = ADM.stamp; let c = ADM.city.get(id); if (c && c.k === k) return c.v;
+  const v = visibleCities().find(x => x.id === id), h = v ? hexAt(v.x, v.y) : -1, ch = h >= 0 ? admChain(h) : { 0: null, 1: null, 2: null }; ADM.city.set(id, { k, v: ch }); return ch;
+}
+
+// ---- what a tier does ----
+{
+  const cf = comFx; comFx = function (id, kind) {
+    const f = cf(id, kind); if (!ECO.adm.length) return f; const d = admCity(id)[2]; const o = d && ADMFX[d.type]; if (!o) return f;
+    for (const k of Object.keys(o)) { if (!(k in f)) continue; if (k === 'arms') f[k] *= o[k]; else f[k] += o[k]; } return f;
+  };
+  const cw = comWhy; comWhy = function (id, kind) { const out = cw(id, kind), d = ECO.adm.length ? admCity(id)[2] : null; if (d && d.type === 'march') out.push(admTitle(d) + ': เขตทหาร ทำอาวุธได้มากขึ้นหนึ่งในสี่ ความเป็นอยู่ −1'); if (d && d.type === 'princ') out.push(admTitle(d) + ': ปกครองตนเอง ความเป็นอยู่ +2'); return out; };
+  const ec = econCompute; econCompute = function () { ADM.stamp++; ADM.idx = null; ADM.city.clear(); return ec(); };
+}
+
+// ---- the document ----
+{
+  const ld = ecoLoad, sr = ecoSerial;
+  ecoLoad = function (b) {
+    ld(b); b = b || {}; ECO.adm = [];
+    for (const u of (Array.isArray(b.adm) ? b.adm : []).slice(0, 6000)) {
+      if (!u || typeof u.id !== 'string' || !/^[a-z0-9]{1,16}$/.test(u.id) || ECO.adm.some(x => x.id === u.id) || ![0, 1, 2].includes(u.t)) continue;
+      ECO.adm.push({ id: u.id, t: u.t, name: ecoStr(u.name, 60), up: ecoStr(u.up, 16), type: u.t === 2 && ADMFX[u.type] ? u.type : '', seat: ecoStr(u.seat, 120) });
+    }
+    ECO.admc = new Array(N).fill(''); if (b.admc && typeof b.admc === 'object') for (const [id, list] of Object.entries(b.admc)) { const u = admById(id); if (!u || u.t !== 0 || !Array.isArray(list)) continue; for (const i of list.slice(0, N)) if (Number.isInteger(i) && i >= 0 && i < N) ECO.admc[i] = id; }
+    ECO.admn = { ...ADMN0 }; if (b.admn && typeof b.admn === 'object') for (const k of Object.keys(ADMN0)) if (typeof b.admn[k] === 'string' && b.admn[k].trim()) ECO.admn[k] = b.admn[k].slice(0, 30);
+    ADM.stamp++; ADM.idx = null; ADM.city.clear(); admSheetKey = '';
+  };
+  ecoSerial = function () {
+    const o = sr(); if (!ECO.adm.length && JSON.stringify(ECO.admn) === JSON.stringify(ADMN0)) return o;
+    o.adm = ECO.adm.map(u => ({ ...u })); const by = {}; ECO.admc.forEach((id, i) => { if (id) (by[id] || (by[id] = [])).push(i); }); o.admc = by; o.admn = { ...ECO.admn }; return o;
+  };
+}
+// a change to the units is one step back: the units, their hexes and the states' land as they were and are
+const admSnap = () => ({ adm: JSON.stringify(ECO.adm), admc: ECO.admc.join('\n'), cells: ECO.cells.join(''), admn: JSON.stringify(ECO.admn), states: JSON.stringify(ECO.states) });
+function admRestore(s) { ECO.adm = JSON.parse(s.adm); if (s.admn) ECO.admn = JSON.parse(s.admn); if (s.states && s.states !== JSON.stringify(ECO.states)) ECO.states = JSON.parse(s.states); ECO.admc = s.admc.split('\n'); if (ECO.admc.length !== N) ECO.admc = new Array(N).fill(''); const cs = [...s.cells]; if (cs.length === N) for (let i = 0; i < N; i++) ECO.cells[i] = cs[i]; }
+function admDo(fn, tables) { const a = admSnap(); fn(); const b = admSnap(); if (a.adm === b.adm && a.admc === b.admc && a.cells === b.cells && a.admn === b.admn && a.states === b.states) return; pushOp({ k: 'adm', a, b }); if (a.cells !== b.cells || a.states !== b.states) ecoChanged(true); admChanged(tables !== false); }
+{ const ap = applyOp; applyOp = function (op, dir, fx) { if (op.k !== 'adm') return ap(op, dir, fx); const was = op.a.cells !== op.b.cells || op.a.states !== op.b.states; admRestore(dir > 0 ? op.b : op.a); if (was) ecoChanged(true); admChanged(true); }; }
+const admNewId = () => { let id; do { id = 'a' + Math.random().toString(36).slice(2, 9); } while (admById(id)); return id; };
+
+// ---- dividing a state: manors around its communities, counties of manors, duchies of counties ----
+function admBuild(s) {
+  const land = []; for (let i = 0; i < N; i++) if (ECO.cells[i] === s.id && !isW(eff(i))) land.push(i); if (!land.length) return 0;
+  const inS = new Uint8Array(N); for (const i of land) inS[i] = 1;
+  const cs = (ECON ? ECON.cities : []).filter(c => { const h = c.h != null ? c.h : hexAt(c.x, c.y); return h >= 0 && inS[h]; });
+  // drop the units of this state that were there before
+  const X = admIndex(), old = new Set(ECO.adm.filter(u => X.st.get(u.id) === s.id).map(u => u.id)); ECO.adm = ECO.adm.filter(u => !old.has(u.id)); for (const i of land) ECO.admc[i] = '';
+  for (let i = 0; i < N; i++) if (old.has(ECO.admc[i])) ECO.admc[i] = '';
+  // manors: the land goes to the nearest community the cheapest way over the ground
+  const seeds = cs.map(c => ({ c, h: c.h != null ? c.h : hexAt(c.x, c.y) }));
+  if (!seeds.length) seeds.push({ c: null, h: land[0] });
+  const cost = i => { const b = eff(i); return b === 'M' ? 4 : 'fokjaw'.includes(b) ? 1.5 : b === 'd' || b === 'n' ? 1.8 : 1; };
+  const T = new Float64Array(N).fill(Infinity), own = new Int32Array(N).fill(-1), H = [];
+  const push = x => { H.push(x); let q = H.length - 1; while (q) { const p = (q - 1) >> 1; if (H[p][0] <= H[q][0]) break; [H[p], H[q]] = [H[q], H[p]]; q = p; } };
+  const pop = () => { const t = H[0], l = H.pop(); if (H.length) { H[0] = l; let q = 0; for (;;) { const x = 2 * q + 1, y = x + 1; let m = q; if (x < H.length && H[x][0] < H[m][0]) m = x; if (y < H.length && H[y][0] < H[m][0]) m = y; if (m === q) break; [H[m], H[q]] = [H[q], H[m]]; q = m; } } return t; };
+  seeds.forEach((s0, j) => { if (T[s0.h] > 0) { T[s0.h] = 0; own[s0.h] = j; push([0, s0.h]); } });
+  while (H.length) { const [t, i] = pop(); if (t > T[i]) continue; for (let d = 0; d < 6; d++) { const v = NB[i * 6 + d]; if (v < 0 || !inS[v]) continue; const nt = t + cost(v); if (nt < T[v]) { T[v] = nt; own[v] = own[i]; push([nt, v]); } } }
+  for (const i of land) if (own[i] < 0) { let bd = Infinity; seeds.forEach((s0, j) => { const d = Math.hypot(CX[s0.h] - CX[i], CY[s0.h] - CY[i]); if (d < bd) { bd = d; own[i] = j; } }); }
+  const manors = seeds.map(s0 => { const u = { id: admNewId(), t: 0, name: s0.c ? s0.c.name || '' : s.name, up: '', type: '', seat: s0.c ? s0.c.id : '' }; ECO.adm.push(u); return { u, c: s0.c, x: CX[s0.h], y: CY[s0.h], pop: s0.c ? s0.c.pop : 0 }; });
+  for (const i of land) ECO.admc[i] = manors[own[i]].u.id;
+  // counties: about five manors each, gathered round the greater communities
+  const group = (items, size, mk) => {
+    const n = Math.max(1, Math.round(items.length / size)), heads = [];
+    const sorted = items.slice().sort((a, b) => b.pop - a.pop), span = Math.sqrt(land.length) * R * 1.6 / Math.sqrt(n);
+    for (const it of sorted) { if (heads.length >= n) break; if (heads.some(h => Math.hypot(h.x - it.x, h.y - it.y) < span)) continue; heads.push(it); }
+    for (const it of sorted) { if (heads.length >= n) break; if (!heads.includes(it)) heads.push(it); }
+    const ups = heads.map(h => mk(h)); for (const it of items) { let bj = 0, bd = Infinity; heads.forEach((h, j) => { const d = Math.hypot(h.x - it.x, h.y - it.y); if (d < bd) { bd = d; bj = j; } }); it.u.up = ups[bj].u.id; ups[bj].pop += it.pop; }
+    return ups;
+  };
+  if (manors.length < 2) return manors.length;
+  const counties = group(manors, 5, h => { const u = { id: admNewId(), t: 1, name: h.u.name, up: '', type: '', seat: h.u.seat }; ECO.adm.push(u); return { u, x: h.x, y: h.y, pop: 0 }; });
+  if (counties.length >= 4) {
+    const duchies = group(counties, 4, h => { const u = { id: admNewId(), t: 2, name: h.u.name, up: '', type: '', seat: h.u.seat }; ECO.adm.push(u); return { u, x: h.x, y: h.y, pop: 0 }; });
+    // a duchy on the border with a rival keeps the march
+    ADM.idx = null; ADM.stamp++; const X2 = admIndex();
+    for (const d of duchies) { let rival = false; for (const i of X2.hexes.get(d.u.id)) { for (let j = 0; j < 6 && !rival; j++) { const v = NB[i * 6 + j]; const z = v >= 0 ? ECO.cells[v] : '.'; if (z !== '.' && z !== s.id && s.rel[z] === 'rival') rival = true; } if (rival) break; } if (rival) d.u.type = 'march'; }
+  }
+  return manors.length;
+}
+// joining two states: the land of one goes to the other; the old state may stay as a principality under the new
+function admJoin(from, to, keep) {
+  const X = admIndex(), mine = ECO.adm.filter(u => X.st.get(u.id) === from.id);
+  for (let i = 0; i < N; i++) if (ECO.cells[i] === from.id) ECO.cells[i] = to.id;
+  if (keep) {
+    const p = { id: admNewId(), t: 2, name: from.name, up: '', type: 'princ', seat: from.cap || '' }; ECO.adm.push(p);
+    // its duchies give way: their counties, and its counties with no duchy, come under the principality
+    for (const u of mine) { if (u.t === 2) u.dead = 1; }
+    for (const u of mine) if (u.t === 1) { const up = X.by.get(u.up); if (!up || up.t !== 1) u.up = p.id; }
+    for (const u of mine) if (u.t === 0 && !X.by.get(u.up)) { u.up = ''; }
+    ECO.adm = ECO.adm.filter(u => !u.dead);
+    if (!mine.some(u => u.t === 1)) for (const u of mine) if (u.t === 0) u.up = p.id;   // a small state of manors only: they sit straight under it (a step skipped)
+  }
+  ECO.states = ECO.states.filter(s => s !== from); for (const s of ECO.states) { delete s.rel[from.id]; }
+}
+
+// ---- on the map: the tiers as lines of three weights, and the chosen unit lit ----
+let admCv = null, admSheetKey = '';
+const admShown = () => (mode === 'econ' && ecoTab === 'adm') || BEL.view === 'adm';
+function admSheet() {
+  const key = ADM.stamp + '|' + ecoStampAdm(); if (key === admSheetKey && admCv) return admCv; admSheetKey = key;
+  if (!admCv) { admCv = document.createElement('canvas'); admCv.width = Math.max(1, Math.ceil(G.w / 2)); admCv.height = Math.max(1, Math.ceil(G.h / 2)); }
+  const c = admCv.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, admCv.width, admCv.height); c.setTransform(0.5, 0, 0, 0.5, 0, 0);
+  const X = admIndex(), top = new Array(N).fill(''), mid = new Array(N).fill('');
+  for (let i = 0; i < N; i++) { const ch = ECO.admc[i] ? admChain(i) : null; if (!ch) continue; mid[i] = ch[1] ? ch[1].id : ch[0] ? ch[0].id : ''; top[i] = ch[2] ? ch[2].id : mid[i]; }
+  const edge = (arr, w, col, dash) => {
+    c.beginPath(); for (let i = 0; i < N; i++) { if (!arr[i]) continue; for (let j = 0; j < 6; j++) { const v = NB[i * 6 + j]; if (v < 0 || arr[v] === arr[i] || (!arr[v] && v < i)) continue; const e = EDGE[j], t0 = e * Math.PI / 3, t1 = (e + 1) * Math.PI / 3; c.moveTo(CX[i] + R * Math.cos(t0), CY[i] + R * Math.sin(t0)); c.lineTo(CX[i] + R * Math.cos(t1), CY[i] + R * Math.sin(t1)); } }
+    c.setLineDash(dash || []); c.lineWidth = w; c.strokeStyle = col; c.stroke(); c.setLineDash([]);
+  };
+  // a faint colour for each duchy (or county standing alone), the state's hue a little turned
+  const hue = new Map(); let k = 0; for (const u of ECO.adm) if ((u.t === 2) || (u.t === 1 && !X.upOf(u)) || (u.t === 0 && !X.upOf(u))) hue.set(u.id, (k++ * 47) % 360);
+  for (const [id, hh] of hue) { c.beginPath(); let any = false; for (const i of X.hexes.get(id) || []) { hexPath(c, i, 1.02); any = true; } if (!any) continue; const u = X.by.get(id); c.fillStyle = u.type === 'princ' ? `hsla(${hh},55%,55%,.30)` : u.type === 'march' ? `hsla(${hh},45%,40%,.30)` : `hsla(${hh},40%,55%,.20)`; c.fill(); }
+  edge(ECO.admc, 0.8, 'rgba(30,28,26,.55)', [2, 2]); edge(mid, 1.6, 'rgba(30,28,26,.8)'); edge(top, 3, 'rgba(20,18,16,.9)');
+  return admCv;
+}
+{ const dg = drawOverGround; drawOverGround = function (c, w, h, live) { if (dg) dg(c, w, h, live); if (!live || !admShown() || !ECO.adm.length) return; const s = admSheet(); c.drawImage(s, 0, 0, s.width * 2, s.height * 2); }; }
+{
+  const top = drawOnTop; drawOnTop = function (c, px) {
+    if (top) top(c, px); if (!admShown() || !ECO.adm.length) return; const X = admIndex();
+    if (ADM.sel) { const hs = X.hexes.get(ADM.sel) || []; c.save(); c.beginPath(); for (const i of hs) hexPath(c, i, 1); c.fillStyle = 'rgba(255,230,150,.22)'; c.fill(); c.restore(); }
+    // names: duchies when far, counties nearer, manors close
+    const t = view.s < 0.9 ? 2 : view.s < 1.8 ? 1 : 0;
+    for (const u of ECO.adm) {
+      if (u.t !== t && !(u.t > t && false)) continue; const hs = X.hexes.get(u.id) || []; if (hs.length < (t === 0 ? 1 : 3)) continue;
+      let sx = 0, sy = 0; for (const i of hs) { sx += CX[i]; sy += CY[i]; } const tt = admTitle(u), fs = (t === 2 ? 13 : t === 1 ? 11 : 9.5) * px;
+      c.font = `600 ${fs}px serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineWidth = 3 * px; c.strokeStyle = 'rgba(16,16,20,.8)'; c.strokeText(tt, sx / hs.length, sy / hs.length); c.fillStyle = u.type === 'march' ? '#ffd2b0' : u.type === 'princ' ? '#e2d4ff' : '#f6ecd4'; c.fillText(tt, sx / hs.length, sy / hs.length);
+    }
+  };
+}
+// the layer switch learns a third stop
+{ const b = $('belBtn'); if (b) { const old = b.onclick; b.onclick = () => { BEL.view = BEL.view === '' ? 'cul' : BEL.view === 'cul' ? 'rel' : BEL.view === 'rel' ? 'adm' : ''; b.textContent = BEL.view === 'cul' ? 'ชั้น: วัฒนธรรม' : BEL.view === 'rel' ? 'ชั้น: ศาสนา' : BEL.view === 'adm' ? 'ชั้น: การปกครอง' : 'ชั้น: ปิด'; b.setAttribute('aria-pressed', String(!!BEL.view)); requestDraw(); }; b.title = 'แสดงวัฒนธรรม ศาสนา หรือหน่วยการปกครองบนแผนที่'; } }
+
+// ---- the pointer in the government tab: a click picks the unit of the chosen tier; Shift and a click annexes ----
+const admLevelAt = (h, lv) => { if (h < 0) return null; if (lv === 3) { const z = ECO.cells[h]; return z && z !== '.' ? { st: ECO.states.find(s => s.id === z) } : null; } const ch = admChain(h); for (let t = lv; t <= 2; t++) if (ch[t]) return ch[t]; return null; };
+box.addEventListener('pointerdown', e => {
+  if (mode !== 'econ' || ecoTab !== 'adm' || spaceDown || e.target !== cv || e.button !== 0) return;
+  e.stopPropagation(); e.preventDefault();
+  const [mx, my] = toMap(e.clientX, e.clientY), h = hexAt(mx, my); if (h < 0) return;
+  if (e.shiftKey && editable) { admAnnex(h); if (ADM.lv === 0) ADM.drag = true; return; }
+  const u = admLevelAt(h, ADM.lv); ADM.sel = u ? (u.st ? 'S:' + u.st.id : u.id) : null; ecoRender(); requestDraw();
+}, true);
+__on(window, 'pointermove', e => { if (!ADM.drag || !(e.buttons & 1)) { ADM.drag = false; return; } const [mx, my] = toMap(e.clientX, e.clientY), h = hexAt(mx, my); if (h >= 0) admAnnex(h, true); });
+__on(window, 'pointerup', () => { ADM.drag = false; });
+function admAnnex(h, quiet) {
+  const sel = ADM.sel; if (!sel) { if (!quiet) flash('คลิกเลือกหน่วยที่จะรับก่อน แล้วกด Shift ค้างคลิกหน่วยที่จะผนวก'); return; }
+  if (sel.startsWith('S:')) {                        // a state takes the greatest unit over the hex, land and all
+    const s = ECO.states.find(x => x.id === sel.slice(2)); if (!s) return; const ch = admChain(h), u = ch[2] || ch[1] || ch[0];
+    admDo(() => { if (u) { const X = admIndex(); for (const i of X.hexes.get(u.id)) ECO.cells[i] = s.id; u.up = ''; } else if (!isW(eff(h))) ECO.cells[h] = s.id; });
+    if (!quiet) flash(u ? `ผนวก${admTitle(u)}เข้ากับ${s.name}แล้ว` : `ผนวกช่องเข้ากับ${s.name}แล้ว`); return;
+  }
+  const P = admById(sel); if (!P) return;
+  if (P.t === 0) { if (isW(eff(h)) || ECO.admc[h] === P.id) return; admDo(() => { ECO.admc[h] = P.id; }); return; }
+  const ch = admChain(h), u = ch[P.t - 1]; if (!u) { if (!quiet) flash('ช่องนี้ยังไม่มีหน่วยระดับที่เล็กกว่า'); return; }
+  if (u.up === P.id) return; admDo(() => { u.up = P.id; }); if (!quiet) flash(`ผนวก${admTitle(u)}เข้ากับ${admTitle(P)}แล้ว`);
+}
+
+// ---- the tab ----
+{
+  const row = $('ecoTab'); if (row && !row.querySelector('[data-t="adm"]')) { const b = document.createElement('button'); b.type = 'button'; b.dataset.t = 'adm'; b.textContent = 'การปกครอง'; row.insertBefore(b, row.querySelector('[data-t="cul"]')); }
+  const er = ecoRender; ecoRender = function () {
+    if (ecoTab !== 'adm') return er();
+    ecoTab = 'tune'; er(); ecoTab = 'adm'; if ($('ecocard').hidden) return;
+    segPick('ecoTab', 't', ecoTab, t => { ecoTab = t; ecoRender(); requestDraw(); if (window.MME && MME.shell && MME.shell.reveal) MME.shell.reveal('ecocard'); });
+    $('ecoHead').textContent = 'หน่วยการปกครอง';
+    $('ecoHint').textContent = editable ? 'คลิกบนแผนที่เพื่อเลือกหน่วยระดับที่ตั้งไว้ กด Shift ค้างแล้วคลิกหน่วยที่เล็กกว่าเพื่อผนวกเข้ากับหน่วยที่เลือก ถ้าเลือกรัฐไว้ หน่วยที่ผนวกย้ายดินแดนมาด้วย' : 'คลิกบนแผนที่เพื่อดูหน่วยการปกครอง';
+    $('ecobody').innerHTML = admHTML();
+  };
+}
+function admHTML() {
+  const X = admIndex(), dis = editable ? '' : ' disabled', lv = ADM.lv;
+  let h = `<div class="erow"><span class="lbl">คลิกเลือกระดับ</span><div class="seg" id="admLv">${[0, 1, 2, 3].map(t => `<button type="button" data-lv="${t}" aria-pressed="${t === lv}">${esc(ECO.admn[t])}</button>`).join('')}</div></div>`;
+  // the chosen unit
+  if (ADM.sel && ADM.sel.startsWith('S:')) { const s = ECO.states.find(x => x.id === ADM.sel.slice(2)); if (s) h += `<div class="scard" style="padding:8px"><b>${esc(ECO.admn[3])} ${esc(s.name)}</b><div class="tr w">กด Shift ค้างแล้วคลิกบนแผนที่เพื่อผนวกหน่วยที่ใหญ่ที่สุดใต้ช่องนั้นพร้อมดินแดน</div><button type="button" class="btn" data-sopen="${s.id}">การ์ดของรัฐ</button></div>`; }
+  const u = ADM.sel && !ADM.sel.startsWith('S:') ? admById(ADM.sel) : null;
+  if (u) {
+    const up = X.upOf(u), st = ECO.states.find(s => s.id === X.st.get(u.id)), cs = X.cities.get(u.id) || [], kids = (X.kids.get(u.id) || []).map(id => X.by.get(id));
+    const vc = new Map(visibleCities().map(c => [c.id, c]));
+    h += `<div class="scard" style="padding:8px"><b>${esc(admTitle(u))}</b> <small>${X.hexes.get(u.id).length} ช่อง · ${cs.length} ชุมชน · ${socN(X.people.get(u.id) || 0)} คน</small>`
+      + `<div class="tr w">ขึ้นกับ ${up ? `<a href="#" data-adm="${up.id}">${esc(admTitle(up))}</a>` : st ? `<a href="#" data-sopen="${st.id}">${esc(ECO.admn[3])} ${esc(st.name)}</a>` : 'ไม่มีรัฐ'}</div>`
+      + `<div class="erow"><label>ชื่อ <input type="text" data-af="name" maxlength="60" value="${esc(u.name)}"${dis}></label>`
+      + (u.t === 2 ? `<label>ชนิด <select data-af="type"${dis}><option value="">${esc(ECO.admn[2])}</option><option value="march"${u.type === 'march' ? ' selected' : ''}>${esc(ECO.admn.march)}</option><option value="princ"${u.type === 'princ' ? ' selected' : ''}>${esc(ECO.admn.princ)}</option></select></label>` : '') + `</div>`
+      + `<div class="erow"><label>ที่ตั้งศูนย์กลาง <select data-af="seat"${dis}><option value="">ไม่ระบุ</option>${cs.map(id => `<option value="${esc(id)}"${id === u.seat ? ' selected' : ''}>${esc((vc.get(id) || {}).name || 'ไม่มีชื่อ')}</option>`).join('')}</select></label></div>`
+      + (u.type === 'march' ? `<div class="tr w">${esc(ECO.admn.march)}: เขตทหาร ชุมชนในเขตทำอาวุธได้มากขึ้นหนึ่งในสี่ ความเป็นอยู่ −1</div>` : u.type === 'princ' ? `<div class="tr w">${esc(ECO.admn.princ)}: ปกครองตนเองเกือบเต็มที่ ความเป็นอยู่ +2 และในระบบการคลังจะเก็บภาษีไว้เองได้มากกว่า</div>` : '')
+      + (kids.length ? `<div class="tr"><b>หน่วยในสังกัด</b> <span class="w">${kids.map(k => `<a href="#" data-adm="${k.id}">${esc(admTitle(k))}</a>`).join(' · ')}</span></div>` : '')
+      + (cs.length ? `<div class="tr"><b>ชุมชน</b> <span class="w">${cs.slice(0, 30).map(id => `<a href="#" data-city="${esc(id)}">${esc((vc.get(id) || {}).name || 'ไม่มีชื่อ')}</a>`).join(' · ')}${cs.length > 30 ? ' …' : ''}</span></div>` : '')
+      + `<div class="btns"><button type="button" class="btn" data-note="s:${u.id}" data-nt="${esc(admTitle(u))}">${noteOf('s:' + u.id) ? 'ประวัติ' : 'เขียนประวัติ'}</button>${up ? `<button type="button" class="btn" data-aa="free"${dis}>แยกออกจากหน่วยเหนือ</button>` : ''}<button type="button" class="btn warn" data-aa="del"${dis}>ยุบหน่วยนี้</button></div></div>`;
+  }
+  // each state, its tree
+  for (const s of ECO.states) {
+    const tops = ECO.adm.filter(x => !X.upOf(x) && X.st.get(x.id) === s.id).sort((a, b) => b.t - a.t || (X.people.get(b.id) || 0) - (X.people.get(a.id) || 0));
+    const tree = x => `<li><a href="#" data-adm="${x.id}"${ADM.sel === x.id ? ' class="on"' : ''}>${esc(admTitle(x))}</a>${x.t > 0 && (X.kids.get(x.id) || []).length ? `<ul>${X.kids.get(x.id).map(id => tree(X.by.get(id))).join('')}</ul>` : ''}</li>`;
+    h += `<details class="efold scard"${GDPV['ad' + s.id] ? ' open' : ''} data-afold="${s.id}"><summary><i class="sdot" style="background:${s.color}"></i>${esc(ECO.admn[3])} ${esc(s.name)} <small>${tops.length ? ECO.adm.filter(x => X.st.get(x.id) === s.id).length + ' หน่วย' : 'ยังไม่แบ่ง'}</small></summary><div class="eform">`
+      + `<div class="btns"><button type="button" class="btn" data-aa="build" data-s="${s.id}"${dis}>${tops.length ? 'แบ่งใหม่อัตโนมัติ' : 'แบ่งหน่วยอัตโนมัติ'}</button><button type="button" class="btn" data-aa="sel" data-s="${s.id}">เลือกรัฐนี้</button></div>`
+      + (tops.length ? `<ul class="admtree">${tops.map(tree).join('')}</ul>` : '')
+      + (ECO.states.length > 1 ? `<div class="erow"><label>รวมเข้ากับ <select data-aj="${s.id}"${dis}>${ECO.states.filter(o => o !== s).map(o => `<option value="${o.id}">${esc(o.name)}</option>`).join('')}</select></label><label><input type="checkbox" data-ak="${s.id}" checked${dis}> เก็บรัฐนี้ไว้เป็น${esc(ECO.admn.princ)}</label><button type="button" class="btn warn" data-aa="join" data-s="${s.id}"${dis}>รวมรัฐ</button></div>` : '')
+      + `</div></details>`;
+  }
+  if (!ECO.states.length) h += '<p class="note">ยังไม่มีรัฐ เพิ่มรัฐในแท็บรัฐและเขตแดนก่อน</p>';
+  h += `<details class="efold"><summary>ชื่อของระดับการปกครอง</summary><div class="eform"><div class="erow">${['0', '1', '2', 'march', 'princ', '3'].map(k => `<label>${{ 0: 'ระดับเล็กสุด', 1: 'ระดับที่สอง', 2: 'ระดับที่สาม', march: 'ระดับที่สามแบบชายแดน', princ: 'ระดับที่สามแบบปกครองตนเอง', 3: 'ระดับสูงสุด' }[k]} <input type="text" data-an="${k}" maxlength="30" value="${esc(ECO.admn[k])}" style="width:9em"${dis}></label>`).join('')}</div>`
+    + `<div class="btns"><button type="button" class="btn" data-aa="names0"${dis}>ชื่อแบบยุโรป</button><button type="button" class="btn" data-aa="namesTh"${dis}>ชื่อแบบไทยโบราณ</button></div></div></details>`;
+  return h;
+}
+$('ecobody').addEventListener('click', e => {
+  if (ecoTab !== 'adm') return;
+  const lvb = e.target.closest ? e.target.closest('#admLv button') : null; if (lvb) { ADM.lv = +lvb.dataset.lv; ecoRender(); return; }
+  const go = e.target.closest ? e.target.closest('[data-adm]') : null; if (go) { e.preventDefault(); ADM.sel = go.dataset.adm; const u = admById(ADM.sel); if (u) { ADM.lv = u.t; admFocus(u); } ecoRender(); requestDraw(); return; }
+  const cg = e.target.closest ? e.target.closest('[data-city]') : null; if (cg) { e.preventDefault(); const v = visibleCities().find(c => c.id === cg.dataset.city); if (v) { setMode('city'); selectCity(v.id); admFocusXY(v.x, v.y); } return; }
+  const b = e.target.closest ? e.target.closest('[data-aa]') : null; if (!b) return; const a = b.dataset.aa;
+  if (a === 'sel') { ADM.sel = 'S:' + b.dataset.s; ADM.lv = 3; ecoRender(); requestDraw(); return; }
+  if (!editable) return; const u = admById(ADM.sel);
+  if (a === 'build') { const s = ECO.states.find(x => x.id === b.dataset.s); if (s) { let n = 0; admDo(() => { n = admBuild(s); }); flash(n ? `แบ่ง${s.name}เป็น ${n} ${ECO.admn[0]}แล้ว` : 'รัฐนี้ยังไม่มีดินแดนบนแผ่นดิน'); } }
+  else if (a === 'free' && u) admDo(() => { u.up = ''; });
+  else if (a === 'del' && u) { admDo(() => { const X = admIndex(), up = X.upOf(u); for (const k of X.kids.get(u.id) || []) X.by.get(k).up = up ? up.id : ''; if (u.t === 0) { for (let i = 0; i < N; i++) if (ECO.admc[i] === u.id) ECO.admc[i] = ''; } ECO.adm = ECO.adm.filter(x => x !== u); }); ADM.sel = null; ecoRender(); }
+  else if (a === 'join') { const from = ECO.states.find(x => x.id === b.dataset.s), to = ECO.states.find(x => x.id === $('ecobody').querySelector(`[data-aj="${b.dataset.s}"]`).value), keep = $('ecobody').querySelector(`[data-ak="${b.dataset.s}"]`).checked; if (from && to) { admDo(() => admJoin(from, to, keep)); ECOX.byKey.delete(from.id); flash(`รวม${from.name}เข้ากับ${to.name}แล้ว` + (keep ? ` ${from.name}เป็น${ECO.admn.princ}` : '')); ecoChanged(true); } }
+  else if (a === 'names0' || a === 'namesTh') admDo(() => { ECO.admn = { ...(a === 'names0' ? ADMN0 : ADMN_TH) }; });
+});
+$('ecobody').addEventListener('change', e => {
+  if (ecoTab !== 'adm' || !editable) return; const el = e.target, u = admById(ADM.sel);
+  if (el.dataset.an) { const v = el.value.trim().slice(0, 30); if (v) admDo(() => { ECO.admn[el.dataset.an] = v; }); return; }
+  if (!u || !el.dataset.af) return; const f = el.dataset.af;
+  admDo(() => { if (f === 'name') u.name = el.value.trim().slice(0, 60); else if (f === 'type') u.type = ADMFX[el.value] ? el.value : ''; else if (f === 'seat') u.seat = el.value; });
+});
+$('ecobody').addEventListener('toggle', e => { const d = e.target; if (d.dataset && d.dataset.afold) { GDPV['ad' + d.dataset.afold] = d.open ? 1 : 0; } }, true);
+function admFocusXY(x, y) { const r = cv.getBoundingClientRect(); view.x = r.width / 2 - x * view.s; view.y = r.height / 2 - y * view.s; clampView(); requestDraw(); }
+function admFocus(u) { const hs = admIndex().hexes.get(u.id) || []; if (!hs.length) return; let sx = 0, sy = 0; for (const i of hs) { sx += CX[i]; sy += CY[i]; } admFocusXY(sx / hs.length, sy / hs.length); }
+// the peek and the community's card name the units over a community
+{ const px = peekCityExtra; peekCityExtra = (c, E) => { const ch = ECO.adm.length ? admCity(c.id) : null, t = ch ? [ch[0], ch[1], ch[2]].filter(Boolean).map(admTitle) : []; return px(c, E) + (t.length ? `<div class="m">${t.map(esc).join(' · ')}</div>` : ''); }; }
+// the unit's purse this year (29m): what it gathered, kept, lost, and how settled it is
+{
+  const ah = admHTML; admHTML = function () {
+    const h = ah(), u = ADM.sel && !ADM.sel.startsWith('S:') ? admById(ADM.sel) : null, U = u && typeof FISC !== 'undefined' ? FISC.unit.get(u.id) : null; if (!U) return h;
+    const line = `<div class="tr">การคลังปีนี้: รับ ${socN(U.got)} · เก็บไว้ ${socN(U.kept)} · รั่วไหล ${socN(U.leak)} · เสถียรภาพ <b>${Math.round(U.stab)}</b> จาก 100</div>`;
+    const at = h.indexOf('<div class="erow"><label>ชื่อ'); return at >= 0 ? h.slice(0, at) + line + h.slice(at) : h;
+  };
+}

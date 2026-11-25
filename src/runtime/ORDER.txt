@@ -40,4 +40,15 @@
 29k-community.js
 29l-season-view.js
 29m-tax.js
+29n-zones.js
+29o-notes.js
+29p-peek.js
+29q-measure.js
+29r-crop.js
+29s-ui.js
+29t-belief.js
+29u-admin.js
+29v-market.js
+29w-army.js
+29x-game.js
 30-api.js

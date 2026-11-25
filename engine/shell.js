@@ -2,7 +2,7 @@
 // the sheet for a new map, and the room around an open map.
 (function () {
   const MME = window.MME;
-  MME.VERSION = '0.18.5';
+  MME.VERSION = '0.19.0';
   MME.NAME = 'Bazaar Worldmaker';
   MME.GRESLAND_KM = 34;   // canon: the continent is about 12 million square kilometres, and the map draws it on 12,208 hexes
   const $ = id => document.getElementById(id);
@@ -174,6 +174,8 @@
   // ---------- the library ----------
   async function renderLibrary() {
     const list = await store.list(), box = $('lib');
+    // v0.19.0: the game's own front row: carry on with the map touched last, a new world, the library, the lessons
+    if ($('gameBar')) { const last = list.slice().sort((x, y) => (y.updated || 0) - (x.updated || 0))[0]; $('gContinue').hidden = !last; if (last) { $('gContinueName').textContent = last.title; $('gContinue').onclick = () => openMap(last.id); } $('gLibCount').textContent = list.length + ' ผืน'; }
     $('libCount').textContent = list.length + ' ผืน';
     box.innerHTML = list.map(m => `<article class="mapcard" data-id="${esc(m.id)}">
       <button type="button" class="th" data-act="open" aria-label="เปิด ${esc(m.title)}" style="${m.thumb ? `background-image:url(${esc(m.thumb)})` : ''}"></button>
@@ -325,6 +327,18 @@
     $('shareVeil').hidden = false; setTimeout(() => $('shareUrl').select(), 30);
   };
   $('shareClose').onclick = () => { $('shareVeil').hidden = true; };
+  if ($('gameBar')) {
+    $('gNew').onclick = () => $('newBtn').click();
+    $('gLib').onclick = () => { const l = document.querySelector('.libhead'); if (l) l.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+    $('gLearn').onclick = () => { const c = document.querySelector('.mcard.tutor'); if (!c) return; c.scrollIntoView({ behavior: 'smooth', block: 'center' }); c.classList.remove('glow'); void c.offsetWidth; c.classList.add('glow'); };
+  }
+  // v0.19.0: the terms of use, from the menu
+  if ($('policyBtn')) {
+    const close = () => { $('policyVeil').hidden = true; };
+    $('policyBtn').onclick = () => { const b = $('policyBody'); if (!b.innerHTML) { b.innerHTML = MME.POLICY_HTML || '<p>ไม่พบนโยบาย</p>'; for (const a of b.querySelectorAll('a')) { a.target = '_blank'; a.rel = 'noopener'; } } $('policyVeil').hidden = false; b.scrollTop = 0; b.focus(); };
+    $('policyClose').onclick = close; $('policyVeil').addEventListener('click', e => { if (e.target === $('policyVeil')) close(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('policyVeil').hidden) close(); });
+  }
   $('shareVeil').addEventListener('click', e => { if (e.target === $('shareVeil')) $('shareVeil').hidden = true; });
   $('shareCopy').onclick = async () => { toast(await copyText(MME.SITE) ? 'คัดลอกลิงก์แล้ว ส่งให้เพื่อนได้เลย' : 'คัดลอกเองไม่ได้ ให้เลือกลิงก์ในช่องแล้วคัดลอก'); };
   $('shareNative').onclick = async () => { try { await navigator.share({ title: 'Bazaar Worldmaker', text: SHARE_TEXT, url: MME.SITE }); } catch (err) { if (!(err && err.name === 'AbortError')) toast('แชร์ผ่านแอปไม่ได้ ใช้ปุ่มคัดลอกลิงก์แทน'); } };

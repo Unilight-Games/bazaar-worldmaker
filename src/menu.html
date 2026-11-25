@@ -4,7 +4,14 @@
     <h1><small>Kirana Worldbuilding Tools</small>Bazaar Worldmaker<em>ตลาดขายโลก</em></h1>
     <p>สร้างแผนที่ช่องหกเหลี่ยม ระบายภูมิประเทศ วางแม่น้ำ เมือง ถนน และเส้นทางการค้า แล้วชวนเพื่อนเข้ามาแก้แผนที่ผืนเดียวกันพร้อมกัน</p>
     <button type="button" class="btn sharebtn" id="shareBtn">แชร์ Bazaar Worldmaker</button>
+    <button type="button" class="btn sharebtn" id="policyBtn">นโยบายการใช้งาน</button>
   </div>
+  <nav class="gamebar" id="gameBar" aria-label="เมนูหลัก">
+    <button type="button" class="gbtn main" id="gContinue" hidden><span class="gk">เล่นต่อ</span><small id="gContinueName"></small></button>
+    <button type="button" class="gbtn" id="gNew"><span class="gk">สร้างโลกใหม่</span><small>ทะเลเปล่าหรือสุ่มแผ่นดิน</small></button>
+    <button type="button" class="gbtn" id="gLib"><span class="gk">คลังแผนที่</span><small id="gLibCount"></small></button>
+    <button type="button" class="gbtn" id="gLearn"><span class="gk">บทเรียน</span><small>เรียนกับเนเมสไซอาร์</small></button>
+  </nav>
   <div class="menugrid">
     <div class="side">
       <div class="mcard lead">
@@ -125,6 +132,13 @@
       <button type="button" class="btn" data-share="x">X</button>
     </div>
     <div class="foot"><button type="button" class="btn" id="shareClose">ปิด</button></div>
+  </div>
+</div>
+<div class="veil" id="policyVeil" hidden>
+  <div class="sheet policysheet" role="dialog" aria-labelledby="policyHead">
+    <h2 id="policyHead">นโยบายการใช้งาน</h2>
+    <div class="policybody" id="policyBody" tabindex="0"></div>
+    <div class="foot"><button type="button" class="btn" id="policyClose">ปิด</button></div>
   </div>
 </div>
 <div id="mtoast" role="status" hidden></div>

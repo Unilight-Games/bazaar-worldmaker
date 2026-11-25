@@ -390,7 +390,7 @@ function eStats(cities, own, wfn) {
     else if (nM) { H.foot += w; if (z === 'H') H.footH += w; if (z !== 'Q') H.footNQ += w; }
     if (FOREST.has(b)) { if (nOpen) { H.edge += w; if (z === 'Q') H.edgeQ += w; } if (nM) H.forestM += w; }
   }
-  for (const p of visiblePoints()) { const h = p.h != null ? p.h : hexAt(p.x, p.y); if (h >= 0 && own[h] >= 0 && Hs[own[h]].pt[p.k] != null) Hs[own[h]].pt[p.k] += wOf[h]; }
+  for (const p of ptLike()) { const h = p.h != null ? p.h : hexAt(p.x, p.y); if (h >= 0 && own[h] >= 0 && Hs[own[h]].pt[p.k] != null) Hs[own[h]].pt[p.k] += wOf[h]; }
   for (const H of Hs) H.south = H.n ? H.south / H.n : 0.5;
   return Hs;
 }

@@ -34,17 +34,18 @@ let TRV = null;
 function trvHoly(c, pts, st) {
   const why = []; let h = 0;
   const own = HOLY[ECO.holy[c.id]]; if (own) { h += own[1]; why.push([own[0], own[1]]); }
-  let f = 0; for (const o of c.org || []) if (o.kind === 'faith') f++; if (f) { h += f; why.push(['บ้านขององค์กรศาสนา ' + f + ' แห่ง', f]); }
+  let f = 0; for (const o of c.org || []) if (o.kind === 'faith') f += relOrgW(c, o); if (f) { h += f; why.push(['บ้านขององค์กรศาสนา ' + f + ' แห่ง', f]); }
   let near = 0; for (const p of pts) if (p.h >= 0 && (p.k === 'pillar' || p.k === 'ruin') && Math.hypot(CX[p.h] - c.x, CY[p.h] - c.y) <= 2.2 * DY) near += p.k === 'pillar' ? 0.5 : 0.25;
   if (near) { h += near; why.push(['เสาหินหรือซากโบราณใกล้เมือง', near]); }
   if (st >= 0 && Math.hypot(CX[st] - c.x, CY[st] - c.y) <= 3.2 * DY) { h += 2; why.push(['มองเห็นยอดเขาศักดิ์สิทธิ์', 2]); }
+  { const rh = relHoly(c); if (rh.h) { h += rh.h; why.push(...rh.why); } }
   const fh = c.fx ? c.fx.holy : 0; if (fh) { h += fh; why.push([c.kind === 'monastery' && !comTr(c.id).includes('holy') ? 'เป็นอาราม' : 'ชนิดและคุณลักษณะของชุมชน', fh]); }   // v0.18.5 (29k)
   return { h, why };
 }
 function trvApply(E, rows, book, mean, tpairs) {
   const n = rows.length; TRV = null; if (!E || !n) return;
   const tRef = socTRef(E), per = ECO.central.per, NT = E.NT, NWAY = E.NWAY || null;
-  const pts = visiblePoints(), st = stPeak();
+  const pts = ptLike(), st = stPeak();
   const out = {}, inn = {}, spendIn = new Float64Array(n), spendOut = new Float64Array(n), pairs = [];
   for (const k of Object.keys(TRVK)) { out[k] = new Float64Array(n); inn[k] = new Float64Array(n); }
   const add = (i, j, x, k) => { if (!(x > 0) || i === j) return; out[k][i] += x; inn[k][j] += x; pairs.push([i, j, x, k]); };
@@ -63,10 +64,10 @@ function trvApply(E, rows, book, mean, tpairs) {
   rows.forEach((r, i) => { r.holy = holy[i]; r.trvWell = 0; r.pilgAccess = 0; });
   if (Hsum > 0) for (let i = 0; i < n; i++) {
     const r = rows[i]; let sum = H[i], away = 0;
-    for (let j = 0; j < n; j++) { W[j] = 0; if (j === i || !(H[j] > 0)) continue; const t = NT[i][j]; if (!isFinite(t) || ecoRival(r.s, rows[j].s)) continue; const e = Math.exp(-t / farG); W[j] = H[j] * e; sum += W[j]; away += W[j]; }
+    for (let j = 0; j < n; j++) { W[j] = 0; if (j === i || !(H[j] > 0)) continue; const t = NT[i][j]; if (!isFinite(t) || ecoRival(r.s, rows[j].s)) continue; const e = Math.exp(-t / farG); W[j] = H[j] * e * relPilgW(r, rows[j]); sum += W[j]; away += W[j]; }
     r.pilgAccess = sum / Hsum; r.trvWell = wellG * r.pilgAccess;
     // the more holiness within reach, the more often people go: as often as the rate says when a regional centre (3) is at hand
-    const G = r.people * rateG * Math.pow(clamp(r.rich, 0.3, 2), 0.3) * Math.min(2, Math.sqrt(away / 3)) * (sum > 0 ? away / sum : 0); if (!(G >= 0.5) || !(away > 0)) continue;
+    const G = r.people * rateG * relPilgRate(r) * Math.pow(clamp(r.rich, 0.3, 2), 0.3) * Math.min(2, Math.sqrt(away / 3)) * (sum > 0 ? away / sum : 0); if (!(G >= 0.5) || !(away > 0)) continue;
     sum = away;
     for (let j = 0; j < n; j++) if (W[j] > 0) add(i, j, G * W[j] / sum, 'pilg');
   }

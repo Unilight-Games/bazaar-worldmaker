@@ -152,10 +152,38 @@ function placePoint(x, y) {
 function paletteNames() { for (const s of document.querySelectorAll('#pal .sw')) if (s.dataset.b !== 'restore') s.lastChild.textContent = biomeInfo(s.dataset.b).name; }
 function updatePointsLegend() {
   const vis = visiblePoints();
-  // v0.18.5: a row per kind of point of interest; on a page the owner may change, a row puts that kind under the pointer to place
-  $('points').innerHTML = Object.entries(D.pointKinds).map(([k, p]) =>
-    `<div class="lg${editable ? ' ptadd' : ''}"${editable ? ` data-ptk="${esc(k)}" role="button" tabindex="0" title="คลิกแล้วคลิกบนแผนที่เพื่อวาง${esc(kindInfo(k).name)}"` : ''}><span class="chip" style="background:${p.color}"></span><span>${esc(kindInfo(k).name)}</span><span class="n">${vis.filter(q => q.k === k).length}</span>${editable ? '<span class="add">+ วาง</span>' : ''}</div>`).join('')
+  // v0.19.0: the owner asked for the points of interest to become features of the ground. No new point is placed; the points the
+  // map already has stay and keep counting until the owner moves them over, with one button, into kinds of feature of the same name.
+  const left = Object.entries(D.pointKinds).filter(([k]) => vis.some(q => q.k === k));
+  $('points').innerHTML = left.map(([k, p]) => `<div class="lg"><span class="chip" style="background:${p.color}"></span><span>${esc(kindInfo(k).name)}</span><span class="n">${vis.filter(q => q.k === k).length}</span></div>`).join('')
     + `<div class="lg"><span class="chip" style="background:radial-gradient(circle,#2a2116 30%,#f5e7b8 32%)"></span><span>ชุมชน</span><span class="n">${visibleCities().length}</span></div>`
-    + `<p class="ptwhy">สถานที่น่าสนใจดึงนักท่องเที่ยวไปยังชุมชนที่อยู่ห่างไม่เกินสามช่อง เสาหินกับซากปรักหักพังทำให้ชุมชนใกล้ ๆ ศักดิ์สิทธิ์ขึ้นจนมีคนมาแสวงบุญ และสินค้าที่ตั้งให้ผลิตจากสถานที่ชนิดใด จะผลิตได้ที่ชุมชนซึ่งมีสถานที่ชนิดนั้นในเขต${editable ? ' คลิกชนิดในรายการเพื่อวางบนแผนที่' : ''}</p>`;
+    + (vis.length ? `<p class="ptwhy">จุดเหล่านี้เป็นสถานที่น่าสนใจแบบเดิม ยังดึงนักท่องเที่ยว ทำให้ชุมชนใกล้ ๆ ศักดิ์สิทธิ์ และให้สินค้าที่ผูกกับชนิดของจุดเหมือนเดิม สถานที่แบบนี้ย้ายไปเป็นลักษณะพิเศษของพื้นที่แล้ว วางใหม่ได้จากแถว "ลักษณะพิเศษ" ในโหมดระบายภูมิประเทศ</p>`
+      + (editable ? `<div class="btns"><button type="button" class="btn" id="ptMove">ย้ายจุดทั้งหมดไปเป็นลักษณะพิเศษ</button></div>` : '') : '');
+  const b = $('ptMove'); if (b) b.onclick = movePointsToFeatures;
+}
+// every point to a feature of the same kind on its hex; a kind of point becomes a kind of feature of its own (pk keeps what it was)
+function movePointsToFeatures() {
+  if (!editable) return; commitInfo();
+  const vis = visiblePoints().filter(p => p.h >= 0 && !isW(eff(p.h))); if (!vis.length) return;
+  const codeOf = {};
+  for (const k of new Set(vis.map(p => p.k))) {
+    let c = Object.keys(ECO.fkinds).find(x => ECO.fkinds[x].pk === k && !ECO.fkinds[x].del); if (c) { codeOf[k] = c; continue; }
+    c = [...FEAT_CODES].find(x => !ECO.fkinds[x]); if (!c) continue;
+    const nm = kindInfo(k).name, clash = Object.values(FEAT_BASE).some(z => z.name === nm);
+    ECO.fkinds[c] = { name: (clash ? nm + ' (จากจุดเดิม)' : nm).slice(0, 40), col: D.pointKinds[k].color || '#b08cd8', on: 'land', y: {}, farm: 0, water: 0, well: 0, tour: 0, g: k, pk: k }; codeOf[k] = c;
+  }
+  const ch = [], ops = [], seen = new Set(), notes = [];
+  for (const p of vis) {
+    const c = codeOf[p.k]; if (!c) continue;
+    if (!seen.has(p.h) && ECO.feat[p.h] === '.') { ch.push([p.h, '.', c]); seen.add(p.h); } else if (!seen.has(p.h) && ECO.feat[p.h] !== c) continue;
+    if (p.name || p.note) notes.push([p.h, p.name, p.note]);
+    const own = ED.points.get(p.id); if (own) ops.push({ k: 'pt', id: p.id, a: { ...own }, b: null }); if (PTB.has(p.id)) ops.push({ k: 'ph+', id: p.id });
+  }
+  for (const [i, , c] of ch) ECO.feat[i] = c;
+  if (typeof noteFromPoint === 'function') for (const [h, nm, nt] of notes) noteFromPoint(h, nm, nt);
+  if (ch.length) ops.push({ k: 'ft', ch });
+  if (ops.length) doOp(ops.length === 1 ? ops[0] : { k: 'm', ops });
+  featChanged(true); isel = null; renderInfoCard(); updatePointsLegend();
+  flash(`ย้าย ${vis.length} จุดไปเป็นลักษณะพิเศษแล้ว`);
 }
 

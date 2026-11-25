@@ -161,6 +161,91 @@ aside { display: flex; flex-direction: column; gap: 12px; }
 .optrow.traits { gap: 4px 12px; }
 .optrow.traits .trait { display: inline-flex; align-items: center; gap: 4px; font-size: .84rem; white-space: nowrap; cursor: pointer; }
 #cfFx { margin-top: 2px; }
+/* v0.19.0: the writer of notes, the world's line, and the windows over the map */
+.mmodal { position: absolute; inset: 0; z-index: 20; background: rgba(10, 11, 14, .55); display: flex; align-items: center; justify-content: center; padding: 18px; }
+.mmodal[hidden] { display: none; }
+.mmcard { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; width: min(720px, 100%); max-height: 100%; display: flex; flex-direction: column; padding: 12px 14px; box-shadow: 0 10px 30px rgba(0, 0, 0, .5); }
+.mmhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.mmhead h3 { margin: 0; font-family: var(--display); font-size: 1.1rem; }
+.ntworld { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-bottom: 8px; font-size: .9rem; }
+.ntworld input { width: 12em; }
+.nttools { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.nttools button { background: var(--ink); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 3px 8px; font: inherit; font-size: .85rem; cursor: pointer; }
+.nttools button:hover { border-color: var(--brass); }
+.ntedit { flex: 1; min-height: 240px; overflow: auto; background: var(--ink); border: 1px solid var(--line); border-radius: 5px; padding: 10px 12px; line-height: 1.7; outline: none; }
+.ntedit:focus { border-color: var(--brass); }
+.ntedit h3, .ntedit h4 { font-family: var(--display); margin: .6em 0 .3em; }
+.ntedit blockquote { margin: .4em 0; padding-left: 10px; border-left: 3px solid var(--brass); color: var(--muted); }
+.worldline { position: absolute; left: 10px; bottom: 32px; z-index: 2; font-family: var(--display); font-size: .85rem; color: var(--text); background: rgba(21, 23, 28, .7); border: 1px solid var(--line); border-radius: 4px; padding: 2px 8px; cursor: pointer; }
+.worldline[hidden] { display: none; }
+.peek { position: absolute; z-index: 6; pointer-events: none; min-width: 180px; max-width: 280px; background: rgba(21, 23, 28, .96); border: 1px solid var(--line); border-left: 3px solid var(--brass); border-radius: 5px; padding: 7px 10px; font-size: .82rem; line-height: 1.5; box-shadow: 0 4px 14px rgba(0, 0, 0, .45); }
+.peek[hidden], .peekring[hidden] { display: none; }
+.peek b { font-family: var(--display); font-size: .98rem; }
+.peek .m { color: var(--muted); } .peek .s { color: var(--brass); } .peek .lore { margin-top: 3px; }
+.peekring { position: absolute; z-index: 6; pointer-events: none; width: 16px; height: 16px; border-radius: 50%; background: conic-gradient(var(--brass) var(--p, 0deg), rgba(255, 255, 255, .18) 0); -webkit-mask: radial-gradient(circle, transparent 4px, #000 5px); mask: radial-gradient(circle, transparent 4px, #000 5px); }
+.tripbox { position: absolute; z-index: 5; right: 64px; top: 54px; width: min(340px, calc(100% - 90px)); max-height: calc(100% - 70px); overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 7px; padding: 10px 12px; font-size: .88rem; box-shadow: 0 6px 18px rgba(0, 0, 0, .45); }
+.tripbox[hidden] { display: none; }
+.tripbox .mmhead h3 { font-size: 1rem; }
+.tripbox .btn.on, .infobody .btn.on { border-color: var(--brass); color: var(--brass); }
+canvas.measuring { cursor: crosshair; }
+.pinrow { position: sticky; top: -8px; z-index: 3; background: inherit; margin: -8px -10px 6px; padding: 8px 10px 6px; background: rgba(27, 30, 37, .98); border-bottom: 1px solid var(--line); }
+.admtree, .admtree ul { list-style: none; margin: 4px 0; padding-left: 14px; font-size: .86rem; }
+.admtree { padding-left: 2px; }
+.admtree a { color: var(--text); text-decoration: none; border-bottom: 1px dotted var(--muted); }
+.admtree a.on, .admtree a:hover { color: var(--brass); }
+#ecobody a[data-adm], #ecobody a[data-city], #ecobody a[data-sopen] { color: var(--brass); }
+.ftax { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 10px; margin: 4px 0 6px; font-size: .86rem; }
+.ftax label { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.ftax small { color: var(--muted); }
+.ftax input.chg { border-color: var(--brass); }
+.frule { flex-wrap: wrap; gap: 4px; }
+.mkcard { width: min(900px, 100%); max-height: 100%; overflow: auto; }
+.mktbl { display: grid; grid-template-columns: minmax(150px, 1.4fr) repeat(5, minmax(70px, .8fr)) minmax(110px, 1.3fr); gap: 0 10px; font-size: .86rem; margin-top: 6px; }
+.mkh { font-weight: 600; color: var(--muted); padding: 4px 0; border-bottom: 1px solid var(--line); }
+.mkh.r, .mkrow .r { text-align: right; }
+.mkrow { display: contents; cursor: pointer; font: inherit; color: inherit; background: none; border: 0; }
+.mkrow > span { padding: 5px 0; border-bottom: 1px solid rgba(255, 255, 255, .05); }
+.mkrow:hover > span, .mkrow.on > span { background: rgba(207, 169, 94, .08); }
+.mkrow small.up { color: #e98a6a; } .mkrow small.dn { color: #8fc48a; }
+.mkdet { grid-column: 1 / -1; padding: 6px 4px 10px; border-bottom: 1px solid var(--line); }
+.mkplot { display: flex; gap: 24px; flex-wrap: wrap; }
+.mkplot b { display: block; font-size: .8rem; color: var(--muted); }
+.mkdet a { color: var(--brass); }
+/* v0.19.0: the bar of figures, the small map, the hotbar, the ring menu, floating cards */
+.hud { position: absolute; z-index: 4; left: 10px; bottom: 10px; display: flex; gap: 2px; align-items: center; flex-wrap: wrap; max-width: calc(100% - 260px); background: linear-gradient(180deg, rgba(34, 31, 26, .94), rgba(20, 21, 26, .94)); border: 1px solid rgba(207, 169, 94, .45); border-radius: 8px; padding: 3px 4px; box-shadow: 0 4px 14px rgba(0, 0, 0, .45); }
+.hud[hidden], .minimap[hidden], .hotbar[hidden], .ringmenu[hidden] { display: none; }
+.hud button { position: relative; background: none; border: 0; color: #f1e6c8; font: inherit; font-size: .82rem; padding: 3px 8px; border-radius: 5px; cursor: pointer; white-space: nowrap; }
+.hud button:hover { background: rgba(207, 169, 94, .16); }
+.hud button[data-hud="world"] { font-family: var(--display); font-weight: 600; color: #e9cf91; }
+.hud .hudsp { flex: 1; min-width: 8px; }
+.hudfloat { position: absolute; left: 50%; top: -6px; transform: translateX(-50%); font-size: .8rem; font-weight: 700; pointer-events: none; animation: hudUp 1.5s ease-out forwards; }
+.hudfloat.up { color: #9fe08a; } .hudfloat.dn { color: #f08a6a; }
+@keyframes hudUp { from { opacity: 1; transform: translate(-50%, 0); } to { opacity: 0; transform: translate(-50%, -22px); } }
+.minimap { position: absolute; z-index: 4; right: 10px; bottom: 10px; width: 200px; border: 1px solid rgba(207, 169, 94, .55); border-radius: 6px; box-shadow: 0 4px 14px rgba(0, 0, 0, .5); background: #0f1114; cursor: crosshair; }
+.hotbar { position: absolute; z-index: 4; left: 50%; transform: translateX(-50%); bottom: 50px; display: flex; gap: 3px; background: rgba(20, 21, 26, .9); border: 1px solid var(--line); border-radius: 8px; padding: 3px; }
+.hotbar button { background: none; border: 1px solid transparent; color: var(--text); font: inherit; font-size: .78rem; padding: 3px 7px; border-radius: 5px; cursor: pointer; white-space: nowrap; }
+.hotbar button[aria-pressed="true"] { border-color: var(--brass); color: var(--brass); background: rgba(207, 169, 94, .1); }
+.hotbar kbd { font-family: inherit; font-size: .7rem; color: var(--muted); margin-right: 4px; border: 1px solid var(--line); border-radius: 3px; padding: 0 3px; }
+.ringmenu { position: absolute; z-index: 9; width: 0; height: 0; }
+.ringmenu .ringhub { position: absolute; transform: translate(-50%, -50%); background: rgba(21, 23, 28, .95); border: 1px solid var(--brass); border-radius: 50%; width: 64px; height: 64px; display: flex; align-items: center; justify-content: center; text-align: center; font-size: .72rem; padding: 4px; color: #e9cf91; }
+.ringmenu button { position: absolute; transform: translate(-50%, -50%) scale(.6); opacity: 0; background: rgba(27, 30, 37, .97); border: 1px solid rgba(207, 169, 94, .6); color: var(--text); border-radius: 16px; padding: 5px 10px; font: inherit; font-size: .8rem; white-space: nowrap; cursor: pointer; transition: transform .16s ease, opacity .16s ease; }
+.ringmenu.on button { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+.ringmenu button:hover { border-color: var(--brass); color: var(--brass); }
+aside .card h2 { position: relative; }
+.popbtn { position: absolute; right: 26px; top: 50%; transform: translateY(-50%); background: none; border: 1px solid transparent; color: var(--muted); font-size: .85rem; cursor: pointer; border-radius: 4px; padding: 0 4px; }
+.popbtn:hover { color: var(--brass); border-color: var(--line); }
+.card.floating { position: absolute; z-index: 8; width: 320px; max-height: 70%; overflow: auto; box-shadow: 0 10px 28px rgba(0, 0, 0, .55); border: 1px solid var(--brass); }
+.card.floating.dragging, .tripbox.dragging { opacity: .9; }
+.toast.long { max-width: min(900px, 90%); white-space: normal; }
+.mmodal:not([hidden]) .mmcard { animation: winIn .18s ease-out; }
+@keyframes winIn { from { opacity: 0; transform: translateY(8px) scale(.98); } }
+@media (prefers-reduced-motion: reduce) { .mmodal:not([hidden]) .mmcard, .ringmenu button, .hudfloat { animation: none; transition: none; } }
+.mapopt { position: absolute; z-index: 4; top: 10px; right: 10px; display: flex; gap: 4px; align-items: center; }
+.mapopt button { border: 1px solid var(--line); background: rgba(21, 23, 28, .88); color: var(--text); font: 500 .8rem/1.25 var(--body); border-radius: 5px; padding: 6px 9px; cursor: pointer; white-space: nowrap; }
+.mapopt button:hover { border-color: var(--brass); }
+.mapopt button.w { font-family: var(--display); color: #e9cf91; max-width: 22em; overflow: hidden; text-overflow: ellipsis; }
+#modes button { position: relative; }
+#modes .modekey { position: absolute; top: 1px; right: 2px; font-family: inherit; font-size: .56rem; line-height: 1; color: var(--muted); opacity: .8; pointer-events: none; }
 
 /* ---------- Bazaar Worldmaker: the menu, the library and the room, in the map's own ink and brass ---------- */
 :root { --good: #7cc47f; --warn: #e2748a; --panel2: #262a33; }
@@ -225,6 +310,7 @@ body.tutoring { padding-bottom: 250px; }
 #tuChip { position: fixed; left: 14px; bottom: 14px; z-index: 60; box-shadow: 0 6px 20px rgba(0, 0, 0, .5); }
 #tuChip[hidden] { display: none; }
 .tu-spot { outline: 2px solid #f0c860 !important; outline-offset: 3px; border-radius: 6px; animation: tuPulse 1.5s ease-in-out infinite; position: relative; z-index: 3; }
+#scalebar.tu-spot, .mapopt.tu-spot, .minimap.tu-spot { position: absolute; }
 @keyframes tuPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(240, 200, 96, .55); } 50% { box-shadow: 0 0 0 9px rgba(240, 200, 96, 0); } }
 @media (prefers-reduced-motion: reduce) { .tu-spot { animation: none; } }
 @media (max-width: 760px) { #tutor { --w: min(64vw, 320px); padding: 0 8px 8px; display: flex; flex-direction: column; } #tutor .tu-fig { position: relative; left: auto; bottom: auto; align-self: flex-start; margin-left: calc(var(--w) * -0.16); margin-bottom: calc(var(--w) * -0.6); } #tutor .tu-box { margin-left: 0; padding-left: 14px; } #tutor .tu-text { font-size: .93rem; min-height: 6.4em; } body.tutoring { padding-bottom: 300px; } }
@@ -725,6 +811,24 @@ svg.chart .ax { fill: var(--muted); font-size: 10px; font-family: var(--body); }
 .cloudt .lnk { white-space: nowrap; }
 b.warn { color: var(--warn); font-weight: 600; }
 .hubtip { position: fixed; z-index: 80; pointer-events: none; background: #0e1014; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font-size: .8rem; max-width: 280px; }
+/* v0.19.0: the terms of use */
+.policysheet { width: min(860px, 94vw); max-height: 88vh; display: flex; flex-direction: column; }
+.policybody { overflow: auto; flex: 1; padding: 4px 6px 4px 2px; line-height: 1.75; font-size: .95rem; outline: none; }
+.policybody h1 { font-size: 1.3rem; } .policybody h2 { font-size: 1.1rem; margin: 1.2em 0 .4em; }
+.policybody table { border-collapse: collapse; width: 100%; margin: .6em 0; font-size: .9rem; }
+.policybody th, .policybody td { border: 1px solid var(--line, #333844); padding: 5px 8px; text-align: left; vertical-align: top; }
+.policybody ol, .policybody ul { padding-left: 1.4em; }
+/* v0.19.0: the front row of the menu, as a game's */
+.gamebar { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: 12px; margin: 6px 0 18px; }
+.gbtn { flex: 1 1 180px; min-height: 74px; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 2px; padding: 12px 18px; border-radius: 10px; border: 1px solid rgba(207, 169, 94, .35); background: linear-gradient(160deg, rgba(40, 36, 30, .88), rgba(22, 24, 30, .92)); color: #f1e6c8; cursor: pointer; text-align: left; box-shadow: 0 6px 18px rgba(0, 0, 0, .35); transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease; }
+.gbtn:hover, .gbtn:focus-visible { transform: translateY(-2px); border-color: #cfa95e; box-shadow: 0 10px 24px rgba(0, 0, 0, .45), 0 0 0 1px rgba(207, 169, 94, .35) inset; }
+.gbtn .gk { font-family: 'Noto Serif Thai', Georgia, serif; font-size: 1.25rem; font-weight: 700; letter-spacing: .01em; }
+.gbtn small { color: #b9ad8e; font-size: .85rem; }
+.gbtn.main { background: linear-gradient(160deg, #cfa95e, #9b7a3a); color: #1d1a14; border-color: #e5c682; }
+.gbtn.main small { color: #3a2e1a; }
+.mcard.tutor.glow { animation: tglow 1.6s ease 2; }
+@keyframes tglow { 50% { box-shadow: 0 0 0 3px rgba(207, 169, 94, .8), 0 0 30px rgba(207, 169, 94, .5); } }
+@media (prefers-reduced-motion: reduce) { .gbtn { transition: none; } .mcard.tutor.glow { animation: none; } }
 </style>
 </head>
 <body>
@@ -734,7 +838,14 @@ b.warn { color: var(--warn); font-weight: 600; }
     <h1><small>Kirana Worldbuilding Tools</small>Bazaar Worldmaker<em>ตลาดขายโลก</em></h1>
     <p>สร้างแผนที่ช่องหกเหลี่ยม ระบายภูมิประเทศ วางแม่น้ำ เมือง ถนน และเส้นทางการค้า แล้วชวนเพื่อนเข้ามาแก้แผนที่ผืนเดียวกันพร้อมกัน</p>
     <button type="button" class="btn sharebtn" id="shareBtn">แชร์ Bazaar Worldmaker</button>
+    <button type="button" class="btn sharebtn" id="policyBtn">นโยบายการใช้งาน</button>
   </div>
+  <nav class="gamebar" id="gameBar" aria-label="เมนูหลัก">
+    <button type="button" class="gbtn main" id="gContinue" hidden><span class="gk">เล่นต่อ</span><small id="gContinueName"></small></button>
+    <button type="button" class="gbtn" id="gNew"><span class="gk">สร้างโลกใหม่</span><small>ทะเลเปล่าหรือสุ่มแผ่นดิน</small></button>
+    <button type="button" class="gbtn" id="gLib"><span class="gk">คลังแผนที่</span><small id="gLibCount"></small></button>
+    <button type="button" class="gbtn" id="gLearn"><span class="gk">บทเรียน</span><small>เรียนกับเนเมสไซอาร์</small></button>
+  </nav>
   <div class="menugrid">
     <div class="side">
       <div class="mcard lead">
@@ -855,6 +966,13 @@ b.warn { color: var(--warn); font-weight: 600; }
       <button type="button" class="btn" data-share="x">X</button>
     </div>
     <div class="foot"><button type="button" class="btn" id="shareClose">ปิด</button></div>
+  </div>
+</div>
+<div class="veil" id="policyVeil" hidden>
+  <div class="sheet policysheet" role="dialog" aria-labelledby="policyHead">
+    <h2 id="policyHead">นโยบายการใช้งาน</h2>
+    <div class="policybody" id="policyBody" tabindex="0"></div>
+    <div class="foot"><button type="button" class="btn" id="policyClose">ปิด</button></div>
   </div>
 </div>
 <div id="mtoast" role="status" hidden></div>
@@ -1014,7 +1132,7 @@ b.warn { color: var(--warn); font-weight: 600; }
         <div data-for="info" hidden>
           <div class="sidehint"><span>ช่องแก้ข้อมูลของสิ่งที่เลือกอยู่ในแผงข้างทางขวา ซึ่งตอนนี้ซ่อนอยู่</span><button type="button" class="btn" data-reveal="infocard">เปิดแผงข้าง</button></div>
           <div class="optrow" style="margin-top:0">
-            <div class="seg" id="ifTool"><button type="button" data-t="pick">เลือกข้อมูล</button><button type="button" data-t="point">วางสถานที่น่าสนใจ</button></div>
+            <div class="seg" id="ifTool"><button type="button" data-t="pick">เลือกข้อมูล</button><button type="button" data-t="zone">ระบายเขตพิเศษ</button></div>
             <div class="seg" id="ifKind" hidden></div>
           </div>
           <p class="hint" id="ifHint"></p>
@@ -1060,17 +1178,18 @@ b.warn { color: var(--warn); font-weight: 600; }
 <section class="method"><div class="card" id="method"></div></section>
 </template>
 <script>window.MME_BUILD = "web"; window.MME_NO_GRESLAND = true;</script>
-<script src="firebase-config.js?v=0.18.5"></script>
-<script src="engine/gen.js?v=0.18.5"></script>
-<script src="engine/store.js?v=0.18.5"></script>
-<script src="engine/backup.js?v=0.18.5"></script>
-<script src="engine/net.js?v=0.18.5"></script>
-<script src="engine/fire.js?v=0.18.5"></script>
-<script src="engine/defaults.js?v=0.18.5"></script>
-<script src="engine/runtime.js?v=0.18.5"></script>
-<script src="engine/shell.js?v=0.18.5"></script>
-<script src="engine/hub.js?v=0.18.5"></script>
-<script src="engine/tutor-lines.js?v=0.18.5"></script>
-<script src="engine/tutor.js?v=0.18.5"></script>
+<script src="firebase-config.js?v=0.19.0"></script>
+<script src="engine/gen.js?v=0.19.0"></script>
+<script src="engine/store.js?v=0.19.0"></script>
+<script src="engine/backup.js?v=0.19.0"></script>
+<script src="engine/net.js?v=0.19.0"></script>
+<script src="engine/fire.js?v=0.19.0"></script>
+<script src="engine/defaults.js?v=0.19.0"></script>
+<script src="engine/runtime.js?v=0.19.0"></script>
+<script src="engine/shell.js?v=0.19.0"></script>
+<script src="engine/hub.js?v=0.19.0"></script>
+<script src="engine/policy.js?v=0.19.0"></script>
+<script src="engine/tutor-lines.js?v=0.19.0"></script>
+<script src="engine/tutor.js?v=0.19.0"></script>
 </body>
 </html>

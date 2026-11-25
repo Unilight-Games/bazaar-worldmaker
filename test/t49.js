@@ -65,18 +65,7 @@ let fails = 0; const ok = (c, m) => { console.log((c ? 'ok   ' : 'FAIL ') + m); 
   const nav = await T(() => MME.shell.cur.rt.test.nav());
   ok(nav && nav.small > 0 && nav.big > 0, 'small rivers and big rivers both on the map ' + JSON.stringify(nav));
 
-  // ---- the points-of-interest launcher ----
-  await p.click('#modes button[data-mode="info"]'); await p.waitForTimeout(400);
-  const pk = await p.$('[data-ptk]'); ok(!!pk, 'the list of points of interest has a place-it row');
-  await pk.click(); await p.waitForTimeout(200);
-  ok(await T(() => MME.shell.cur.rt.test.iptool()) === 'point', 'a click on it starts placing that kind');
-  const p0 = await T(() => MME.shell.cur.rt.test.pts());
-  const land = await T(() => { const t = MME.shell.cur.rt.test, c = t.cities()[0]; const q = t.cityXY(c.id); return [q[0] + 30, q[1] + 30]; });
-  await p.mouse.click(land[0], land[1]); await p.waitForTimeout(300);
-  const p1 = await T(() => MME.shell.cur.rt.test.pts());
-  ok(p1 === p0 + 1 || p1 === p0, 'a click on the map places it (or refuses water) ' + p0 + '→' + p1);
-  if (p1 === p0 + 1) { await p.keyboard.press('Control+z'); await p.waitForTimeout(300); ok(await T(() => MME.shell.cur.rt.test.pts()) === p0, 'and Ctrl+Z takes it back'); }
-  await p.keyboard.press('Escape');
+  // (v0.19.0: points of interest are no longer placed; they became features, see t50)
 
   // ---- community kinds and traits ----
   const c0 = await T(() => { const t = MME.shell.cur.rt.test; return t.gdp ? t.cities().filter(c => c.kind === 'city')[0] : null; });
@@ -91,33 +80,7 @@ let fails = 0; const ok = (c, m) => { console.log((c ? 'ok   ' : 'FAIL ') + m); 
   const kinds = await T(() => [...document.querySelectorAll('#cfKind option')].map(o => o.value));
   ok(['hamlet', 'monastery', 'camp', 'waystation'].every(k => kinds.includes(k)), 'the four new kinds of community can be chosen');
 
-  // ---- taxes ----
-  const G = await T(() => MME.shell.cur.rt.test.grid());
-  const set = async (f) => { const d = await T(() => MME.shell.cur.rt.test.eco()); f(d); await T(d => MME.shell.cur.rt.test.ecoSet(d), d); await settle(); return T(() => MME.shell.cur.rt.test.tax()); };
-  if (!eco0.states || !eco0.states.length) await set(d => { d.states = [{ id: 'A', name: 'รัฐทดสอบ', color: '#aa3333', sys: 'merc', rel: {} }]; d.cells = 'A'.repeat(G.N); });
-  const tx = await T(() => MME.shell.cur.rt.test.tax());
-  const st = tx.books.filter(b => b.sys !== 'anar').sort((a, b) => b.gdp - a.gdp)[0];
-  ok(st && st.tax > 0, 'a state collects its starting tax ' + (st && st.sys));
-  const hi = await set(d => { const s = d.states.find(x => x.id === st.id); s.tax = 0.4; s.tuse = 'keep'; });
-  const bh = hi.books.find(b => b.id === st.id), rows = hi.rows.filter(r => r.s === st.id);
-  ok(Math.abs(bh.tax / rows.reduce((a, r) => a + r.tax / 0.4, 0) - 0.4) < 0.02 && bh.use === 'keep' && Math.abs(bh.tr - bh.tax) < 1e-6, 'a 40% rate into the treasury: the state keeps it all');
-  const wellHi = rows.reduce((a, r) => a + r.well, 0) / rows.length;
-  const svc = await set(d => { const s = d.states.find(x => x.id === st.id); s.tuse = 'svc'; });
-  const rs = svc.rows.filter(r => r.s === st.id), back = rs.reduce((a, r) => a + r.back, 0), took = rs.reduce((a, r) => a + r.tax, 0);
-  ok(Math.abs(back - took) < 1e-6 * Math.max(1, took), 'spent on services, all of it comes back by head');
-  ok(rs.reduce((a, r) => a + r.well, 0) / rs.length > wellHi, 'and people live better than with the same rate kept in the treasury');
-  const crt = await set(d => { const s = d.states.find(x => x.id === st.id); s.tuse = 'court'; });
-  const rc = crt.rows.filter(r => r.s === st.id), got = rc.filter(r => r.back > 0);
-  ok(got.length === 1 && Math.abs(got[0].back - rc.reduce((a, r) => a + r.tax, 0)) < 1e-6 * Math.max(1, got[0].back), 'spent on the court, the whole take goes to one central community');
-  const one2 = rs.sort((a, b) => b.people - a.people)[0];
-  const own = await set(d => { d.ctax = { ...(d.ctax || {}), [one2.id]: 0.05 }; });
-  ok(Math.abs(own.rows.find(r => r.id === one2.id).rate - 0.05) < 1e-9, 'a community with its own rate pays that rate');
-  const free = await set(d => { const s = d.states.find(x => x.id === st.id); s.tax = 0; });
-  ok(free.rows.filter(r => r.s === st.id && r.id !== one2.id).every(r => r.tax === 0), 'a zero rate takes nothing');
-  const saved = await T(() => MME.shell.cur.rt.test.eco());
-  ok(saved.ctax && saved.ctax[one2.id] === 0.05 && saved.states.find(x => x.id === st.id).tax === 0, 'the rates are saved with the map');
-  await T(d => MME.shell.cur.rt.test.ecoSet(d), eco0); await settle();
-
+  // (v0.19.0: the single tax became the public purse, see t53)
   ok(!errs.length, 'no page errors ' + errs.join(' | '));
   await browser.close(); console.log(fails ? fails + ' failed' : 'all passed'); process.exit(fails ? 1 : 0);
 })();

@@ -1,5 +1,6 @@
 // ---------- the year's trade ----------
 let ECON = null, econDirty = true, econTimer = 0;
+let armyNeed = (c, cat) => 0;                       // v0.19.0: what a garrison's kit asks of its city (29w)
 function econCompute() {
   const t0 = performance.now();
   ensureRoutes();                                    // the roads as they stand, and the river crossings
@@ -44,7 +45,7 @@ function econCompute() {
   socRich(cities, prod);                            // how the city's money falls between its classes, and what its country brings up: what its people will want
   // what each city needs, before its workshops
   const need = cities.map(c => {
-    const m = {}; for (const cat of ECATS) m[cat] = ENEED[cat][c.ki] * c.pop * socNeed(c, cat); if (!c.port) m.ships = 0;
+    const m = {}; for (const cat of ECATS) m[cat] = ENEED[cat][c.ki] * c.pop * socNeed(c, cat) + armyNeed(c, cat); if (!c.port) m.ships = 0;
     m.fuel *= c.cm.fuel; m.cloth *= c.cm.cloth; m.herbs *= c.cm.herbs; m.tools *= c.cm.tools;   // what the climate asks of the city
     return m;
   });

@@ -6,6 +6,7 @@ const tipEl = $('tip');
 tipEl.innerHTML = '<div class="tiphead" title="ลากเพื่อย้ายคำอธิบาย ดับเบิลคลิกเพื่อคืนที่เดิม"><span class="tipgrip" aria-hidden="true">⠿</span><span class="tiptitle" id="tipTitle">คำอธิบาย</span><button type="button" class="tipfold" id="tipFold" aria-expanded="true" aria-controls="tipBody" title="พับหรือกางคำอธิบาย">▾</button></div><div class="tipbody" id="tipBody"></div>';
 const tipBody = $('tipBody');
 let TIP = { x: null, y: null, fold: false };
+try { if (localStorage.getItem('mme-tip-v19') !== '1') { localStorage.removeItem('mme-tip'); localStorage.setItem('mme-tip-v19', '1'); } } catch (err) { /* v0.19.0: everyone's card starts again at the bottom left, the owner's ask */ }
 try { const o = JSON.parse(localStorage.getItem('mme-tip') || 'null'); if (o && typeof o === 'object') TIP = { x: Number.isFinite(o.x) ? o.x : null, y: Number.isFinite(o.y) ? o.y : null, fold: !!o.fold }; } catch (err) { /* where it started */ }
 const tipSave = () => { try { localStorage.setItem('mme-tip', JSON.stringify(TIP)); } catch (err) { /* this visit only */ } };
 function tipPlace() {                               // inside the map's box, wherever the box now ends

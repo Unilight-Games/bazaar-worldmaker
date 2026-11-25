@@ -31,7 +31,15 @@ const FEAT_BASE = {
   r: { name: 'ที่ราบสูงยอดตัด', col: '#b0704c', on: 'land', y: { stone: 0.3, ore: 0.1 }, farm: 0, water: 0, well: 0, tour: 0.5, cross: 0.3, g: 'mesa' },
   // asked for next (v0.16.1): islands strewn over open sea, where the ground of the map is sea; the ground "หมู่เกาะ" is shallow sea full of islets already
   s: { name: 'หมู่เกาะกลางทะเล', col: '#78a86e', on: 'sea', y: { protein: 0.4, timber: 0.15, luxury: 0.05 }, farm: 0, water: 1, well: 0, tour: 0.4, cross: -0.1, g: 'isles' },
+  // asked for next (v0.19.0): the points of interest become features of the ground, with waterfalls and great rift valleys
+  t: { name: 'น้ำตก', col: '#8ec8e0', on: 'land', y: { protein: 0.1 }, farm: 0, water: 1, well: 2, tour: 1.2, cross: 0.3, g: 'waterfall' },
+  u: { name: 'หุบเขาทรุดตัว', col: '#9a7a58', on: 'land', y: { grain: 0.3, stone: 0.3, ore: 0.3 }, farm: 1, water: 0, well: 0, tour: 0.6, cross: 0.5, g: 'rift', look: 'ground' },
 };
+// v0.19.0: the owner asked for some features to look like a kind of ground, the way forests and grasslands do. A kind with the
+// look "ground" fills its hexes whole in its own colour and is strewn with small signs as a forest is with trees; the others keep
+// the tint and the one sign. These kinds start as ground (Claude's choice); every kind's card can switch it.
+for (const c of ['b', 'c', 'f', 'g', 'n', 'o']) FEAT_BASE[c].look = 'ground';
+const FEAT_LOOK = { mark: 'สีจางกับเครื่องหมาย', ground: 'เหมือนภูมิประเทศ' };
 const FEAT_ON = { land: 'บนแผ่นดิน', coast: 'แผ่นดินริมทะเล', sea: 'ในทะเล', any: 'ที่ไหนก็ได้' };
 const FEAT_CODES = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 const DRYB = new Set(['d', 'c', 'y', 'u']);
@@ -49,6 +57,13 @@ function featOk(k, i) {                                 // whether a kind may li
   if (k.on === 'any') return true; if (k.on === 'sea') return isSea(b);
   if (isW(b)) return false; if (k.on !== 'coast') return true;
   for (let j = 0; j < 6; j++) { const v = NB[i * 6 + j]; if (v >= 0 && isSea(eff(v))) return true; } return false;
+}
+// v0.19.0: the points of interest live on as features. A kind made from a kind of point keeps the point's kind in pk, and each of
+// its hexes stands for one such point wherever the land's goods, the visitors and the holy places still count points.
+function ptLike() {
+  const out = visiblePoints(); let any = false; for (const k of Object.values(FK)) if (k.pk) { any = true; break; } if (!any) return out;
+  for (let i = 0; i < N; i++) { const k = featAt(i); if (k && k.pk) out.push({ id: 'ft' + i, k: k.pk, x: CX[i], y: CY[i], h: i, name: '', note: '', ft: true }); }
+  return out;
 }
 const featAt = i => { const c = ECO.feat[i]; if (!c || c === '.') return null; const k = FK[c]; return k && featOk(k, i) ? k : null; };
 function featRegister() {                               // each kind's goods, named for the class and the feature, for the books and the cards
@@ -123,6 +138,9 @@ const featFarmAt = u => { const k = featAt(u); return !!(k && k.farm); };
       if (typeof o.name === 'string') z.name = o.name.slice(0, 40);
       if (/^#[0-9a-f]{6}$/i.test(o.col || '')) z.col = o.col;
       if (FEAT_ON[o.on]) z.on = o.on;
+      if (FEAT_LOOK[o.look]) z.look = o.look;
+      if (typeof o.g === 'string' && (FEATG[o.g] || POINTFN[o.g])) z.g = o.g;
+      if (typeof o.pk === 'string' && D.pointKinds[o.pk]) z.pk = o.pk;
       if (o.y && typeof o.y === 'object') { z.y = {}; for (const [cat, r] of Object.entries(o.y).slice(0, 30)) if (typeof cat === 'string' && cat.length <= 40 && +r > 0) z.y[cat] = Math.min(20, +r); }
       for (const f of ['farm', 'water']) if (o[f] != null) z[f] = o[f] ? 1 : 0;
       if (o.well != null) z.well = ecoNum(o.well, -20, 20, 0); if (o.tour != null) z.tour = ecoNum(o.tour, 0, 3, 0); if (o.cross != null) z.cross = ecoNum(o.cross, -0.9, 3, 0);
@@ -202,6 +220,8 @@ const FEATG = {
   karst(c, x, y) { for (const [dx, hh] of [[-2.2, 3], [0, 4.2], [2.2, 2.6]]) { poly(c, [[x + dx - 1, y + 2], [x + dx - 0.8, y + 2 - hh], [x + dx + 0.8, y + 2 - hh], [x + dx + 1, y + 2]], 'rgb(140,152,124)', 'rgb(70,80,62)'); ell(c, x + dx, y + 2 - hh, 0.9, 0.5, 'rgb(96,132,80)'); } },
   mesa(c, x, y) { poly(c, [[x - 3.6, y + 2], [x - 2.2, y - 1.8], [x + 2.2, y - 1.8], [x + 3.6, y + 2]], 'rgb(178,104,70)', 'rgb(96,52,34)'); seg(c, x - 2.6, y - 0.4, x + 2.6, y - 0.4, 'rgb(140,76,50)', 0.4); seg(c, x - 3, y + 0.8, x + 3, y + 0.8, 'rgb(140,76,50)', 0.4); },
   isles(c, x, y) { for (const [dx, dy, r] of [[-2.2, -0.8, 1.2], [0.6, 0.9, 1.5], [2.4, -1.2, 0.9]]) { ell(c, x + dx, y + dy, r, r * 0.7, 'rgb(212,196,150)'); ell(c, x + dx, y + dy - 0.15, r * 0.65, r * 0.45, 'rgb(98,146,84)'); } },
+  waterfall(c, x, y) { poly(c, [[x - 3.4, y - 2.4], [x + 3.4, y - 2.4], [x + 3.4, y - 0.6], [x - 3.4, y - 0.6]], 'rgb(112,104,96)', 'rgb(60,56,52)'); poly(c, [[x - 1.1, y - 0.6], [x + 1.1, y - 0.6], [x + 1.4, y + 1.6], [x - 1.4, y + 1.6]], 'rgb(196,228,240)'); for (const dx of [-0.6, 0, 0.6]) seg(c, x + dx, y - 0.4, x + dx * 1.2, y + 1.5, 'rgba(255,255,255,.85)', 0.25); ell(c, x, y + 2, 2.6, 0.8, 'rgb(120,180,206)'); },
+  rift(c, x, y) { poly(c, [[x - 3.6, y - 1.2], [x - 1.6, y + 0.4], [x + 1.6, y + 0.4], [x + 3.6, y - 1.2], [x + 3.6, y + 2], [x - 3.6, y + 2]], 'rgb(150,118,84)', 'rgb(84,62,42)'); seg(c, x - 3.6, y - 1.2, x - 1.6, y + 0.4, 'rgb(70,50,34)', 0.5); seg(c, x + 1.6, y + 0.4, x + 3.6, y - 1.2, 'rgb(70,50,34)', 0.5); seg(c, x - 1.2, y + 1.2, x + 1.2, y + 1.2, 'rgb(84,140,176)', 0.4); },
   cave(c, x, y) { poly(c, [[x - 3.4, y + 1.8], [x - 2.4, y - 1.6], [x, y - 2.6], [x + 2.4, y - 1.6], [x + 3.4, y + 1.8]], 'rgb(130,122,110)', 'rgb(70,64,58)'); ell(c, x, y + 0.9, 1.4, 1.5, 'rgb(34,30,36)'); },
 };
 // v0.18.5: the owner found the features standing out too much, and asked for them to sit in the ground the way the fields and the
@@ -219,15 +239,23 @@ function featSheet() {
   featKey = key;
   if (!featCv) { featCv = document.createElement('canvas'); featCv.width = Math.max(1, Math.ceil(G.w / FEAT_SHEET)); featCv.height = Math.max(1, Math.ceil(G.h / FEAT_SHEET)); }
   const c = featCv.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, featCv.width, featCv.height); c.setTransform(1 / FEAT_SHEET, 0, 0, 1 / FEAT_SHEET, 0, 0);
-  for (let i = 0; i < N; i++) { const k = featAt(i); if (!k) continue; c.beginPath(); hexPath(c, i, 1.08); c.fillStyle = jit(landMix(featGround(eff(i)), featRGB(k.col), FEAT_TINT), i, 8); c.fill(); }
+  for (let i = 0; i < N; i++) { const k = featAt(i); if (!k || k.look === 'ground') continue; c.beginPath(); hexPath(c, i, 1.08); c.fillStyle = jit(landMix(featGround(eff(i)), featRGB(k.col), FEAT_TINT), i, 8); c.fill(); }
   return featCv;
 }
 function featDraw(c) {
   let any = false; for (let i = 0; i < N; i++) if (ECO.feat[i] !== '.') { any = true; break; } if (!any) return;
   const sh = featSheet();
+  // the kinds that look like ground: whole hexes in their colour, then small signs strewn over them
+  c.save();
+  for (let i = 0; i < N; i++) { const k = featAt(i); if (!k || k.look !== 'ground') continue; c.beginPath(); hexPath(c, i, 1.02); c.fillStyle = jit(landMix(featGround(eff(i)), featRGB(k.col), 0.85), i, 10); c.fill(); }
+  for (let i = 0; i < N; i++) {
+    const k = featAt(i); if (!k || k.look !== 'ground') continue; const fn = FEATG[k.g] || POINTFN[k.g]; if (!fn) continue; const r = rng(i * 17 + 3);
+    for (let s = 0; s < 4; s++) { c.save(); c.translate(CX[i] + (r() - 0.5) * 1.2 * R, CY[i] + (r() - 0.5) * 1.0 * R); c.scale(0.6, 0.6); c.globalAlpha = 0.8; fn(c, 0, 0); c.restore(); }
+  }
+  c.restore();
   c.save(); c.globalAlpha = FEAT_ALPHA; c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high'; c.drawImage(sh, 0, 0, sh.width * FEAT_SHEET, sh.height * FEAT_SHEET); c.globalAlpha = 0.85;
   for (let i = 0; i < N; i++) {
-    const k = featAt(i); if (!k) continue; const fn = FEATG[k.g];
+    const k = featAt(i); if (!k || k.look === 'ground') continue; const fn = FEATG[k.g] || POINTFN[k.g];
     let same = 0; for (let j = 0; j < 6; j++) { const v = NB[i * 6 + j]; if (v >= 0 && ECO.feat[v] === ECO.feat[i]) same++; }
     const r = rng(i * 13 + 5); if (same >= 3 && r() < 0.5) continue;             // in a wide patch, a sign on about half of it
     c.save(); c.translate(CX[i] + (r() - 0.5) * 0.5 * R, CY[i] + (r() - 0.5) * 0.4 * R); c.scale(0.95, 0.95);
@@ -251,7 +279,7 @@ function featCard() {
     h += `<details class="tfold fk" data-fk="${c}"${open ? ' open' : ''}><summary><i class="sdot" style="background:${k.col}"></i>${esc(k.name)} <small>${n[c] || 0} ช่อง</small></summary>`
       + `<div class="tr w">${esc(featSum(k))}</div>`
       + `<div class="erow"><label>ชื่อ <input type="text" data-ff="name" maxlength="40" value="${esc(k.name)}"${dis}></label><label>สี <input type="color" data-ff="col" value="${k.col}"${dis}></label></div>`
-      + `<div class="erow"><label>วางได้ <select data-ff="on"${dis}>${Object.entries(FEAT_ON).map(([v, t]) => `<option value="${v}"${v === k.on ? ' selected' : ''}>${t}</option>`).join('')}</select></label></div>`
+      + `<div class="erow"><label>วางได้ <select data-ff="on"${dis}>${Object.entries(FEAT_ON).map(([v, t]) => `<option value="${v}"${v === k.on ? ' selected' : ''}>${t}</option>`).join('')}</select></label><label>หน้าตา <select data-ff="look"${dis}>${Object.entries(FEAT_LOOK).map(([v, t]) => `<option value="${v}"${v === (k.look || 'mark') ? ' selected' : ''}>${t}</option>`).join('')}</select></label></div>`
       + `<div class="erow"><label><input type="checkbox" data-ff="farm"${k.farm ? ' checked' : ''}${dis}> ตั้งไร่ได้</label><label><input type="checkbox" data-ff="water"${k.water ? ' checked' : ''}${dis}> จุดพักน้ำของคาราวาน</label></div>`
       + `<div class="erow"><label>ความเป็นอยู่ <input type="number" data-ff="well" min="-20" max="20" step="1" value="${k.well || 0}"${dis}> แต้ม</label><label>ดึงนักท่องเที่ยว <input type="number" data-ff="tour" min="0" max="3" step="0.1" value="${k.tour || 0}"${dis}></label></div>`
       + `<div class="erow"><label title="บวกคือเส้นทางที่ผ่านช่องนี้ช้าลง ลบคือเร็วขึ้น เช่น หุบผาชันต้องอ้อม ลากูนน้ำนิ่ง">เส้นทางผ่านช่องนี้ <input type="number" data-ff="cross" min="-90" max="300" step="5" value="${Math.round((k.cross || 0) * 100)}"${dis}> %</label></div>`
@@ -268,7 +296,7 @@ function featCard() {
 const featEdit = (c, f) => { const o = ECO.fkinds[c] || (ECO.fkinds[c] = {}); f(o, FK[c]); featChanged(true); };
 $('featbody') && $('featbody').addEventListener('change', e => {
   if (!editable) return; const el = e.target, d = el.closest('[data-fk]'); if (!d) return; const c = d.dataset.fk; featSel = c;
-  if (el.dataset.ff) { const f = el.dataset.ff; featEdit(c, o => { o[f] = f === 'farm' || f === 'water' ? (el.checked ? 1 : 0) : f === 'well' ? ecoNum(el.value, -20, 20, 0) : f === 'tour' ? ecoNum(el.value, 0, 3, 0) : f === 'cross' ? ecoNum(+el.value / 100, -0.9, 3, 0) : f === 'name' ? (el.value.trim() || FK[c].name).slice(0, 40) : f === 'on' ? (FEAT_ON[el.value] ? el.value : 'land') : /^#[0-9a-f]{6}$/i.test(el.value) ? el.value : FK[c].col; }); }
+  if (el.dataset.ff) { const f = el.dataset.ff; featEdit(c, o => { o[f] = f === 'farm' || f === 'water' ? (el.checked ? 1 : 0) : f === 'well' ? ecoNum(el.value, -20, 20, 0) : f === 'tour' ? ecoNum(el.value, 0, 3, 0) : f === 'cross' ? ecoNum(+el.value / 100, -0.9, 3, 0) : f === 'name' ? (el.value.trim() || FK[c].name).slice(0, 40) : f === 'on' ? (FEAT_ON[el.value] ? el.value : 'land') : f === 'look' ? (el.value === 'ground' ? 'ground' : 'mark') : /^#[0-9a-f]{6}$/i.test(el.value) ? el.value : FK[c].col; }); }
   else if (el.dataset.fy) featEdit(c, (o, k) => { o.y = { ...k.y, [el.dataset.fy]: ecoNum(el.value, 0, 20, 0) }; if (!(o.y[el.dataset.fy] > 0)) delete o.y[el.dataset.fy]; });
   else if (el.dataset.fa === 'yadd' && el.value) featEdit(c, (o, k) => { o.y = { ...k.y, [el.value]: 0.3 }; });
 });

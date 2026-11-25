@@ -112,6 +112,7 @@
   function spot(sel) {
     clearSpots(); if (!sel) return;
     if ($('mapscreen').classList.contains('fit')) { let hid = []; try { hid = [...document.querySelectorAll(sel)]; } catch (err) { hid = []; } if (hid.some(e => e.closest('aside')) && $('mapscreen').classList.contains('noside')) MME.shell.panels({ side: true }); if (hid.some(e => e.closest('.opts')) && $('mapscreen').classList.contains('noopts')) MME.shell.panels({ opts: true }); }
+    try { for (const el of document.querySelectorAll(sel)) { let d = el.closest('details:not([open])'); while (d) { d.open = true; d = d.parentElement && d.parentElement.closest('details:not([open])'); } } } catch (err) { /* a folded section stays folded */ }   // what she points at is never folded away
     let els = []; try { els = [...document.querySelectorAll(sel)].filter(el => el.offsetParent !== null || el.id === 'scalebar'); } catch (err) { els = []; }
     for (const el of els) { el.classList.add('tu-spot'); spots.push(el); }
     const el = els.find(e => !root.contains(e)); if (!el) return;
