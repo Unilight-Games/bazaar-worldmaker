@@ -1,0 +1,753 @@
+// Bazaar Worldmaker (ตลาดขายโลก; the code still says Map Maker Engine and MME, its working name): the menu, the library,
+// the sheet for a new map, and the room around an open map.
+(function () {
+  const MME = window.MME;
+  MME.VERSION = '0.22.0';
+  MME.LANG = window.MME_LANG || 'th';   // v0.22.0: which twin of the page this is (build.py)
+  MME.NAME = 'Bazaar Worldmaker';
+  MME.GRESLAND_KM = 34;   // canon: the continent is about 12 million square kilometres, and the map draws it on 12,208 hexes
+  const $ = id => document.getElementById(id);
+  const esc = t => String(t).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
+  const store = MME.store, DOCKEYS = MME.DOCKEYS;
+  const LS = { get(k) { try { return localStorage.getItem(k); } catch (err) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (err) { /* this visit only */ } } };
+
+  // ---------- what the host page offers (the only part that knows it runs as a Claude artifact) ----------
+  const cap = name => { const cl = window.claude; return cl && typeof cl.use === 'function' ? Promise.resolve().then(() => cl.use(name)).then(v => v || null, () => null) : Promise.resolve(null); };
+  const platform = { downloads: cap('downloads'), room: cap('room'), db: cap('db'), user: cap('user') };
+  const fire = MME.fire || null;                  // a page of its own (GitHub Pages): Google sign-in and rooms over Firebase, see fire.js
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); } catch (err) { /* the browser decides alone */ }
+  // ---------- whose library this is ----------
+  // The owner asked that someone who does not own a map should not find it in their own library (23 Nov 2026). Two things follow.
+  // The map that ships with the page, Gresland, is put in the library of the page's owner alone. And since one browser keeps one
+  // library for the page whoever is signed in, every map carries the id of the person who made it, and the library shows a person
+  // only their own (see store.js). Where the page cannot say who is looking (the one-file build, a copy served from a folder)
+  // there is one person, and everything is theirs. A friend in a room never had the map in their library: it lives in the
+  // memory of their page and leaves with the room.
+  const HOSTED = !!(window.claude && typeof window.claude.use === 'function') || !!window.MME_WHO || !!fire;
+  const waitMs = ms => new Promise(res => setTimeout(() => res(null), ms));
+  let WHO = HOSTED ? { id: null, owner: null } : { id: null, owner: true };
+  const setWho = w => { WHO = w; MME.who = w; store.me = w.id; store.role = w.owner === true ? 'owner' : w.owner === false ? 'other' : 'unknown'; };
+  setWho(WHO);
+  const whoP = (async () => {
+    if (window.MME_WHO) return setWho({ id: window.MME_WHO.id || null, owner: window.MME_WHO.owner });   // a test says who is looking
+    if (!HOSTED) return;
+    if (fire) {                                     // the page signs people in itself: the account is whoever is signed in, and nobody is the page's owner
+      store.strict = true; await fire.ready;
+      const put = () => setWho({ id: fire.user ? fire.user.id : null, owner: false });
+      put(); fire.onUser(() => { put(); acctUI(); if (!cur) renderLibrary(); });
+      return;
+    }
+    const u = await platform.user; if (!u) return;
+    let id = null, owner = null;
+    try { if (typeof u.id === 'function') id = await Promise.race([Promise.resolve(u.id()), waitMs(6000)]); } catch (err) { id = null; }
+    try { if (typeof u.isOwner === 'function') { const o = await Promise.race([Promise.resolve(u.isOwner()), waitMs(6000)]); owner = o == null ? null : !!o; } } catch (err) { owner = null; }
+    setWho({ id: typeof id === 'string' && id ? id : null, owner });
+  })();
+  const myDevice = () => { let d = LS.get('mme-dev'); if (!d || !/^[a-z0-9]{12,40}$/.test(d)) { d = (Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2) + Date.now().toString(36)).slice(0, 24); LS.set('mme-dev', d); } return d; };
+  const sayErr = msg => { const e = new Error(msg); e.say = true; return e; };
+  async function joiner() {                       // how this page reaches a room: the online room, else the tabs of this browser
+    const room = await Promise.race([platform.room, new Promise(res => setTimeout(() => res(null), window.claude ? 11000 : 0))]);
+    if (room && typeof room.join === 'function') return { join: MME.transports.claude(room), online: true };
+    if (fire) {
+      if (!(await fire.ready)) throw sayErr("Can't reach the online room service; check your internet and try again");
+      if (!fire.user) { try { await fire.signIn(); } catch (err) { /* said below */ } }
+      if (!fire.user) throw sayErr("Online rooms need you to sign in with Google first. If the sign-in window doesn't appear, allow pop-ups for this page and try again");
+      return { join: fire.transport(), online: true };
+    }
+    if (typeof BroadcastChannel === 'function') return { join: MME.transports.tabs(), online: false };
+    return null;
+  }
+  async function saveFile(filename, data) {
+    const dl = await platform.downloads;
+    if (dl) { try { await dl.save({ filename, data }); toast("File saved"); } catch (err) { if (!(err && err.code === 'declined')) toast("This page can't save files"); } return; }
+    try { const blob = data instanceof Blob ? data : new Blob([data], { type: 'application/json' }), a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }
+    catch (err) { toast("This page can't save files"); }
+  }
+
+  let toastT = 0;
+  function toast(t, ms) { const el = $('mtoast'); el.textContent = t; el.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { el.hidden = true; }, ms || 3600); }
+  // the second copy of the library on the host page, where the page has a private store for the person looking at it
+  const backup = MME.Backup({ db: platform.db, user: platform.user, store, say: t => toast(t, 7000), busy: id => !!(cur && cur.meta.id === id), onChange: () => { if (!cur) renderLibrary(); } });
+  MME.backup = backup;
+  const slug = s => (String(s || 'map').toLowerCase().replace(/[^a-z0-9ก-๙]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40)) || 'map';
+  const fmtDate = t => { try { return new Date(t).toLocaleDateString(MME.LANG === 'en' ? 'en-GB' : 'th-TH', { day: 'numeric', month: 'short', year: 'numeric' }); } catch (err) { return ''; } };
+  const fmtKm = v => Math.round(v).toLocaleString('en-US');
+
+  // ---------- bases: the ground under a map before anyone paints it ----------
+  function blankBase(meta) {
+    const G = MME.gridFor(meta.cols, meta.rows), N = meta.cols * meta.rows, DF = MME.DEFAULTS;
+    return { blank: true, img: '', G, D: { biome: 'S'.repeat(N), zone: '.'.repeat(N), river: '0'.repeat(N), biomes: DF.biomes, zones: {}, pointKinds: DF.pointKinds, points: [], cities: [], labels: [], method: [], rivs: [], fields: '', stan: [], stpeak: -1, oldc: {}, oldl: {}, roads: [], fixes: [], clim: null, cren: {} } };
+  }
+  let greslandBase = null;
+  function loadGresland() {
+    if (!greslandBase) greslandBase = new Promise((res, rej) => {
+      if (window.MME_BASES && window.MME_BASES.gresland) return res(window.MME_BASES.gresland);
+      const s = document.createElement('script'); s.src = 'maps/gresland-base.js';
+      s.onload = () => window.MME_BASES && window.MME_BASES.gresland ? res(window.MME_BASES.gresland) : rej(new Error('base')); s.onerror = () => rej(new Error('base'));
+      document.head.appendChild(s);
+    });
+    return greslandBase.catch(err => { greslandBase = null; throw err; });
+  }
+  // Where the ground of a map comes from. A page that carries Gresland reads its own copy. A page that does not (the one on
+  // GitHub, by the owner's ruling) takes the ground from beside the map, where importing a file put it, or from the owner of the
+  // room this page is a guest in.
+  const NOGRES = !!window.MME_NO_GRESLAND, lent = new Map();
+  store.keepBase = NOGRES;
+  const baseFor = async meta => {
+    if (meta.base !== 'gresland') return blankBase(meta);
+    if (!NOGRES) return loadGresland();
+    const b = lent.get(meta.id) || await store.getDoc(meta.id, '@base');
+    if (store.okBase(b, meta.cols, meta.rows)) return { img: b.img || '', G: b.G, D: b.D };
+    const e = new Error('nobase'); e.code = 'nobase'; throw e;
+  };
+  // a file that leaves this page carries the ground of a Gresland map, so it opens on a page without Gresland too
+  const withBase = async f => { if (f && f.meta && f.meta.base === 'gresland' && !f.base) { try { const b = await baseFor(f.meta); f.base = { img: b.img || '', G: b.G, D: b.D }; } catch (err) { /* the file goes without it */ } } return f; };
+
+  // the Gresland map and the owner's edits on it enter the library once
+  // where this page stands on the old Gresland page's own address, the owner's edits are still in that page's database: read whole
+  const dbRead = async (db, path) => {            // one document, read once; a store that is briefly away gets a second try
+    for (let n = 0; n < 2; n++) {
+      try { const s = await Promise.race([db.doc(path).get(), new Promise((res, rej) => setTimeout(() => rej({ code: 'unavailable' }), 12000))]); return s && s.exists ? JSON.parse(JSON.stringify(s.data())) : null; }
+      catch (err) { if (n || !err || err.code !== 'unavailable') throw err; await new Promise(res => setTimeout(res, 700 + Math.random() * 600)); }
+    }
+    return null;
+  };
+  async function greslandFromDb(wait) {
+    const db = await Promise.race([platform.db, new Promise(res => setTimeout(() => res(null), wait || 6000))]);
+    if (!db || typeof db.doc !== 'function') return null;
+    const out = {}; let any = false;
+    for (const k of DOCKEYS) { try { const b = await dbRead(db, 'map/' + k); if (b && typeof b === 'object') { out[k] = b; any = true; } } catch (err) { if (k === 'terrain' || k === 'cities') return null; } }
+    return any ? out : null;
+  }
+  const GRES_TITLE = "Gresland terrain map";
+  const fileEdits = async () => { if (window.MME_EDITS) return window.MME_EDITS; try { const r = await fetch('maps/gresland-edits.json'); return r.ok ? await r.json() : {}; } catch (err) { return {}; } };
+  async function seedGresland() {
+    if (WHO.owner !== true || window.MME_NO_GRESLAND) return;   // the page's owner alone, and only in a build that carries the map: nobody else gets it put in their library
+    const have = await store.getMeta('gresland');
+    if (have) {                                     // the distance a hex stands for, once the canon's size of the continent was read
+      if (!have.kmCanon) { if (have.kmPerHex === 10) have.kmPerHex = MME.GRESLAND_KM; have.kmCanon = true; await store.putMeta(have); }
+      LS.set('mme-gresland-seeded', '1');
+      if (have.seed !== 'db') greslandLate();
+      return;
+    }
+    $('lib').innerHTML = "<p class=\"note2\">Preparing the Gresland map</p>";
+    // a browser that has no library yet: the owner's own copy on this page is the latest state of the map, so it comes first
+    if (await backup.restore('gresland')) { LS.set('mme-gresland-seeded', '1'); return; }
+    let docs = await greslandFromDb(), seed = 'db';
+    if (!docs) { docs = await fileEdits(); seed = 'file'; }
+    for (const k of DOCKEYS) if (docs[k]) await store.putDoc('gresland', k, docs[k]);
+    await store.putMeta({ id: 'gresland', title: GRES_TITLE, base: 'gresland', cols: 159, rows: 104, kmPerHex: MME.GRESLAND_KM, kmCanon: true, created: Date.now(), updated: Date.now(), thumb: MME.DEFAULTS.greslandThumb, builtin: true, seed, seedDocs: DOCKEYS.filter(k => docs[k]) });
+    LS.set('mme-gresland-seeded', '1');
+    if (seed !== 'db') greslandLate();
+  }
+  // The page's own database answered after the library was already seeded from the copy that ships with the engine: take the
+  // owner's map from it now. What stood in the library is kept as a second map if it was ever worked on.
+  let lateRun = false;
+  async function greslandLate() {
+    if (lateRun) return; lateRun = true;
+    const db = await platform.db; if (!db || typeof db.doc !== 'function') return;
+    for (let n = 0; n < 40 && cur && cur.meta.id === 'gresland'; n++) await new Promise(res => setTimeout(res, 3000));
+    if (cur && cur.meta.id === 'gresland') return;
+    const docs = await greslandFromDb(20000), have = await store.getMeta('gresland'); if (!docs || !have || have.seed === 'db') return;
+    await adoptGresland(docs, have);
+    toast("Gresland read completely from the old page's database", 7000);
+  }
+  async function adoptGresland(docs, have) {
+    if (have.updated > have.created + 5000) { const f = await store.exportMap('gresland'); if (f) { f.meta = { ...f.meta, title: "Gresland (the set before reading the old page)" }; delete f.meta.builtin; await store.importMap(f, false); } }
+    for (const k of DOCKEYS) await store.putDoc('gresland', k, docs[k] || null);
+    have.seed = 'db'; have.seedDocs = DOCKEYS.filter(k => docs[k]); have.updated = Date.now(); await store.putMeta(have);
+    await renderLibrary(); backup.soon();
+  }
+  // by hand, for the owner: the map as the old page's database holds it, brought in again as a map of its own
+  async function greslandAgain() {
+    const b = $('gresAgain'); b.disabled = true; b.textContent = "Reading from the old page";
+    const docs = await greslandFromDb(12000);
+    if (!docs) toast("The old page's database can't be read in this view", 6000);
+    else {
+      const id = MME.newId(); for (const k of DOCKEYS) if (docs[k]) await store.putDoc(id, k, docs[k]);
+      await store.putMeta({ id, title: "Gresland (read from the old page " + fmtDate(Date.now()) + ')', base: 'gresland', cols: 159, rows: 104, kmPerHex: MME.GRESLAND_KM, kmCanon: true, created: Date.now(), updated: Date.now(), thumb: MME.DEFAULTS.greslandThumb, seed: 'db', seedDocs: DOCKEYS.filter(k => docs[k]) });
+      await renderLibrary(); backup.soon(); toast("Imported as another map in the library; the maps already there are untouched", 7000);
+    }
+    b.disabled = false; b.textContent = "Read Gresland from the old page again";
+  }
+  Promise.all([platform.db, whoP]).then(([db]) => { if (db && typeof db.doc === 'function' && WHO.owner === true) { $('gresAgain').hidden = false; $('gresAgain').onclick = greslandAgain; } });
+
+  // ---------- the library ----------
+  async function renderLibrary() {
+    const list = await store.list(), box = $('lib');
+    // v0.19.0: the game's own front row: carry on with the map touched last, a new world, the library, the lessons
+    if ($('gameBar')) { const last = list.slice().sort((x, y) => (y.updated || 0) - (x.updated || 0))[0]; $('gContinue').hidden = !last; if (last) { $('gContinueName').textContent = last.title; $('gContinue').onclick = () => openMap(last.id); } $('gLibCount').textContent = list.length + " maps"; }
+    $('libCount').textContent = list.length + " maps";
+    box.innerHTML = list.map(m => `<article class="mapcard" data-id="${esc(m.id)}">
+      <button type="button" class="th" data-act="open" aria-label="Open ${esc(m.title)}" style="${m.thumb ? `background-image:url(${esc(m.thumb)})` : ''}"></button>
+      <div class="bd"><h3>${esc(m.title)}${m.builtin ? "<span class=\"tag\">Starter map</span>" : ''}</h3>
+      <div class="mt">${m.cols} × ${m.rows} hexes · about ${fmtKm(m.cols * 0.866 * m.kmPerHex)} km wide · last edited ${esc(fmtDate(m.updated))}</div>
+      ${m.seed === 'db' ? `<div class="mt">Read from the old Gresland page's database: ${(m.seedDocs || []).length} sets. The old database is still there and untouched</div>` : ''}
+      <div class="mt bk${!m.backup || m.updated > m.backup + 60000 ? ' due' : ''}">${!m.backup ? "Never backed up to a file" : m.updated > m.backup + 60000 ? "Edited since the last backup (" + esc(fmtDate(m.backup)) + ')' : "Backed up to a file " + esc(fmtDate(m.backup))}</div>
+      ${bkLine(m.id)}
+      <div class="acts"><button type="button" class="btn brass" data-act="open">Open map</button><button type="button" class="btn" data-act="copy">Duplicate</button><button type="button" class="btn" data-act="export">Export file</button>${m.builtin ? '' : "<button type=\"button\" class=\"btn warn\" data-act=\"del\">Delete</button>"}</div></div></article>`).join('')
+      || "<p class=\"note2\">No maps in the library yet. Press New map on the left to start your first " + (HOSTED && WHO.owner == null ? " This page can't tell yet who has it open, so it hasn't placed the page owner's map. If you are the owner, try reloading the page " : '') + '</p>';
+    // maps of an account that is not signed in just now stay out of sight, and the library says that they are there
+    if (store.hidden > 0 && fire) $('lib').insertAdjacentHTML('beforeend', "<p class=\"note2\" id=\"libHidden\">There are " + store.hidden + " more maps in this browser that belong to another account." + (fire.user ? '' : " Sign in with the owner's account to open them.") + '</p>');
+    const copyOn = !backup.off && backup.on;
+    $('storeNote').textContent = copyOn
+      ? (store.persistent ? "Every map is kept in this computer's browser, and this page keeps one more private backup copy that only your account can read. If you clear the browser's data or open the page on another computer with the same account, the maps come back from that copy by themselves. Exported files are still a second backup you can take anywhere" : "This browser won't let the page store data. Your maps survive only through the private backup copy on this page; wait until the card says backed up before closing the page")
+      : (store.persistent ? "Every map is kept only in this computer's browser, with no copy on a server. Export files as a backup or to move to another computer; if you clear the browser's data, the maps go with it" : "This browser won't let the page store data. Maps last only while this page is open; export a file every time before closing");
+    $('storeNote').classList.toggle('bad', !store.persistent && !copyOn);
+    const tg = $('bakOn'); tg.hidden = !!backup.off; tg.textContent = backup.on ? "Stop backing up to this page" : "Turn on backup to this page";
+  }
+  function bkLine(id) {                             // what the second copy on this page holds of one map
+    if (backup.off || !backup.on) return '';
+    const s = backup.status(id);
+    if (!s) return "<div class=\"mt bk2\">Checking the backup copy on this page</div>";
+    if (s.state === 'ok') return "<div class=\"mt bk2 ok\">Backed up on this page</div>";
+    if (s.state === 'wait') return "<div class=\"mt bk2\">Waiting to back up to this page</div>";
+    if (s.state === 'pull') return "<div class=\"mt bk2\">There are newer edits from another of your browsers; they will come in when you close the map</div>";
+    if (s.state === 'conflict') return "<div class=\"mt bk2 due\">This map was edited both here and in another of your browsers, so the backup copy differs from the one on this computer. Choose which to keep</div><div class=\"acts\"><button type=\"button\" class=\"btn\" data-act=\"bkMine\">Use the copy on this computer</button><button type=\"button\" class=\"btn\" data-act=\"bkTheirs\">Take the backup, and keep this one as a duplicate</button></div>";
+    if (s.state === 'gone') return "<div class=\"mt bk2 due\">This map was deleted from another of your browsers. It is still complete on this computer</div><div class=\"acts\"><button type=\"button\" class=\"btn\" data-act=\"bkMine\">Keep it and back it up again</button><button type=\"button\" class=\"btn warn\" data-act=\"del\">Delete it here too</button></div>";
+    return '<div class="mt bk2 due"' + (backup.last ? ' title="' + esc(backup.last.at + ' ' + backup.last.code + ' ' + backup.last.text) + '"' : '') + ">Backup to this page failed " + esc(s.why || '') + '</div>';
+  }
+  $('bakOn').onclick = () => { backup.on = !backup.on; renderLibrary(); toast(backup.on ? "Backup to this page turned on" : "Backup to this page stopped. The copy already there stays, but won't follow new edits", 6000); };
+  Promise.all([backup.ready, whoP]).then(([ok]) => { if (!cur) renderLibrary(); if (ok) backup.sync(); });
+  let delArm = null;
+  $('lib').addEventListener('click', async e => {
+    const b = e.target.closest('[data-act]'); if (!b) return;
+    const id = b.closest('.mapcard').dataset.id, act = b.dataset.act;
+    if (act === 'open') openMap(id);
+    else if (act === 'export') { const f = await withBase(await store.exportMap(id)); if (f) { await saveFile(slug(f.meta.title) + '.mapmaker.json', JSON.stringify(f)); await markBackup([id]); renderLibrary(); } }
+    else if (act === 'copy') {
+      const f = await store.exportMap(id); if (!f) return;
+      f.meta = { ...f.meta, title: (f.meta.title + " (copy)").slice(0, 80) }; delete f.meta.builtin;
+      await store.importMap(f, false); renderLibrary(); backup.soon(); toast("Duplicated");
+    } else if (act === 'del') {
+      if (delArm !== id) { delArm = id; const lab = b.textContent; b.textContent = "Press again to delete"; setTimeout(() => { if (delArm === id) { delArm = null; b.textContent = lab; } }, 4000); return; }
+      delArm = null; const m0 = await store.getMeta(id); if (m0 && m0.builtin) return; await store.remove(id); backup.forget(id); renderLibrary(); toast("Map deleted");
+    } else if (act === 'bkMine') { b.disabled = true; await backup.keepMine(id); }
+    else if (act === 'bkTheirs') { b.disabled = true; const m = await store.getMeta(id); await backup.takeTheirs(id, ((m ? m.title : "Map ") + " (the copy on this computer before taking the backup)").slice(0, 80)); backup.soon(); }
+  });
+  async function markBackup(ids) { const t = Date.now(); for (const id of ids) { const m = await store.getMeta(id); if (m) { m.backup = t; await store.putMeta(m); if (cur && cur.meta.id === id) cur.meta.backup = t; } } }
+  $('bakAll').onclick = async () => {
+    const list = await store.list(), maps = []; for (const m of list) { const f = await withBase(await store.exportMap(m.id)); if (f) maps.push(f); }
+    if (!maps.length) return;
+    await saveFile('map-maker-library-' + new Date().toISOString().slice(0, 10) + '.mapmaker.json', JSON.stringify({ format: 'map-maker-engine-library', version: 1, maps }));
+    await markBackup(list.map(m => m.id)); renderLibrary();
+  };
+  $('impBtn').onclick = () => $('impFile').click();
+  $('impFile').onchange = async e => {
+    const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return;
+    try {
+      const data = JSON.parse(await f.text());
+      if (data && data.format === 'map-maker-engine-library' && Array.isArray(data.maps)) { let n = 0, bare = 0; for (const one of data.maps.slice(0, 200)) { try { if (one.meta) delete one.meta.builtin; await store.importMap(one, false); n++; } catch (err) { if (err && err.code === 'nobase') bare++; /* a broken one is skipped */ } } await renderLibrary(); backup.soon(); toast("Imported: " + n + " maps from the library backup file." + (bare ? " Skipped " + bare + " maps drawn on the Gresland ground, because the file did not bring the map's ground with it; export them again with version 0.8.2 or later" : ''), bare ? 9000 : undefined); return; }
+      const meta = await store.importMap(data, false); await renderLibrary(); backup.soon(); toast("Imported: " + meta.title);
+    }
+    catch (err) { const own = err && (err.code === 'nobase' || /Bazaar|Map Maker|ขนาด|size/i.test(err.message)); toast(own ? err.message : "Can't read this file; it must be a .mapmaker.json file exported from this page", err && err.code === 'nobase' ? 12000 : undefined); }
+  };
+
+  // ---------- a new map ----------
+  const NM = { cc: 720, cr: 468, size: 'm', start: 'random', style: 'continent', climate: 'mixed', wind: 'W', rivers: 1, seed: 1, read: 'auto', fit: 'fit', cut: null, inv: false };
+  let nmPic = null;                                  // the picture a new map is read from: an ImageBitmap or an Image
+  let nmGen = null, nmT = 0;
+  const seg = (id, key, cb) => { for (const b of $(id).querySelectorAll('button')) b.onclick = () => { NM[key] = isNaN(+b.dataset.v) ? b.dataset.v : +b.dataset.v; syncSeg(id, key); cb && cb(); }; };
+  const syncSeg = (id, key) => { for (const b of $(id).querySelectorAll('button')) b.setAttribute('aria-pressed', String(String(NM[key]) === b.dataset.v)); };
+  // v0.21.0: the sizes on offer, and one of the player's own measure (each side from MINDIM to MAXDIM hexes)
+  const nmDim = () => NM.size === 'c' ? { cols: NM.cc, rows: NM.cr } : MME.SIZES[NM.size];
+  function nmSizes() {
+    const heavy = d => d.cols * d.rows > 240 * 156 ? `<span class="heavy">About ${Math.max(2, Math.round(d.cols * d.rows / (240 * 156)))} × as heavy as the large size</span>` : '';
+    $('nmSizes').innerHTML = Object.entries(MME.SIZES).map(([k, s]) => `<label class="sizeopt${NM.size === k ? ' on' : ''}"><input type="radio" name="nmSize" id="nmSize-${k}" value="${k}"${NM.size === k ? ' checked' : ''}><b>${s.name}</b><span>${s.cols} × ${s.rows} hexes</span><span>${esc(s.note)}</span></label>`).join('')
+      + `<label class="sizeopt${NM.size === 'c' ? ' on' : ''}"><input type="radio" name="nmSize" id="nmSize-c" value="c"${NM.size === 'c' ? ' checked' : ''}><b>Custom</b><span class="sizein"><input type="number" id="nmCols" min="${MME.MINDIM}" max="${MME.MAXDIM}" step="1" value="${NM.cc}" aria-label="Hexes across"> × <input type="number" id="nmRows" min="${MME.MINDIM}" max="${MME.MAXDIM}" step="1" value="${NM.cr}" aria-label="Hexes down"> hexes</span><span>Each side ${MME.MINDIM} to ${MME.MAXDIM} hexes</span>${NM.size === 'c' ? heavy(nmDim()) : ''}</label>`;
+    for (const r of $('nmSizes').querySelectorAll('input[name="nmSize"]')) r.onchange = () => { NM.size = r.value; nmSizes(); nmPreview(); };
+    for (const [id, k] of [['nmCols', 'cc'], ['nmRows', 'cr']]) { const el = $(id); el.onfocus = () => { if (NM.size !== 'c') { NM.size = 'c'; const r = $('nmSize-c'); if (r) r.checked = true; } }; el.onchange = () => { NM[k] = Math.max(MME.MINDIM, Math.min(MME.MAXDIM, Math.round(+el.value || NM[k]))); NM.size = 'c'; nmSizes(); nmPreview(); }; }
+    nmKm();
+  }
+  // v0.21.0: the more hexes, the shorter each (the owner, 26 Nov 2026): the scale starts so that the map spans about what a
+  // middle-sized map at 30 km spans, until the player writes a scale of their own
+  const kmFor = cols => Math.max(0.5, Math.min(30, Math.round(2 * 30 * 159 / cols) / 2)); // 30 km up to the medium width, then the same world spread over more hexes
+  function nmKm() { const s = nmDim(); if (!NM.kmOwn) $('nmKm').value = kmFor(s.cols); const km = Math.max(0.1, +$('nmKm').value || 30); $('nmKmNote').textContent = (NM.kmOwn ? '' : "Set from the map size: the more hexes, the shorter each one. You can change it · ") + ` The map is about ${fmtKm(s.cols * 0.866 * km)} km wide and ${fmtKm(s.rows * km)} km tall, an area of about ${(Math.round(s.cols * s.rows * 0.866 * km * km / 1e5) / 10).toLocaleString('en-US')} million km² including sea`; }
+  function nmOpts() { return { seed: NM.seed, style: NM.style, land: +$('nmLand').value / 100, relief: +$('nmRelief').value / 100, climate: NM.climate, wind: NM.wind, rivers: NM.rivers, km: Math.max(0.1, +$('nmKm').value || 30) }; }
+  const PREV = { S: '#274559', L: '#4a7692', M: '#8d8273', g: '#a7b06e', s: '#c4b880', v: '#bbb56c', c: '#cdb988', h: '#929e6c', d: '#e3c78f', t: '#b7b7a0', n: '#e9edf0', f: '#4f6f52', o: '#5f8a4e', j: '#2f6b45', m: '#7f9a78', w: '#4d7361' };
+  function nmPreview() {
+    clearTimeout(nmT);
+    nmT = setTimeout(() => {
+      const s = nmDim(), cv = $('nmPrev'), c = cv.getContext('2d'); cv.width = s.cols * 2; cv.height = s.rows * 2 + 1;
+      c.fillStyle = PREV.S; c.fillRect(0, 0, cv.width, cv.height);
+      $('nmRandom').hidden = NM.start !== 'random';
+      $('nmImage').hidden = NM.start !== 'image'; $('nmSeedRow').hidden = $('nmGenHint').hidden = NM.start === 'image';
+      if (NM.start === 'image') { nmGen = null; nmImgRead(s, c); return; }
+      if (NM.start !== 'random') { nmGen = null; $('nmStat').textContent = "All sea, waiting for you to paint the land"; return; }
+      const G = MME.gridFor(s.cols, s.rows); nmGen = MME.generate(G, nmOpts());
+      for (let i = 0; i < nmGen.cells.length; i++) { const ch = nmGen.cells[i]; if (ch === '.') continue; const x = i % s.cols, y = (i / s.cols) | 0; c.fillStyle = PREV[ch] || '#999'; c.fillRect(x * 2, y * 2 + (x & 1), 2, 2); }
+      c.strokeStyle = 'rgba(120,180,220,.9)'; c.lineWidth = 0.8;
+      for (const r of nmGen.rivers) { c.beginPath(); r.pts.forEach((p, j) => { const x = (p[0] - G.x0) / (1.5 * G.R) * 2 + 1, y = (p[1] - G.y0) / (Math.sqrt(3) * G.R) * 2 + 1; if (j) c.lineTo(x, y); else c.moveTo(x, y); }); c.stroke(); }
+      $('nmStat').textContent = `Land ${nmGen.land.toLocaleString('en-US')} hexes · rivers ${nmGen.rivers.length} · seed ${NM.seed}`;
+    }, 60);
+  }
+  function openNewMap() {
+    NM.seed = 1 + Math.floor(Math.random() * 99999); $('nmSeed').value = NM.seed; $('nmTitle').value = ''; NM.kmOwn = false;
+    nmSizes(); for (const [id, key] of [['nmStart', 'start'], ['nmStyle', 'style'], ['nmClimate', 'climate'], ['nmWind', 'wind'], ['nmRivers', 'rivers'], ['nmRead', 'read'], ['nmFit', 'fit']]) syncSeg(id, key);
+    $('newVeil').hidden = false; nmPreview(); $('nmTitle').focus();
+  }
+  // v0.19.4: a new map read from a picture, bare land and water only. The picture is drawn over the map's frame at half a pixel
+  // a map unit, then gen.js reads it hex by hex. Nothing of it is kept but the map it gives.
+  let nmImg = null;
+  function nmImgRead(s, c) {
+    nmImg = null;
+    if (!nmPic) { $('nmStat').textContent = "Choose a picture first: a hand-drawn map, a scan, or an image from another program"; $('nmCutV').textContent = '-'; return; }
+    const G = MME.gridFor(s.cols, s.rows), k = 0.5, w = Math.ceil(G.w * k), h = Math.ceil(G.h * k), cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const x = cv.getContext('2d', { willReadFrequently: true }), iw = nmPic.width, ih = nmPic.height;
+    if (NM.fit === 'fill') x.drawImage(nmPic, 0, 0, w, h);
+    else { const f = Math.min(w / iw, h / ih), dw = iw * f, dh = ih * f; x.drawImage(nmPic, (w - dw) / 2, (h - dh) / 2, dw, dh); }
+    const px = x.getImageData(0, 0, w, h);
+    let clear = 0, n = 0; { const t = document.createElement('canvas'), tw = Math.min(200, iw), th = Math.max(1, Math.round(ih * tw / iw)); t.width = tw; t.height = th; const tx = t.getContext('2d'); tx.drawImage(nmPic, 0, 0, tw, th); const d = tx.getImageData(0, 0, tw, th).data; for (let p = 3; p < d.length; p += 4) { n++; if (d[p] < 128) clear++; } }
+    nmImg = MME.readImage(G, { data: px.data, w, h, k }, { mode: NM.read, cut: NM.cut, invert: NM.inv, clean: $('nmClean').checked, alpha: clear > 0.02 * n });
+    for (let i = 0; i < nmImg.cells.length; i++) { const ch = nmImg.cells[i]; if (ch === '.') continue; const cx = i % s.cols, cy = (i / s.cols) | 0; c.fillStyle = PREV[ch] || '#999'; c.fillRect(cx * 2, cy * 2 + (cx & 1), 2, 2); }
+    const RN = { alpha: "Transparent parts are water", blue: "Blue is water", dark: "Dark is land", light: "Light is land", line: "Line drawing" };
+    if (NM.cut == null) $('nmCut').value = Math.round(nmImg.cut * 100); $('nmCut').disabled = nmImg.mode === 'alpha';
+    $('nmCutV').textContent = NM.cut == null ? "Automatic" : Math.round(NM.cut * 100) + '%';
+    $('nmStat').textContent = `Land ${nmImg.land.toLocaleString('en-US')} hexes · lakes ${nmImg.lake.toLocaleString('en-US')} hexes · read as ${RN[nmImg.mode]}`;
+  }
+  $('nmPick').onclick = () => $('nmPicFile').click();
+  $('nmPicFile').onchange = async () => {
+    const f = $('nmPicFile').files[0]; $('nmPicFile').value = ''; if (!f) return;
+    try {
+      nmPic = typeof createImageBitmap === 'function' ? await createImageBitmap(f) : await new Promise((ok, no) => { const im = new Image(); im.onload = () => ok(im); im.onerror = no; im.src = URL.createObjectURL(f); });
+      $('nmPicName').textContent = f.name.slice(0, 60) + ' · ' + nmPic.width + ' × ' + nmPic.height + ' px'; NM.cut = null;
+      if (!$('nmTitle').value.trim()) $('nmTitle').value = f.name.replace(/\.[^.]+$/, '').slice(0, 80);
+    } catch (err) { nmPic = null; $('nmPicName').textContent = "Can't read this picture; try a PNG or JPG file"; }
+    nmPreview();
+  };
+  seg('nmRead', 'read', () => { NM.cut = null; nmPreview(); }); seg('nmFit', 'fit', nmPreview);
+  $('nmCut').oninput = () => { NM.cut = +$('nmCut').value / 100; nmPreview(); };
+  $('nmInv').onclick = () => { NM.inv = !NM.inv; $('nmInv').setAttribute('aria-pressed', String(NM.inv)); nmPreview(); };
+  $('nmClean').onchange = nmPreview;
+  seg('nmStart', 'start', nmPreview); seg('nmStyle', 'style', nmPreview); seg('nmClimate', 'climate', nmPreview); seg('nmWind', 'wind', nmPreview); seg('nmRivers', 'rivers', nmPreview);
+  for (const id of ['nmLand', 'nmRelief']) $(id).oninput = () => { $(id + 'V').textContent = $(id).value + '%'; nmPreview(); };
+  $('nmSeed').oninput = () => { NM.seed = Math.max(1, Math.floor(+$('nmSeed').value) || 1); nmPreview(); };
+  $('nmReroll').onclick = () => { NM.seed = 1 + Math.floor(Math.random() * 99999); $('nmSeed').value = NM.seed; nmPreview(); };
+  $('nmKm').oninput = () => { NM.kmOwn = true; nmKm(); nmPreview(); };   // the weather of the new land counts in km (v0.21.0)
+  $('newBtn').onclick = openNewMap;
+  $('nmCancel').onclick = () => { $('newVeil').hidden = true; };
+  $('newVeil').addEventListener('pointerdown', e => { if (e.target === $('newVeil')) $('newVeil').hidden = true; });
+  $('nmCreate').onclick = async () => {
+    const s = nmDim(), id = MME.newId(), N = s.cols * s.rows;
+    const meta = { id, title: ($('nmTitle').value.trim() || "New map").slice(0, 80), base: 'blank', cols: s.cols, rows: s.rows, kmPerHex: Math.max(0.1, Math.min(1000, +$('nmKm').value || 30)), created: Date.now(), updated: Date.now(), thumb: '' };
+    let cells = '.'.repeat(N), rivers = [];
+    if (NM.start === 'image') { if (!nmImg) { toast("Choose a picture before creating the map"); return; } cells = nmImg.cells; meta.gen = { image: 1, read: nmImg.mode }; }
+    if (NM.start === 'random') { const g = nmGen || MME.generate(MME.gridFor(s.cols, s.rows), nmOpts()); cells = g.cells; rivers = g.rivers.map((r, i) => ({ id: 'g' + i.toString(36) + Math.random().toString(36).slice(2, 6), kind: r.kind, pts: r.pts })); meta.gen = nmOpts(); }
+    try { meta.thumb = $('nmPrev').toDataURL('image/webp', 0.8); } catch (err) { meta.thumb = ''; }
+    await store.putDoc(id, 'terrain', { v: 2, cols: s.cols, rows: s.rows, cells, rivOff: [], rivSig: '0:0' });
+    await store.putDoc(id, 'rivers', { v: 1, rivers });
+    await store.putMeta(meta);
+    $('newVeil').hidden = true; openMap(id);
+  };
+
+  // ---------- an open map ----------
+  let cur = null;                                   // { meta, rt, db, room, guest, env }
+  const myName = () => ($('myName').value.trim() || LS.get('mme-name') || '').slice(0, 24);
+  // the account row of the menu, where the page signs people in itself
+  function acctUI() {
+    const box = $('acct'); if (!box || !fire) return; box.hidden = false;
+    const u = fire.user, pic = $('acctPic');
+    $('acctWho').innerHTML = fire.state === 'failed' ? "Can't reach the account service; online rooms are unavailable right now" : u ? "Signed in <b>" + esc(u.name || "Google account") + '</b>' : "Online rooms use a Google account";
+    pic.hidden = !(u && /^https:\/\//.test(u.photo || '')); if (!pic.hidden) { pic.referrerPolicy = 'no-referrer'; pic.src = u.photo; }
+    $('acctBtn').hidden = fire.state === 'failed'; $('acctBtn').textContent = u ? "Sign out" : "Sign in with Google";
+    $('acctBtn').onclick = async () => { try { if (fire.user) await fire.signOut(); else await fire.signIn(); } catch (err) { toast("Sign-in failed. If the sign-in window doesn't appear, allow pop-ups for this page", 6000); } acctUI(); };
+    if (u && u.name && !$('myName').value.trim() && !LS.get('mme-name')) { $('myName').value = u.name.slice(0, 24); LS.set('mme-name', $('myName').value); }
+  }
+  if (fire) { acctUI(); fire.ready.then(acctUI); }
+  // ---------- sharing the page (v0.18.1, the owner's ask) ----------
+  // Always the official page on GitHub, whichever copy is open: the Claude artifact is private to its owner and the one-file
+  // build is a file on someone's disk, so neither is a link a friend can open. The usage policy lets anyone share this link.
+  MME.SITE = 'https://unilight-games.github.io/bazaar-worldmaker/';
+  const SHARE_TEXT = "Bazaar Worldmaker, the World Bazaar: a fantasy world map maker on hexes, free in your browser";
+  const SHARE_TO = {
+    facebook: u => 'https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(u),
+    line: u => 'https://social-plugins.line.me/lineit/share?url=' + encodeURIComponent(u),
+    x: u => 'https://twitter.com/intent/tweet?url=' + encodeURIComponent(u) + '&text=' + encodeURIComponent(SHARE_TEXT)
+  };
+  async function copyText(t) {
+    try { if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(t); return true; } } catch (err) { /* the older way below */ }
+    try { const el = $('shareUrl'); el.focus(); el.select(); return document.execCommand('copy'); } catch (err) { return false; }
+  }
+  $('shareBtn').onclick = () => {
+    $('shareUrl').value = MME.SITE; $('shareNative').hidden = !(navigator.share && typeof navigator.share === 'function');
+    $('shareVeil').hidden = false; setTimeout(() => $('shareUrl').select(), 30);
+  };
+  $('shareClose').onclick = () => { $('shareVeil').hidden = true; };
+  if ($('gameBar')) {
+    $('gNew').onclick = () => $('newBtn').click();
+    $('gLib').onclick = () => { const l = document.querySelector('.libhead'); if (l) l.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+    $('gLearn').onclick = () => { const c = document.querySelector('.mcard.tutor'); if (!c) return; c.scrollIntoView({ behavior: 'smooth', block: 'center' }); c.classList.remove('glow'); void c.offsetWidth; c.classList.add('glow'); };
+  }
+  // v0.19.0: the terms of use, from the menu
+  if ($('policyBtn')) {
+    const close = () => { $('policyVeil').hidden = true; };
+    $('policyBtn').onclick = () => { const b = $('policyBody'); if (!b.innerHTML) { b.innerHTML = MME.POLICY_HTML || "<p>Terms not found</p>"; for (const a of b.querySelectorAll('a')) { a.target = '_blank'; a.rel = 'noopener'; } } $('policyVeil').hidden = false; b.scrollTop = 0; b.focus(); };
+    $('policyClose').onclick = close; $('policyVeil').addEventListener('click', e => { if (e.target === $('policyVeil')) close(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('policyVeil').hidden) close(); });
+  }
+  $('shareVeil').addEventListener('click', e => { if (e.target === $('shareVeil')) $('shareVeil').hidden = true; });
+  $('shareCopy').onclick = async () => { toast(await copyText(MME.SITE) ? "Link copied, send it to your friends" : "Can't copy automatically; select the link in the box and copy it"); };
+  $('shareNative').onclick = async () => { try { await navigator.share({ title: 'Bazaar Worldmaker', text: SHARE_TEXT, url: MME.SITE }); } catch (err) { if (!(err && err.name === 'AbortError')) toast("Can't share through an app; use the copy link button instead"); } };
+  for (const b of document.querySelectorAll('[data-share]')) b.onclick = () => { const w = window.open(SHARE_TO[b.dataset.share](MME.SITE), '_blank', 'width=620,height=560'); if (w) { try { w.opener = null; } catch (err) { /* another site's window */ } } else toast("This page can't open a new window; use the copy link button instead"); };
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('shareVeil').hidden) $('shareVeil').hidden = true; });
+  $('myName').value = LS.get('mme-name') || '';
+  $('myName').onchange = () => LS.set('mme-name', $('myName').value.trim().slice(0, 24));
+
+  // the size of the page's letters: the owner found the first size too small (v0.9.0), so the middle one is larger and there are three
+  // v0.19.2: "auto", the default, sizes the letters (and with them the whole interface) to the window: 17 px at 1536 by 864, less on
+  // a small screen, more on a large one, never under 13 or over 22 (Claude's numbers). A size the person picks stays picked.
+  const UIS = { s: 15, m: 17, l: 19 };
+  const uiAuto = () => { const f = Math.min(innerWidth / 1536, innerHeight / 864); return Math.round(Math.max(13, Math.min(22, 17 * Math.pow(Math.max(f, 0.1), 0.7))) * 2) / 2; };
+  function setUi(k, keep) {
+    k = UIS[k] || k === 'a' ? k : 'a'; document.documentElement.style.setProperty('--ufs', (k === 'a' ? uiAuto() : UIS[k]) + 'px'); if (keep) LS.set('mme-ui', k);
+    for (const b of document.querySelectorAll('[data-ui]')) b.setAttribute('aria-pressed', b.dataset.ui === k ? 'true' : 'false');
+    if ((keep || k === 'a') && cur) { try { applyFit(false); cur.rt.refit && cur.rt.refit(); } catch (err) { /* the next resize sets it right */ } }
+  }
+  document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-ui]'); if (b) setUi(b.dataset.ui, true); });
+  setUi(LS.get('mme-ui') || 'a');
+  { let rt = 0; window.addEventListener('resize', () => { if ((LS.get('mme-ui') || 'a') !== 'a') return; clearTimeout(rt); rt = setTimeout(() => setUi('a', false), 150); }); }
+  function showScreen(map) { $('menu').hidden = map; $('mapscreen').hidden = !map; $('vtag').hidden = map; window.scrollTo(0, 0); }   // on the map the version sits at the foot of the side panel, where it covers nothing (v0.14.0)
+  async function mount(meta, db, guestRoom, practice) {
+    const scr = $('mapscreen'); scr.innerHTML = "<div id=\"mapload\">Opening the map</div>"; showScreen(true);
+    let base; try { base = await baseFor(meta); } catch (err) { showScreen(false); toast(err && err.code === 'nobase' ? "This map was drawn on the Gresland ground, which this page doesn't have. Export the file again from a page that has Gresland, with version 0.8.2 or later, then import it again" : "The map ground failed to load; try opening it again", err && err.code === 'nobase' ? 9000 : undefined); return false; }
+    scr.innerHTML = ''; scr.appendChild($('tpl-map').content.cloneNode(true)); if ($('vfoot')) $('vfoot').textContent = MME.NAME + ' v' + MME.VERSION; scr.classList.toggle('blank', !!base.blank); setUi(LS.get('mme-ui') || 'a');
+    const side = scr.querySelector('aside'), meth = scr.querySelector('section.method'); if (side && meth) side.appendChild(meth);   // the notes under the map live in the side panel
+    applyFit(true);
+    if (base.blank) {                               // words that belong to Gresland alone
+      const w = document.createTreeWalker($('opts'), NodeFilter.SHOW_TEXT); let n;
+      while ((n = w.nextNode())) n.nodeValue = n.nodeValue.replace(' หรือยอดภูเขาสแตนเทอร์', '').replace('ชื่อสถานที่กับภูเขาสแตนเทอร์ก็ลากย้ายได้', 'ชื่อสถานที่ก็ลากย้ายได้').replace(', a place name or the peak of Mount Stanther', ' or a place name').replace('place names and Mount Stanther can be dragged too', 'place names can be dragged too');   // i18n:keep
+    }
+    const dl = await Promise.race([platform.downloads, new Promise(res => setTimeout(() => res(null), 1500))]);
+    const env = { db, meta, room: guestRoom || null, canEdit: true, maxDoc: 4000000, saveDelay: guestRoom ? 260 : 500, saveFile, peers: [],
+      savedText: () => cur && cur.guest ? "Sent to the room's owner" : cur && cur.room ? "Saved and sent to the room" : "Saved on this computer" };
+    env.downloads = dl || { save: ({ filename, data }) => saveFile(filename, data) };
+    cur = { meta, db, room: guestRoom || null, guest: !!guestRoom, practice: !!practice, env, rt: null, roomShut: !!guestRoom };   // a friend's panel of the room starts put away: the chip in the bar opens it
+    cur.rt = MME.startMap(base, env);
+    wireMapBar();
+    return true;
+  }
+  // ---------- the fitted screen: on a screen wide enough the map takes the whole window, and the panels lie over it ----------
+  const FITMQ = window.matchMedia && !/[?&]fit=0\b/.test(location.search) ? matchMedia('(min-width: 900px) and (min-height: 480px)') : null;   // v0.19.2: down to 900 by 480, for short laptop windows (a Mac with its Dock and the browser's bars); ?fit=0 keeps the scrolling page, for the tests written on it
+  // fold: the options show their title bar alone. ox, oy: where the owner dragged them, from the map's top left corner (null: where the layout puts them)
+  const PAN = { side: true, opts: true, fold: false, ox: null, oy: null }, DOCKW = 330;
+  try { const p = JSON.parse(LS.get('mme-panels') || 'null'); if (p) { PAN.side = p.side !== false; PAN.opts = p.opts !== false; PAN.fold = !!p.fold; if (Number.isFinite(p.ox) && Number.isFinite(p.oy)) { PAN.ox = p.ox; PAN.oy = p.oy; } } } catch (err) { /* both shown */ }
+  const panSave = () => LS.set('mme-panels', JSON.stringify(PAN));
+  let SHUT = {}; try { SHUT = JSON.parse(LS.get('mme-cards') || '{}') || {}; } catch (err) { SHUT = {}; }
+  const MODENAME = { view: "View map", terrain: "Paint terrain", river: "Draw rivers", city: "Place communities", label: "Name places", route: "Roads", trade: "Trade", climate: "Climate", econ: "Economy", info: "Places and info" };
+  function applyFit(first) {
+    const scr = $('mapscreen'), box = $('mapbox'); if (!box) return;
+    const on = !!(FITMQ && FITMQ.matches), teach = document.body.classList.contains('tutoring');
+    // on the fitted screen the tools ride in the top bar beside the map's name, so the map gets the row they stood in
+    const bar = scr.querySelector('.mapbar'), row = scr.querySelector('#toolbar .tbrow'), md = $('modes'), hi = $('history'), gr = bar && bar.querySelector('.grow');
+    if (bar && row && md && hi && gr) { if (on && md.parentNode !== bar) { bar.insertBefore(md, gr); bar.insertBefore(hi, gr); } else if (!on && md.parentNode !== row) { row.insertBefore(hi, row.firstChild); row.insertBefore(md, hi); } }
+    scr.classList.toggle('onebar', on && !!md && md.parentNode === bar);
+    const op = $('opts'), moved = on && !teach && PAN.ox != null, fold = on && !teach && PAN.fold;
+    if (op) { op.classList.toggle('folded', fold); op.classList.toggle('moved', moved); const f = $('optsFold'); if (f) { f.textContent = fold ? '▸' : '▾'; f.setAttribute('aria-expanded', String(!fold)); } }
+    scr.classList.toggle('fit', on); scr.classList.toggle('noside', on && !PAN.side); scr.classList.toggle('noopts', on && !PAN.opts);
+    { const ctl = scr.querySelector('.ctl'); if (ctl && ctl.offsetHeight > 0) scr.style.setProperty('--ctlh', ctl.offsetHeight + 'px'); }   // the bar over the map may take two rows on a narrow window: the options start below it (v0.15.1)
+    box.classList.toggle('free', on); box.dataset.padr = on && PAN.side ? '342' : '0';
+    // where the window is wide for its height, the tool's options stand in the strip left of the map and cover none of it
+    let dock = false;
+    if (on && PAN.opts && cur && !moved && !fold) { const G = MME.gridFor(cur.meta.cols, cur.meta.rows), b = box.getBoundingClientRect(); dock = b.height > 200 && (b.width - (PAN.side ? 342 : 0) - DOCKW) / G.w >= 0.85 * b.height / G.h; }   // the strip may cost the map up to a seventh of its size: that is less than the options would cover
+    // In a lesson she stands at the left edge, which is where the options stand too. Where the window is wide enough the options
+    // move to her right and the map takes what is left; where it is not, the options end above her head and scroll inside
+    // themselves. Either way nothing she points at is behind her.
+    let shift = 0, cap = 0; const fig = on && PAN.opts && document.body.classList.contains('tutoring') ? document.querySelector('#tutor .tu-fig') : null;
+    if (fig) {
+      const f = fig.getBoundingClientRect(), b = box.getBoundingClientRect(), at = f.left + 0.8 * f.width - b.left;
+      if (f.width > 0 && innerWidth > 760) { if (b.width - (PAN.side ? 342 : 0) - DOCKW - at >= 480) shift = Math.max(0, Math.round(at)); else { const o1 = scr.querySelector('.opts'), r1 = o1 ? o1.getBoundingClientRect() : null, top1 = r1 && r1.height > 0 ? r1.top : b.top + 54; cap = Math.max(96, Math.round(f.top + 0.127 * f.width - top1)); } }   // from where the options begin, measured: the bar over the map may take two rows (v0.17.0)
+    }
+    if (shift) dock = true;
+    scr.style.setProperty('--tush', shift + 'px'); scr.style.setProperty('--tumax', cap ? cap + 'px' : '9999px');
+    // beside her, the options may run down to where her box of words begins
+    const reach = fig && /^(ask|mad)$/.test(fig.dataset.pose || ''), tub = fig && shift && !reach ? document.querySelector('#tutor .tu-box') : null,   // two of her poses hold an arm far out at the height of her box: under those the options keep their shorter length
+     tb0 = tub ? tub.getBoundingClientRect() : null, o0 = scr.querySelector('.opts'), ot = o0 && o0.getBoundingClientRect().height > 0 ? o0.getBoundingClientRect().top : $('toolbar') ? $('toolbar').getBoundingClientRect().bottom + 46 : 164,   // where the options begin: measured, since the size of the page's letters moves it
+     tl = tb0 && tb0.height > 0 ? Math.round(tb0.top - ot - 8) : 0;
+    if (tl >= 140) scr.style.setProperty('--tuh', tl + 'px'); else scr.style.removeProperty('--tuh');
+    scr.style.setProperty('--tuh0', Math.max(120, Math.round(innerHeight - ot - 216)) + 'px');
+    scr.classList.toggle('dock', dock); box.dataset.padl = dock ? String(DOCKW + shift) : '0';
+    if (op) {                                       // where the owner dragged the options: kept inside the map's box, whatever its size now
+      if (moved) { const t = $('toolbar').getBoundingClientRect(), b = box.getBoundingClientRect(), w = op.offsetWidth || 310, h = Math.min(op.offsetHeight || 40, b.height - 8); op.style.left = Math.round(b.left - t.left + Math.max(4, Math.min(b.width - w - 4, PAN.ox))) + 'px'; op.style.top = Math.round(b.top - t.top + Math.max(4, Math.min(b.height - h - 4, PAN.oy))) + 'px'; }
+      else { op.style.left = ''; op.style.top = ''; }
+    }
+    const bs = $('panSide'), bo = $('panOpts');
+    if (bs) { bs.hidden = !on; bs.setAttribute('aria-pressed', String(PAN.side)); } if (bo) { bo.hidden = !on; bo.setAttribute('aria-pressed', String(PAN.opts)); }
+    if (!first && cur && cur.rt) cur.rt.refit();
+  }
+  function panels(o) { if (o.side != null) PAN.side = !!o.side; if (o.opts != null) PAN.opts = !!o.opts; if (o.fold != null) PAN.fold = !!o.fold; if ('ox' in o) { PAN.ox = o.ox; PAN.oy = o.oy; } panSave(); applyFit(false); }
+  window.addEventListener('resize', () => { if (cur) applyFit(false); });
+  if (FITMQ) { const h = () => applyFit(false); if (FITMQ.addEventListener) FITMQ.addEventListener('change', h); else if (FITMQ.addListener) FITMQ.addListener(h); }
+  let metaT = 0;
+  function touchMeta(now) {                         // the library card follows the map: its date, and a small picture of it
+    if (!cur || cur.guest || cur.practice) return;
+    clearTimeout(metaT);
+    const run = async () => { if (!cur || cur.guest || cur.practice) return; const m = cur.meta; m.updated = Date.now(); try { m.thumb = cur.rt.thumb() || m.thumb; } catch (err) { /* keep the old picture */ } await store.putMeta(m); backup.touch(m.id); };
+    if (now) return run(); metaT = setTimeout(run, 4000);
+  }
+  async function openMap(id) {
+    const meta = await store.getMeta(id); if (!meta) { toast("This map isn't in the library"); renderLibrary(); return; }
+    const db = MME.MapDb(MME.libraryBack(id), () => { touchMeta(false); if (cur && cur.room && cur.room.touch) cur.room.touch(); });
+    await mount(meta, db, null);
+  }
+  // a map for the lessons: it lives in this page's memory and leaves with the lesson
+  async function openPractice(meta, docs) {
+    if (cur) return false;
+    const db = MME.MapDb(MME.memoryBack(docs), () => {});
+    return mount(meta, db, null, true);
+  }
+  async function keepPractice() {
+    if (!cur || !cur.practice) return;
+    await cur.rt.flush();
+    let thumb = ''; try { thumb = cur.rt.thumb() || ''; } catch (err) { thumb = ''; }
+    const m = await store.importMap({ format: 'map-maker-engine', version: 1, meta: { ...cur.meta, title: cur.meta.title, thumb }, docs: cur.db.docs() }, false);
+    delete m.backup; await store.putMeta(m); backup.soon();
+    toast("The practice map was saved to the library as a copy of how it is now; later work in the lesson won't follow it", 6000);
+  }
+  async function closeMap(why) {
+    if (!cur) return; const c = cur;
+    try { await c.rt.flush(); } catch (err) { /* nothing more to save */ }
+    if (!c.guest && !c.practice) await touchMeta(true);
+    if (c.room) c.room.close();
+    cur = null; c.rt.destroy(); c.db.destroy(); lent.delete(c.meta.id);
+    $('mapscreen').innerHTML = ''; showScreen(false); document.title = MME.NAME; titleWas = null; await renderLibrary(); if (!c.guest && !c.practice) backup.soon();
+    if (c.practice && MME.tutor) MME.tutor.closed();
+    if (why) toast(why, 7000);
+  }
+  window.addEventListener('pagehide', () => { if (cur) { try { cur.rt.flush(); } catch (err) { /* closing */ } if (cur.room) cur.room.close(); } });
+
+  function wireMapBar() {
+    const op = $('opts');
+    if (op && !$('optsFold')) {
+      // The owner asked that the notes lying over the map can be dragged and folded (23 Nov 2026). The options get a title bar:
+      // drag it to move them, press the arrow to fold them to that bar, double-click it to send them back where the layout puts them.
+      const hd = document.createElement('div'); hd.className = 'ohead'; hd.title = "Drag to move the options; double-click to put them back";
+      hd.innerHTML = "<span class=\"ogrip\" aria-hidden=\"true\">⠿</span><span class=\"otitle\" id=\"optsTitle\">Tool options</span><button type=\"button\" id=\"optsFold\" aria-expanded=\"true\" title=\"Fold or unfold the tool options\">▾</button>";
+      op.insertBefore(hd, op.firstChild);
+      $('optsFold').onclick = e => { e.stopPropagation(); panels({ fold: !PAN.fold }); };
+      let d = null;
+      hd.addEventListener('pointerdown', e => { if (e.button !== 0 || e.target.closest('button') || !$('mapscreen').classList.contains('fit') || document.body.classList.contains('tutoring')) return; const r = op.getBoundingClientRect(); d = { dx: e.clientX - r.left, dy: e.clientY - r.top, go: false, x: e.clientX, y: e.clientY }; try { hd.setPointerCapture(e.pointerId); } catch (err) { /* a nicety */ } e.preventDefault(); });
+      hd.addEventListener('pointermove', e => { if (!d) return; if (!d.go && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 4) return; d.go = true; const b = $('mapbox').getBoundingClientRect(); PAN.ox = Math.round(e.clientX - d.dx - b.left); PAN.oy = Math.round(e.clientY - d.dy - b.top); op.classList.add('dragging'); applyFit(false); });
+      const end = () => { if (!d) return; const went = d.go; d = null; op.classList.remove('dragging'); if (went) { const b = $('mapbox').getBoundingClientRect(), r = op.getBoundingClientRect(); PAN.ox = Math.round(r.left - b.left); PAN.oy = Math.round(r.top - b.top); panSave(); } };
+      hd.addEventListener('pointerup', end); hd.addEventListener('pointercancel', end);
+      hd.addEventListener('dblclick', e => { if (e.target.closest('button')) return; panels({ ox: null, oy: null }); });
+      const name = () => { const m = $('mapbox').dataset.mode; $('optsTitle').textContent = MODENAME[m] ? "Options: " + MODENAME[m] : "Tool options"; if (cur && cur.guest && cur.room && cur.room.status) cur.room.status(m); };
+      new MutationObserver(name).observe($('mapbox'), { attributes: true, attributeFilter: ['data-mode'] }); name();
+      // each card of the side panel folds to its heading, and stays so between visits
+      for (const c of document.querySelectorAll('#mapscreen aside .card')) {
+        const h = c.querySelector(':scope > h2'); if (!h || !c.id) continue;
+        h.tabIndex = 0; h.setAttribute('role', 'button'); h.title = "Fold or unfold this card";
+        const set = () => { c.classList.toggle('shut', !!SHUT[c.id]); h.setAttribute('aria-expanded', String(!SHUT[c.id])); };
+        const flip = () => { if (document.body.classList.contains('tutoring')) return; if (SHUT[c.id]) delete SHUT[c.id]; else SHUT[c.id] = 1; LS.set('mme-cards', JSON.stringify(SHUT)); set(); };
+        h.addEventListener('click', flip); h.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); } }); set();
+      }
+    }
+    const tb = document.querySelector('#toolbar .tbrow'), st = $('status');
+    if (tb && st && !$('panSide')) {                // two switches for the panels that lie over the map
+      const g = document.createElement('div'); g.className = 'seg panseg';
+      g.innerHTML = "<button type=\"button\" id=\"panOpts\" title=\"Show or hide the tool options floating over the map\">Options</button><button type=\"button\" id=\"panSide\" title=\"Show or hide the card panel on the right\">Side panel</button>";
+      const bar = document.querySelector('#mapscreen .mapbar'), chip = $('roomChip');   // the save status and the switches ride in the top bar, so the tools keep one row
+      if (bar && chip) { bar.insertBefore(st, chip); bar.insertBefore(g, chip); } else tb.insertBefore(g, st);
+      $('panSide').onclick = () => panels({ side: !PAN.side }); $('panOpts').onclick = () => panels({ opts: !PAN.opts });
+      if (window.ResizeObserver) { const ro = new ResizeObserver(() => { const w = document.querySelector('#mapscreen .wrap'), t = $('toolbar'); if (w && t) w.style.setProperty('--tbh', t.querySelector('.tbrow').offsetHeight + 8 + 'px'); }); ro.observe($('toolbar')); }
+      if (window.ResizeObserver) { const ctl = document.querySelector('#mapscreen .ctl'), scr = $('mapscreen'); if (ctl) new ResizeObserver(() => { if (ctl.offsetHeight > 0) scr.style.setProperty('--ctlh', ctl.offsetHeight + 'px'); }).observe(ctl); }
+    }
+    applyFit(true); requestAnimationFrame(() => { if (cur) applyFit(false); });
+    const m = cur.meta, guest = cur.guest, practice = cur.practice;
+    const head = () => { $('mmTitle').textContent = m.title; $('mmSub').textContent = `${m.cols} × ${m.rows} hexes · ${m.kmPerHex} km a hex` + (guest ? " · the room owner's map" : ''); $('mmTitle').title = m.title + ' · ' + $('mmSub').textContent; document.title = m.title + ' · ' + MME.NAME; };
+    head();
+    $('mmBack').textContent = practice ? "← Leave the lesson" : guest ? "← Leave the room" : "← Map library";
+    $('mmBack').onclick = () => practice && MME.tutor ? MME.tutor.quit('') : closeMap(guest ? "You left the room; the map was not kept on this computer" : '');
+    $('setTitle').value = m.title; $('setKm').value = m.kmPerHex;
+    $('setTitle').disabled = guest; $('setKm').disabled = guest; $('setExport').hidden = guest;
+    $('setTitle').onchange = () => { m.title = ($('setTitle').value.trim() || m.title).slice(0, 80); $('setTitle').value = m.title; head(); touchMeta(true); };
+    $('setKm').onchange = () => { m.kmPerHex = Math.max(0.1, Math.min(1000, +$('setKm').value || m.kmPerHex)); $('setKm').value = m.kmPerHex; head(); cur.rt.requestDraw(); cur.rt.recalc(); touchMeta(true); };
+    if (practice) { $('setExport').textContent = "Save this practice map to the library"; }
+    $('setExport').onclick = practice ? keepPractice : async () => { await cur.rt.flush(); await touchMeta(true); const f = await withBase(await store.exportMap(m.id)); if (f) { await saveFile(slug(m.title) + '.mapmaker.json', JSON.stringify(f)); await markBackup([m.id]); } };
+    const rb = $('setRestore'); let arm = 0;
+    const rbShow = () => { rb.hidden = guest || !m.roomBackup || !!(cur && cur.room); rb.textContent = "Restore the map to before the last room was opened"; };
+    rbShow(); cur.rbShow = rbShow;
+    rb.onclick = async () => {
+      if (!arm) { arm = 1; rb.textContent = "Press again to restore; work done since will be lost"; setTimeout(() => { arm = 0; if ($('setRestore')) rbShow(); }, 5000); return; }
+      const id = m.id; await closeMap(''); await store.copyDocs(id + '@room', id); await openMap(id); toast("The map is back to how it was before the last room was opened");
+    };
+    $('setNote').textContent = practice ? "The practice map lasts only during the lesson and is gone when you leave, unless you save it to the library" : guest ? "This map is on the room owner's computer; this computer holds it only while you are in the room" : "This map is kept in this computer's browser; export a file now and then as a backup";
+    $('roomOpen').hidden = guest; $('roomOpen').onclick = practice ? () => toast("A practice map can't open a room; try with a map from your library") : openRoom;
+    $('roomClose').onclick = () => { if (cur && cur.room && !cur.guest) { cur.room.close(); cur.room = null; cur.env.room = null; cur.env.saveDelay = 500; cur.people = []; cur.rt.setPeers([]); roomUI(null); if (cur.rbShow) cur.rbShow(); toast("Room closed; everyone has left"); } };
+    $('roomCopy').onclick = () => { const code = cur && cur.room && cur.room.code; if (!code) return; try { navigator.clipboard.writeText(showCode(code)).then(() => toast("Room code copied"), () => toast("Can't copy; note the code from the screen instead")); } catch (err) { toast("Can't copy; note the code from the screen instead"); } };
+    $('roomChip').onclick = () => { if (!cur || !cur.room) return; cur.roomShut = !cur.roomShut; roomUI(); };
+    $('roomHide').onclick = () => { if (!cur) return; cur.roomShut = true; roomUI(); };
+    roomUI(guest ? [] : null);
+  }
+  // ---------- the room: who is in it, what they are doing, and who is kept out ----------
+  // The owner asked to be told when someone comes in, to be able to look at that person's name and state, and to send them out
+  // or shut them out of the map (23 Nov 2026). The panel of the room hangs under its chip in the top bar; the chip opens and
+  // closes it. A kick holds while this room stands. A ban is written on the map itself (meta.bans) and holds in every later room.
+  const clock = t => { const d = new Date(t); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+  const ago = t => { const m = Math.max(0, Math.round((Date.now() - t) / 60000)); return m < 1 ? "just joined" : m < 60 ? "here for " + m + " min" : "here for " + Math.floor(m / 60) + " hr " + (m % 60) + " min"; };
+  function stateOf(p) {                              // one line on what a friend is doing, from what the owner's page itself has seen
+    const mode = MODENAME[p.md] ? "mode " + MODENAME[p.md] : '', busy = p.last && p.edits && Date.now() - p.last < 45000;
+    return (busy ? "editing " : p.edits ? "watching, last edit " + clock(p.last) : "watching, no edits yet ") + (mode ? ' · ' + mode : '');
+  }
+  function bansHTML() {
+    const bans = cur && !cur.guest && Array.isArray(cur.meta.bans) ? cur.meta.bans : [];
+    return bans.length ? "<span class=\"lbl\">Banned from this map " + bans.length + " people</span>" + bans.map(b => `<span class="banrow">${esc(b.name || "No name")}<small>${esc(fmtDate(b.at))}</small><button type="button" class="btn" data-unban="${esc(b.k)}">Unban</button></span>`).join('') : '';
+  }
+  function bansUI() {
+    const h = bansHTML();
+    for (const id of ['roomBans', 'setBans']) { const el = $(id); if (!el) continue; el.innerHTML = h; el.hidden = !h; for (const b of el.querySelectorAll('[data-unban]')) b.onclick = () => unban(b.dataset.unban); }
+  }
+  async function unban(key) {
+    if (!cur || cur.guest) return; const m = cur.meta, was = (m.bans || []).find(b => b.k === key);
+    m.bans = (m.bans || []).filter(b => b.k !== key); if (!m.bans.length) delete m.bans; await store.putMeta(m);
+    if (cur.room && cur.room.unban) cur.room.unban(key);
+    roomSay({ t: 'unban', name: was ? was.name : '', at: Date.now() }, true); bansUI(); toast("Unban " + (was && was.name ? was.name : " this person ") + " unbanned; they can join this map's room again");
+  }
+  const EVTEXT = { join: "Join room", leave: "left the room", refused: "was blocked trying to join", kick: "was kicked", ban: "was banned from the map", unban: "was unbanned" };
+  let titleWas = null;
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && titleWas != null) { document.title = titleWas; titleWas = null; } });
+  function roomSay(ev, quiet) {                      // something happened in the room: the owner is told, and it goes on the room's list
+    if (!cur || !cur.room) return;
+    (cur.roomLog = cur.roomLog || []).unshift(ev); cur.roomLog.length = Math.min(cur.roomLog.length, 30);
+    const name = ev.name || "No name";
+    if (!quiet && (ev.t === 'join' || ev.t === 'leave' || ev.t === 'refused')) {
+      toast(ev.t === 'join' ? name + " joined the room" : ev.t === 'leave' ? name + " left the room" : name + " was blocked but tried to join again", 6000);
+      const chip = $('roomChip'); if (chip) { chip.classList.remove('ping'); void chip.offsetWidth; chip.classList.add('ping'); }
+      if (ev.t === 'join' && document.hidden) { if (titleWas == null) titleWas = document.title; document.title = '● ' + name + " joined · " + titleWas; }
+    }
+    roomLogUI();
+  }
+  function roomLogUI() {
+    const el = $('roomLog'); if (!el || !cur) return; const log = cur.roomLog || [];
+    el.hidden = !log.length || cur.guest; el.innerHTML = log.slice(0, 8).map(e => `<li><time>${clock(e.at)}</time> ${esc(e.name || "No name")} ${EVTEXT[e.t] || ''}</li>`).join('');
+  }
+  function roomUI(people) {
+    if (!cur) return; const inRoom = !!cur.room, guest = cur.guest;
+    if (people) cur.people = people;
+    $('roomPanel').hidden = !inRoom || !!cur.roomShut; $('roomChip').hidden = !inRoom; $('roomOpen').hidden = inRoom || guest;
+    $('roomChip').setAttribute('aria-expanded', String(inRoom && !cur.roomShut));
+    bansUI();
+    if (!inRoom) return;
+    $('roomCode').textContent = showCode(cur.room.code); $('roomClose').hidden = guest;
+    $('roomWhere').textContent = cur.online === false ? "Test room: works only between tabs of this browser, because this page can't reach online rooms" : guest ? "You are in the map owner's room. Every edit is sent to the owner's computer; this map is not stored in your library" : "Give this code to your friends. They open this page " + (fire ? " Sign in with Google " : '') + " and enter the code in the menu. The map stays only on this computer; if you close the room or leave this page, everyone drops out at once";
+    const list = cur.people || [];
+    $('roomChipText').textContent = (guest ? "In the room " : "Room open ") + showCode(cur.room.code) + ' · ' + Math.max(1, list.length) + " people";
+    $('roomPeople').innerHTML = list.map(p => {
+      const dot = `<i style="background:${/^#[0-9a-f]{6}$/i.test(p.color) ? p.color : '#aaa'}"></i>`, who = `<b>${esc(p.name)}</b>${p.host ? "<small>Owner</small>" : ''}${p.me ? "<small>You</small>" : ''}`;
+      if (guest || p.me || p.host) return `<li>${dot}${who}${!p.me && !p.host && MODENAME[p.md] ? `<span class="pst">mode ${MODENAME[p.md]}</span>` : ''}</li>`;
+      // the buttons ride on the line of the name, so they keep their place whatever the lines under them say
+      return `<li class="pp" data-peer="${esc(p.peer)}">${dot}${who}
+        <span class="pact"><button type="button" class="btn" data-look="${esc(p.peer)}"${Number.isFinite(p.x) && Number.isFinite(p.y) ? '' : ' disabled'} title="Move the map to where this person is pointing">Go to</button><button type="button" class="btn" data-kick="${esc(p.peer)}" title="Remove from this room session; they can't come back until a new room is opened">Kick</button><button type="button" class="btn warn${banArm === p.peer ? ' armed' : ''}" data-ban="${esc(p.peer)}" title="Remove, and keep out of this map's rooms until unbanned. Press twice to confirm">${banArm === p.peer ? "Confirm ban" : "Ban"}</button></span>
+        <span class="pst">${esc(stateOf(p))}</span>
+        <span class="pmeta">${p.since ? "joined " + clock(p.since) + ' · ' + ago(p.since) + ' · ' : ''} edits ${p.edits || 0} times · ${p.key && p.key[0] === 'u' ? (cur.online === false ? "a tab of this browser" : "has an account the system remembers") : p.key ? "no account; recognised by their browser" : "no account to remember"}</span></li>`;
+    }).join('');
+    for (const b of $('roomPeople').querySelectorAll('[data-kick]')) b.onclick = () => cur && cur.room && cur.room.kick && cur.room.kick(b.dataset.kick);
+    for (const b of $('roomPeople').querySelectorAll('[data-look]')) b.onclick = () => { const p = cur && (cur.people || []).find(q => q.peer === b.dataset.look); if (p && cur.rt.lookAt) cur.rt.lookAt(p.x, p.y); };
+    for (const b of $('roomPeople').querySelectorAll('[data-ban]')) b.onclick = () => banPeer(b);
+    roomLogUI();
+  }
+  let banArm = null;
+  async function banPeer(b) {                        // twice to ban: it reaches past this room
+    const peer = b.dataset.ban; if (!cur || !cur.room || !cur.room.ban) return;
+    // the first press arms the button and the list is drawn again from that, so the wait for the second press survives the list
+    // being redrawn every time someone in the room moves
+    if (banArm !== peer) { banArm = peer; roomUI(); setTimeout(() => { if (banArm === peer) { banArm = null; if (cur && cur.room) roomUI(); } }, 5000); return; }
+    banArm = null; const c = cur, e = c.room.ban(peer);
+    if (e) { c.meta.bans = (c.meta.bans || []).filter(x => x.k !== e.k).concat([e]).slice(-200); await store.putMeta(c.meta); backup.touch(c.meta.id); toast("Ban " + e.name + " from this map; they can't join this map's room again until you unban them", 7000); }
+    else toast("Removed, but this person has no account to remember, so they are kept out of this room session only", 7000);
+    if (cur === c) roomUI();
+  }
+  setInterval(() => { if (cur && cur.room && !cur.guest && !cur.roomShut && $('roomPanel') && !document.hidden) roomUI(); }, 20000);   // the minutes on the list move on
+  const showCode = c => { const u = String(c).toUpperCase(); return u.slice(0, 6) + '-' + u.slice(6); };
+  const onPeople = list => { if (!cur) return; roomUI(list); cur.rt && cur.rt.setPeers(list.filter(p => !p.me && Number.isFinite(p.x) && Number.isFinite(p.y))); };
+  async function openRoom() {
+    if (!cur || cur.guest || cur.room) return;
+    const name = myName(); if (!name) { toast("First type the name friends will see, in the box at the top of the room card"); $('roomName').hidden = false; $('roomNameIn').focus(); return; }
+    $('roomOpen').disabled = true; $('roomOpen').textContent = "Opening the room";
+    try {
+      const j = await joiner(); if (!j) throw new Error('none');
+      await cur.rt.flush();
+      await store.copyDocs(cur.meta.id, cur.meta.id + '@room'); cur.meta.roomBackup = Date.now(); await store.putMeta(cur.meta);   // the map as it stands, kept in case the room goes wrong
+      const c = cur, room = await MME.hostRoom({ join: j.join, code: MME.roomCode(), name, db: c.db, onPeople, base: () => c.meta.base === 'gresland' ? baseFor(c.meta).then(b => ({ img: b.img || '', G: b.G, D: b.D })) : null, bans: (c.meta.bans || []).map(b => b.k), onEvent: ev => { if (cur === c) roomSay(ev, ev.t === 'kick' || ev.t === 'ban'); }, meta: () => ({ title: c.meta.title, base: c.meta.base, cols: c.meta.cols, rows: c.meta.rows, kmPerHex: c.meta.kmPerHex, v: MME.VERSION }) });
+      if (cur !== c) { room.close(); return; }
+      c.room = room; c.online = j.online; c.env.room = room; c.env.saveDelay = 260; c.roomShut = false; c.roomLog = []; roomUI([]); if (c.rbShow) c.rbShow();
+    } catch (err) { console.error(err); toast(err && err.say ? err.message : fire ? "Couldn't open the room; try again" : "Rooms can't be opened in this view; open this page directly from the Artifact's link", 7000); }
+    if ($('roomOpen')) { $('roomOpen').disabled = false; $('roomOpen').textContent = "Open a shared room"; }
+  }
+  document.addEventListener('change', e => { if (e.target && e.target.id === 'roomNameIn') { const v = e.target.value.trim().slice(0, 24); if (v) { LS.set('mme-name', v); $('myName').value = v; $('roomName').hidden = true; openRoom(); } } });
+
+  // a friend's room
+  $('joinBtn').onclick = async () => {
+    const code = $('joinCode').value.trim().toLowerCase().replace(/[^a-z0-9]/g, ''), name = myName();
+    if (!name) { toast("First type the name friends will see"); $('myName').focus(); return; }
+    if (code.length !== 10) { toast("A room code has ten characters; enter all of them as the map owner sees on screen"); $('joinCode').focus(); return; }
+    LS.set('mme-name', name);
+    $('joinBtn').disabled = true; $('joinBtn').textContent = "Joining the room";
+    try {
+      const j = await joiner(); if (!j) throw new Error("This page can't reach rooms in this view");
+      const r = await MME.joinRoom({ join: j.join, code, name, device: myDevice(), onPeople, onEnd: why => closeMap(why), needBase: m => NOGRES && m.base === 'gresland' });
+      const meta = { id: 'room-' + code.slice(0, 6), title: String(r.meta.title || "A friend's map").slice(0, 80), base: r.meta.base === 'gresland' ? 'gresland' : 'blank', cols: r.meta.cols | 0, rows: r.meta.rows | 0, kmPerHex: +r.meta.kmPerHex || 10 };
+      if (!(meta.cols >= 8 && meta.cols <= MME.MAXDIM && meta.rows >= 8 && meta.rows <= MME.MAXDIM)) { r.room.close(); throw new Error("This room's map can't be read"); }
+      if (r.base) lent.set(meta.id, r.base);          // the ground the owner handed over, held only while this page is in the room
+      const ok = await mount(meta, r.db, r.room); if (ok) { cur.online = j.online; roomUI([]); try { r.room.status($('mapbox').dataset.mode); } catch (err) { /* said at the next change of tool */ } } else r.room.close();
+    } catch (err) { toast(err && err.message ? err.message : "Couldn't join the room", 6000); }
+    $('joinBtn').disabled = false; $('joinBtn').textContent = "Join room";
+  };
+  $('joinCode').addEventListener('keydown', e => { if (e.key === 'Enter') $('joinBtn').click(); });
+
+  // ---------- which browser this is ----------
+  // The engine has been tried on Google Chrome on a computer and nowhere else. The one-file build says so every time it is opened;
+  // the hosted page says so when the browser is another one. The owner asked for this notice before real use (23 Nov 2026).
+  (function browserNotice() {
+    let chrome = false, name = '';
+    try {
+      const b = navigator.userAgentData && navigator.userAgentData.brands, ua = navigator.userAgent || '';
+      if (b && b.length) { chrome = b.some(x => x.brand === 'Google Chrome'); name = (b.find(x => !/Not.?A.?Brand|Chromium/i.test(x.brand)) || {}).brand || 'Chromium'; }
+      else { chrome = /Chrome\//.test(ua) && !/Edg\/|OPR\/|SamsungBrowser|YaBrowser|Vivaldi/.test(ua); name = /Firefox\//.test(ua) ? 'Firefox' : /Edg\//.test(ua) ? 'Microsoft Edge' : /OPR\//.test(ua) ? 'Opera' : /Safari\//.test(ua) && !/Chrome\//.test(ua) ? 'Safari' : chrome ? 'Google Chrome' : ''; }
+      if (chrome && /Android|iPhone|iPad|Mobile/.test(ua)) { chrome = false; name = "Chrome on a phone or tablet"; }
+    } catch (err) { chrome = false; }
+    MME.browser = { chrome, name };
+    const off = !!window.MME_OFFLINE, key = off ? 'mme-br-off' : 'mme-br';
+    if ((!off && chrome) || LS.get(key) === '1' || (navigator.webdriver && !window.MME_NOTICE_TEST)) return;   // a browser driven by a test script is not a person to tell
+    $('brOff').hidden = !off;
+    $('brNow').textContent = chrome ? "You are using Google Chrome, the tested browser" : "You are using " + (name ? "which is " + name : " not Google Chrome") + " has not been tested with this tool. If anything behaves oddly, try Google Chrome";
+    $('brVeil').hidden = false;
+    const close = () => { if ($('brKeep').checked) LS.set(key, '1'); $('brVeil').hidden = true; };
+    $('brOk').onclick = close; setTimeout(() => { try { $('brOk').focus(); } catch (err) { /* no focus to give */ } }, 60);
+  })();
+
+  // ---------- start ----------
+  $('vtag').textContent = MME.NAME + ' v' + MME.VERSION;
+  // v0.22.0: the page in the other language, its twin; the choice is kept in the browser so the next visit opens in it too
+  { const b = $('langBtn'), pages = window.MME_PAGES || {}, other = MME.LANG === 'en' ? 'th' : 'en'; if (b && pages[other]) { b.hidden = false; b.textContent = other === 'th' ? 'ภาษาไทย' : 'English'; b.lang = other; b.onclick = () => { try { localStorage.setItem('mme.lang', other); } catch (e) {} location.href = pages[other] + location.search + location.hash; }; } }   // i18n:keep
+  // v0.22.0: Thai counts without a plural, so the English twin writes "1 maps"; this puts the noun back to one, in the page as drawn
+  if (MME.LANG === 'en') {
+    const ONE = { maps: 'map', cities: 'city', communities: 'community', regiments: 'regiment', places: 'place', hexes: 'hex', lines: 'line', states: 'state', seasons: 'season', classes: 'class', rows: 'row', people: 'person', men: 'man', lessons: 'lesson', pairs: 'pair', days: 'day', groups: 'group', units: 'unit', months: 'month', years: 'year', loads: 'load', branches: 'branch', regions: 'region', markets: 'market', layers: 'layer', kinds: 'kind', points: 'point', words: 'word', times: 'time', heads: 'head' };
+    const RX = new RegExp('(^|[^\\d.,])1 (' + Object.keys(ONE).join('|') + ')\\b', 'g'), HEAD = new RegExp('^(\\s)(' + Object.keys(ONE).join('|') + ')\\b');
+    const one = n => {
+      const v = n.nodeValue; if (!v || v.length > 4000) return;
+      let w = v.indexOf('1 ') >= 0 ? v.replace(RX, (m, a, x) => a + '1 ' + ONE[x]) : v;
+      const p = n.previousSibling; if (p && HEAD.test(w) && /(^|[^\d.,])1$/.test((p.textContent || '').trim())) w = w.replace(HEAD, (m, a, x) => a + ONE[x]);
+      if (w !== v) n.nodeValue = w;
+    };
+    const walk = r => { if (r.nodeType === 3) { one(r); return; } if (r.nodeType !== 1 || /^(SCRIPT|STYLE|CANVAS|SVG)$/i.test(r.tagName)) return; const t = document.createTreeWalker(r, NodeFilter.SHOW_TEXT); let n; while ((n = t.nextNode())) one(n); };
+    walk(document.body);
+    new MutationObserver(ms => { for (const m of ms) { if (m.type === 'characterData') one(m.target); else for (const a of m.addedNodes) walk(a); } }).observe(document.body, { childList: true, subtree: true, characterData: true });
+  }
+  // the first sight of the library waits a moment for the page to say who is looking; if the answer comes later it is drawn again
+  (async () => {
+    let late = false; whoP.then(async () => { if (!late) return; try { await seedGresland(); } catch (err) { console.error(err); } if (!cur) renderLibrary(); if (backup.ready) backup.ready.then(ok => { if (ok) backup.soon(); }); });
+    await Promise.race([whoP, waitMs(HOSTED ? 3000 : 0)]); late = true;
+    try { await seedGresland(); } catch (err) { console.error(err); } await renderLibrary();
+  })();
+  function reveal(id, top) {                               // bring a card of the side panel into sight: the panel shown, the card unfolded, scrolled to (v0.15.1)
+    const c = $(id); if (!c || !cur || document.body.classList.contains('tutoring')) return;   // a lesson keeps the panels where it set them
+    if (!PAN.side) panels({ side: true });
+    if (SHUT[id]) { delete SHUT[id]; LS.set('mme-cards', JSON.stringify(SHUT)); c.classList.remove('shut'); const h = c.querySelector(':scope > h2'); if (h) h.setAttribute('aria-expanded', 'true'); }
+    requestAnimationFrame(() => {                     // scroll the panel alone: the page itself stays where it is
+      const a = c.closest('aside'); if (!a || c.hidden || !c.offsetParent) return; const ar = a.getBoundingClientRect(), cr = c.getBoundingClientRect(), d = cr.top - ar.top;
+      if (top || d < 0 || cr.bottom > ar.bottom) a.scrollTo({ top: a.scrollTop + (top || d < 0 ? d : Math.min(d, cr.bottom - ar.bottom)), behavior: 'smooth' });
+    });
+  }
+  document.addEventListener('click', e => { const b = e.target.closest ? e.target.closest('[data-reveal]') : null; if (b) reveal(b.dataset.reveal); });
+  MME.shell = { openMap, closeMap, openPractice, panels, reveal, refit: () => applyFit(false), get cur() { return cur; }, renderLibrary };
+})();

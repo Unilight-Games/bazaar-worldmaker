@@ -156,7 +156,7 @@
     if (!st.task || taskDone || !s0 || typing()) return;
     let ok = false; try { ok = TESTS[st.task](now, s0); } catch (err) { ok = false; }
     if (!ok) return;
-    taskDone = true; const tk = $('tuTask'); tk.textContent = '✓ ' + (T.taskLabel[st.task] || '').replace(/^ลองทำ: /, 'ทำแล้ว: '); tk.className = 'tu-task ok';
+    taskDone = true; const tk = $('tuTask'); tk.textContent = '✓ ' + (T.taskLabel[st.task] || '').replace(/^(ลองทำ|Try it): /, 'ทำแล้ว: '); tk.className = 'tu-task ok';
     pose('smile'); say(T.praise[st.task] || 'ดีมาก', false);
   }
   function next() {

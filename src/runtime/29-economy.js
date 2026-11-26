@@ -15,7 +15,7 @@ let POL = null, FXS = null, POLG = 0, POLC = 0;               // what each state
 // The levels of people a map can hold (v0.11.1, the owner's three): a few million, a few hundred million, billions. Anything else
 // the owner writes as a number. Before that there were five under other keys; a map that named one of those keeps the people it
 // had, under the level that now means that many or as a number of its own.
-const ETIER = { low: ['ต่ำ', 3e6, 'ไม่กี่ล้านคน'], mid: ['กลาง', 3e8, 'ไม่กี่ร้อยล้านคน'], high: ['สูง', 2e9, 'พันล้านคน'] };
+const ETIER = { low: ['ต่ำ', 3e6, 'ไม่กี่ล้านคน'], mid: ['กลาง', 3e8, 'ไม่กี่ร้อยล้านคน'], high: [window.MME_LANG === 'en' ? 'High' : 'สูง', 2e9, 'พันล้านคน'] };
 const ETIER_OLD = { xs: 3e4, l: 3e5, m: 'low', h: 'high', xl: 2e10 };
 const tierOk = k => typeof k === 'string' && Object.prototype.hasOwnProperty.call(ETIER, k);
 function ecoScale() {
@@ -83,7 +83,7 @@ const ETUNE = {
 function TU(k) { const v = ECO.tune[k]; return v == null ? ETUNE[k][0] : v; }
 const SKEYS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', SCOLS = ['#d9534f', '#4f8fd9', '#58b368', '#e0a83a', '#a56cd6', '#3bb5ad', '#e07a3a', '#c95f9c', '#8a9a3a', '#7480e0'];
 const ESYS = {
-  trad: ['ดั้งเดิม', 'ไม่ออกไปค้าเอง ค้ากันเองได้แค่ระยะใกล้ ของไกลต้องรอพ่อค้าต่างรัฐเข้ามา ซึ่งคิดค่าขนแพงขึ้น'],
+  trad: [window.MME_LANG === 'en' ? 'Traditional' : 'ดั้งเดิม', 'ไม่ออกไปค้าเอง ค้ากันเองได้แค่ระยะใกล้ ของไกลต้องรอพ่อค้าต่างรัฐเข้ามา ซึ่งคิดค่าขนแพงขึ้น'],
   feud: ['ศักดินา', 'ชุมชนส่งของเหลือให้ศูนย์ที่ตนขึ้นอยู่ก่อน ของที่ชุมชนขายหรือซื้อกับที่อื่นต้องผ่านศูนย์นั้น แล้วจึงค้าในรัฐ แล้วจึงค้านอกรัฐ'],
   merc: ['พาณิชยนิยม', 'ซื้อของถูก ขายของเหลือให้ผู้ให้ราคาดีที่สุดโดยนับค่าเงินที่แข็งกว่าเป็นราคาที่ดีกว่า ตั้งกำแพงกับสินค้าโรงงานต่างรัฐ และหวงวัตถุดิบไว้ในรัฐ'],
   cap: ['ทุนนิยม', 'ค้าเสรี ค่าขนระหว่างรัฐทุนนิยมด้วยกันถูกลง เลือกผู้ซื้อตามค่าเงินที่แข็งกว่า ตลาดของรัฐที่อยู่บนทางผ่านรับของของผู้อื่นไปส่งต่อในค่าขนที่ถูกลงโดยเก็บค่าฝาก และรับของจากคู่อริสองฝ่ายไปขายต่อให้กันโดยเก็บส่วนคนกลาง'],
@@ -495,7 +495,7 @@ function ecoGdpHTML() {
   const rows = ecoIncome(ecoGdp()); let h = `<div class="erow"><label>เงินกลางชื่อ <input type="text" data-f="cenname" maxlength="30" value="${esc(ECO.central.name)}" style="width:8em"></label><label>ข้าวที่คนหนึ่งกินทั้งปีราคา <input type="number" data-f="cenyear" min="0.001" step="1" value="${Math.round(ECO.central.per / ECO.unit * 1000) / 1000}" style="width:6em"> ${esc(ECO.central.name)}</label><label>ประชากรหนึ่งหน่วยของแบบจำลอง = <input type="number" data-f="unit" min="100" step="100" value="${ECO.unit}"> คน</label></div><p class="note">เงินกลางคือไม้บรรทัดวัดมูลค่าของทั้งโลก ตั้งจากราคาข้าว: ข้าวที่คนหนึ่งคนกินตลอดปีราคา ${ecoNumF(ECO.central.per / ECO.unit)} ${esc(ECO.central.name)} เท่ากับ 1 ${esc(ECO.central.name)} ซื้อข้าวได้ราว ${ecoNumF(365 * ECO.unit / ECO.central.per)} วัน ส่วนประชากรหนึ่งหน่วยของแบบจำลองคือจำนวนคนที่นับเป็นหนึ่งก้อนในการคิด หมู่บ้านคือ ${Math.round(EPOP[4] * ECO.unit).toLocaleString('en-US')} คน เมืองหลวงคือ ${Math.round(EPOP[0] * ECO.unit).toLocaleString('en-US')} คน จนกว่าจะกรอกประชากรของเมืองเอง แก้สองตัวเลขนี้แล้วผลการค้าไม่เปลี่ยน เปลี่ยนเฉพาะจำนวนคนกับจำนวนเงินที่แสดง</p>${typeof coinWorldHTML === 'function' ? coinWorldHTML() : ''}`;
   if (!rows.length) return h + `<p class="note">ยังไม่มีเมืองบนแผนที่ หรือยังคิดการค้าไม่เสร็จ</p>`;
   const tot = rows.reduce((a, r) => a + r.gdp, 0), ppl = rows.reduce((a, r) => a + r.people, 0), mean = rows.reduce((a, r) => a + r.inc, 0) / ppl;
-  h += `<div class="tr">ทั้งแผนที่ GDP <b>${ecoNumF(tot)}</b> ${esc(ECO.central.name)} ประชากร ${ppl.toLocaleString('en-US')} คน เฉลี่ยคนละ ${ecoNumF(mean)}</div>`;
+  h += `<div class="tr">ทั้งแผนที่ GDP <b>${ecoNumF(tot)}</b> ${esc(ECO.central.name)} · ประชากร ${ppl.toLocaleString('en-US')} คน · เฉลี่ยคนละ ${ecoNumF(mean)}</div>`;
   const by = new Map(); for (const r of rows) { const key = r.s ? r.s.id : '.'; const o = by.get(key) || { s: r.s, gdp: 0, people: 0, n: 0 }; o.gdp += r.gdp; o.people += r.people; o.n++; by.set(key, o); }
   const orgT = ECO.orgs.length ? orgTableHTML(rows) : '';   // before the rows are put in the order asked for: it reads them by city
   const SK = { name: ['เมือง', (a, b) => a.c.name.localeCompare(b.c.name, 'th')], people: ['ประชากร', (a, b) => a.people - b.people], gdp: ['GDP', (a, b) => a.gdp - b.gdp], inc: ['รายได้', (a, b) => a.inc - b.inc], pc: ['ต่อหัว', (a, b) => a.inc / a.people - b.inc / b.people] };

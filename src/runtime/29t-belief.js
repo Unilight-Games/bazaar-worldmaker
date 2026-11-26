@@ -267,7 +267,7 @@ function belNewId(k) { let id; do { id = k[0] + Math.random().toString(36).slice
 function belHTML(k) {
   const L = belList(k), a = belCells(k), T = belTraits(k), dis = editable ? '' : ' disabled', n = {}; for (const id of a) if (id) n[id] = (n[id] || 0) + 1;
   const cs = ECON ? ECON.cities : [], cn = {}; for (const c of cs) { const b = belCity(c.id)[k]; if (b) cn[b.id] = (cn[b.id] || 0) + 1; }
-  let h = `<div class="btns" style="margin:0 0 6px"><button type="button" class="btn" data-bl="new"${dis}>เพิ่ม${belName[k]}</button><button type="button" class="btn" data-bl="states"${dis}>สร้างหนึ่ง${belName[k]}ต่อรัฐ</button><button type="button" class="btn" data-bl="spread"${dis}>กระจายจากชุมชนใหญ่</button><label>จำนวน <select id="belSeeds"${dis}>${[2, 3, 4, 6, 8, 12].map(x => `<option${x === (k === 'cul' ? 6 : 3) ? ' selected' : ''}>${x}</option>`).join('')}</select></label></div>`
+  let h = `<div class="btns" style="margin:0 0 6px"><button type="button" class="btn" data-bl="new"${dis}>${window.MME_LANG === 'en' ? 'Add ' + belName[k].toLowerCase() : 'เพิ่ม' + belName[k]}</button><button type="button" class="btn" data-bl="states"${dis}>${window.MME_LANG === 'en' ? 'One ' + belName[k].toLowerCase() + ' per state' : 'สร้างหนึ่ง' + belName[k] + 'ต่อรัฐ'}</button><button type="button" class="btn" data-bl="spread"${dis}>กระจายจากชุมชนใหญ่</button><label>จำนวน <select id="belSeeds"${dis}>${[2, 3, 4, 6, 8, 12].map(x => `<option${x === (k === 'cul' ? 6 : 3) ? ' selected' : ''}>${x}</option>`).join('')}</select></label></div>`
     + `<div class="erow"><span class="lbl">แปรง</span><div class="seg" id="belBrush">${[[1, '1 ช่อง'], [2, '7 ช่อง'], [3, '19 ช่อง'], [4, '37 ช่อง']].map(([v, t]) => `<button type="button" data-n="${v}" aria-pressed="${BEL.n === v}">${t}</button>`).join('')}</div><label><input type="checkbox" id="belErase"${BEL.erase ? ' checked' : ''}${dis}> ลบออก</label></div>`;
   for (const o of L) {
     const on = BEL.pick === o.id && ecoTab === k, R = k === 'rel' ? BEL.tithe && BEL.tithe[o.id] : null;
@@ -286,7 +286,7 @@ function belHTML(k) {
     h += `<div class="btns"><button type="button" class="btn warn" data-bl="del"${dis}>ลบ${belName[k]}นี้</button></div></div></details>`;
   }
   if (!L.length) h += `<p class="note">ยังไม่มี${belName[k]} กดเพิ่ม หรือให้สร้างจากรัฐหรือกระจายจากชุมชนใหญ่</p>`;
-  return h + `<p class="note">${k === 'cul' ? 'วัฒนธรรมที่ต่างกันทำให้ค่าขนระหว่างสองชุมชนแพงขึ้นร้อยละ ' + ecoPc(TU('culFar')) : 'ศาสนาที่ต่างกันทำให้ค่าขนระหว่างสองชุมชนแพงขึ้นร้อยละ ' + ecoPc(TU('relFar')) + ' ผู้แสวงบุญไปศาสนสถานของศาสนาอื่นน้อยลงเหลือร้อยละ ' + ecoPc(TU('relPilgOther'))} ตัวเลขเหล่านี้แก้ได้ในแท็บตัวเลข</p>`;
+  return h + `<p class="note">${k === 'cul' ? `วัฒนธรรมที่ต่างกันทำให้ค่าขนระหว่างสองชุมชนแพงขึ้นร้อยละ ${ecoPc(TU('culFar'))}` : `ศาสนาที่ต่างกันทำให้ค่าขนระหว่างสองชุมชนแพงขึ้นร้อยละ ${ecoPc(TU('relFar'))} ผู้แสวงบุญไปศาสนสถานของศาสนาอื่นน้อยลงเหลือร้อยละ ${ecoPc(TU('relPilgOther'))}`} ตัวเลขเหล่านี้แก้ได้ในแท็บตัวเลข</p>`;
 }
 $('ecobody').addEventListener('click', e => {
   if (ecoTab !== 'cul' && ecoTab !== 'rel') return; const k = ecoTab;

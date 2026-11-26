@@ -86,7 +86,7 @@ function coinStateForm(s) {
     const users = ECO.states.filter(x => x !== s && coinIssuer(x) === s), Y = COINY.get(s.id);
     h += `<div class="tr w">${users.length ? 'รัฐที่ใช้เงินนี้ด้วย: ' + users.map(x => esc(x.name)).join(' · ') + ' ค้ากันไม่ต้องแลกเงิน ' : 'ยังไม่มีรัฐอื่นใช้เงินนี้ '}${Y ? `· ปีนี้ได้จากการผลิตเงิน ${socN(Y.got)} ${cen}${users.length ? ` (จากรัฐอื่น ${socN([...Y.from].filter(([id]) => id !== s.id).reduce((a, [, v]) => a + v, 0))})` : ''}` : ''}</div>`;
   } else if (I) {
-    h += `<div class="tr w">ใช้${esc(coinName(s))}ที่${esc(I.name)}ออก (${esc(COINF[form].name)}) 1 หน่วย = ${I.rate} ${cen} ค่าเงินขึ้นลงพร้อมกับ${esc(I.name)} ค้ากับรัฐที่ใช้เงินเดียวกันไม่ต้องแลกเงิน และจ่ายค่าผลิตเงินร้อยละ ${ecoPc(COINF[form].seig)} ของ GDP ต่อปีให้คลังของ${esc(I.name)}</div>`;
+    h += `<div class="tr w">ใช้${esc(coinName(s))}ที่ออกโดย${esc(I.name)} (${esc(COINF[form].name)}) 1 หน่วย = ${I.rate} ${cen} ค่าเงินขึ้นลงพร้อมกับ${esc(I.name)} ค้ากับรัฐที่ใช้เงินเดียวกันไม่ต้องแลกเงิน และจ่ายค่าผลิตเงินร้อยละ ${ecoPc(COINF[form].seig)} ของ GDP ต่อปีให้คลังของ${esc(I.name)}</div>`;
   } else h += `<div class="tr w">${cen} เป็นหน่วยวัดมูลค่ากลาง ไม่มีรัฐใดออก ค่าไม่ขึ้นลงตามดุลการค้า ค้ากับรัฐที่ใช้เงินของตัวเองต้องแลกเงิน</div>`;
   if (b && Math.abs(b.fx) >= 0.001) h += `<div class="tr w">ปีนี้ค่าเงิน${b.fx > 0 ? 'แข็งขึ้น' : 'อ่อนลง'}ร้อยละ ${ecoPc(Math.abs(b.fx))} ตามดุลการค้า${use !== 'own' && I ? 'ของทุกรัฐที่ใช้เงินนี้รวมกัน' : ''}</div>`;
   return h;

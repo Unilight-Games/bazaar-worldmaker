@@ -24,6 +24,10 @@ const COS = [], SIN = [];
 for (let a = 0; a < 6; a++) { COS.push(Math.cos(a * Math.PI / 3)); SIN.push(Math.sin(a * Math.PI / 3)); }
 function hexPath(c, i, s) { c.moveTo(CX[i] + R * s, CY[i]); for (let a = 1; a < 6; a++) c.lineTo(CX[i] + R * s * COS[a], CY[i] + R * s * SIN[a]); c.closePath(); }
 const BI = D.biome, ZO = D.zone, RV = D.river;   // one character per hex: the map as drawn
+// v0.22.0: on the English page the kinds of ground and of places a map brings with it (Gresland's own) take the English names of
+// the same codes; their notes stay as the map wrote them
+const enKinds = (o, def) => { if (window.MME_LANG !== 'en' || !o || !def) return o; const r = {}; for (const k in o) r[k] = def[k] ? { ...o[k], name: def[k].name } : o[k]; return r; };
+if (window.MME_LANG === 'en' && window.MME && MME.DEFAULTS) { D.biomes = enKinds(D.biomes, MME.DEFAULTS.biomes); D.pointKinds = enKinds(D.pointKinds, MME.DEFAULTS.pointKinds); }
 const BIOME = D.biomes, ZONE = D.zones;
 const isW = b => b === 'S' || b === 'L' || b === 'i';
 const isSea = b => b === 'S' || b === 'i';            // the archipelago ('i') is shallow sea strewn with islets

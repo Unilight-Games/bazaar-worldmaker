@@ -16,10 +16,11 @@ const MK = { stamp: -1, regions: [], at: null };
 // v0.19.0: a price for one piece too. A portion (a person's year of a good) holds this many pieces of the good's usual unit; the
 // counts are Claude's reading of what one person uses in a year (grain about 200 kg, a weapon kept a year, a ship shared by many),
 // and each can be changed in the market window.
-const MKUNIT0 = { grain: ['กก.', 200], protein: ['กก.', 60], salt: ['กก.', 6], herbs: ['กก.', 3], timber: ['ท่อน', 5], fuel: ['มัด', 100], stone: ['ก้อน', 20], ore: ['กก.', 50], cloth: ['ผืน', 4], mana: ['ก้อน', 2], rare: ['บาท (น้ำหนัก)', 20], luxury: ['ชิ้น', 5], tools: ['ชิ้น', 2], arms: ['ชิ้น', 1], tech: ['ชิ้น', 1], ships: ['ลำ', 0.01], books: ['เล่ม', 3] , livestock: ['ตัว', 0.5], drink: ['ไห', 2], furniture: ['ชิ้น', 1], build: ['ก้อน', 100], fert: ['กระสอบ', 4], feed: ['กระสอบ', 4], textile: ['ผืน', 3], pottery: ['ใบ', 10], food: ['ไห', 2], medicine: ['ขวด', 5], jewelry: ['ชิ้น', 0.2] };
+const MKBOLT = window.MME_LANG === 'en' ? 'bolt' : 'ผืน';   // v0.22.0: ผืน also counts maps, which takes the English word first
+const MKUNIT0 = { grain: ['กก.', 200], protein: ['กก.', 60], salt: ['กก.', 6], herbs: ['กก.', 3], timber: ['ท่อน', 5], fuel: ['มัด', 100], stone: ['ก้อน', 20], ore: ['กก.', 50], cloth: [MKBOLT, 4], mana: ['ก้อน', 2], rare: ['บาท (น้ำหนัก)', 20], luxury: ['ชิ้น', 5], tools: ['ชิ้น', 2], arms: ['ชิ้น', 1], tech: ['ชิ้น', 1], ships: ['ลำ', 0.01], books: ['เล่ม', 3] , livestock: ['ตัว', 0.5], drink: ['ไห', 2], furniture: ['ชิ้น', 1], build: ['ก้อน', 100], fert: ['กระสอบ', 4], feed: ['กระสอบ', 4], textile: [MKBOLT, 3], pottery: ['ใบ', 10], food: ['ไห', 2], medicine: ['ขวด', 5], jewelry: ['ชิ้น', 0.2] };
 ECO.munit = {};
 const mkUnit = cat => { const o = ECO.munit[cat], d = MKUNIT0[cat] || ['ชิ้น', 1]; return [o && o[0] || d[0], o && o[1] > 0 ? o[1] : d[1]]; };
-const mkPiece = x => x >= 100 ? Math.round(x).toLocaleString('th-TH') : x >= 1 ? x.toFixed(2) : x >= 0.01 ? x.toFixed(3) : x.toPrecision(2);
+const mkPiece = x => x >= 100 ? Math.round(x).toLocaleString(window.MME_LANG === 'en' ? 'en-GB' : 'th-TH') : x >= 1 ? x.toFixed(2) : x >= 0.01 ? x.toFixed(3) : x.toPrecision(2);
 {
   const ld = ecoLoad, sr = ecoSerial;
   ecoLoad = function (b) { ld(b); b = b || {}; ECO.munit = {}; for (const [c, v] of Object.entries(b.munit || {})) if (ECAT[c] && Array.isArray(v) && typeof v[0] === 'string' && +v[1] > 0) ECO.munit[c] = [v[0].slice(0, 20), Math.min(1e6, +v[1])]; };
@@ -78,7 +79,7 @@ function mkClose() { mkEl.hidden = true; }
 $('mkClose').onclick = mkClose; mkEl.addEventListener('pointerdown', e => { if (e.target === mkEl) mkClose(); e.stopPropagation(); });
 for (const ev of ['wheel', 'click', 'keydown']) mkEl.addEventListener(ev, e => { if (ev === 'keydown' && e.key === 'Escape') mkClose(); e.stopPropagation(); });
 // shown in portions: a load is what a thousand people use in a year, so a portion is one person's year of that good
-const MKP = 1000, mkN = x => { x *= MKP; return x >= 100 ? Math.round(x).toLocaleString('th-TH') : x >= 10 ? x.toFixed(1) : x.toFixed(2); }, mkPr = x => { x /= MKP; return x >= 100 ? Math.round(x).toLocaleString('th-TH') : x >= 10 ? x.toFixed(1) : x.toFixed(2); };
+const MKP = 1000, mkN = x => { x *= MKP; return x >= 100 ? Math.round(x).toLocaleString(window.MME_LANG === 'en' ? 'en-GB' : 'th-TH') : x >= 10 ? x.toFixed(1) : x.toFixed(2); }, mkPr = x => { x /= MKP; return x >= 100 ? Math.round(x).toLocaleString(window.MME_LANG === 'en' ? 'en-GB' : 'th-TH') : x >= 10 ? x.toFixed(1) : x.toFixed(2); };
 function mkSeasonIdx(M) { if (MKV.s >= 0) return MKV.s; const id = typeof clSeas !== 'undefined' ? clSeas : ''; const i = M.seas.findIndex(s => s.id && s.id === id); return i >= 0 ? i : 0; }
 function mkSpark(vals, w, h, col) {
   const lo = Math.min(...vals), hi = Math.max(...vals), sp = hi - lo || 1, n = vals.length;
@@ -106,7 +107,7 @@ function mkRender() {
     h += `<button type="button" class="mkrow${on ? ' on' : ''}" data-cat="${cat}"><span><i class="sdot" style="background:${ECAT[cat].col}"></i>${esc(ECAT[cat].name)}</span><span class="r">${mkN(r.sup + r.imp)}</span><span class="r">${mkN(r.dem + r.exp)}</span><span class="r">${mkN(r.stock0)}</span><span class="r">${mkPr(r.price)} <small class="${d > 0.02 ? 'up' : d < -0.02 ? 'dn' : ''}">${d > 0.02 ? '▲' : d < -0.02 ? '▼' : '·'}${Math.abs(Math.round(d * 100))}%</small></span><span class="r">${(() => { const [u, n] = mkUnit(cat); return mkPiece(r.price / MKP / n) + ' <small>/' + esc(u) + '</small>'; })()}</span><span class="w">${C.sellers.slice(0, 3).map(x => esc(x.name || 'ไม่มีชื่อ')).join(' · ')}</span></button>`;
     if (on) {
       h += `<div class="mkdet"><div class="mkplot"><div><b>ราคา</b> ${mkSpark(C.rows.map(x => x.price), 220, 54, 'var(--brass)')}</div><div><b>สต็อก</b> ${mkSpark(C.rows.map(x => x.stock0), 220, 54, '#7fb6ff')}</div></div>`
-        + `<div class="tr w">ราคาเฉลี่ยทั้งปี ${mkPr(C.P)} ${coin} ต่อส่วน (เฉลี่ยจากราคาในทุกชุมชน ถ่วงด้วยปริมาณที่แต่ละชุมชนซื้อ ถูกสุด ${mkPr(C.lo)} แพงสุด ${mkPr(C.hi)}) · ทั้งปีผลิต ${mkN(C.sup)} ใช้ ${mkN(C.dem)}${C.imp ? ` · ซื้อเข้าจากตลาดอื่น ${mkN(C.imp)}` : ''}${C.exp ? ` · ขายออก ${mkN(C.exp)}` : ''}</div>`
+        + `<div class="tr w">ราคาเฉลี่ยทั้งปี ${mkPr(C.P)} ${coin} ต่อส่วน (เฉลี่ยจากราคาในทุกชุมชน ถ่วงด้วยปริมาณที่แต่ละชุมชนซื้อ ถูกสุด ${mkPr(C.lo)} แพงสุด ${mkPr(C.hi)}) · ทั้งปีผลิต ${mkN(C.sup)} บริโภค ${mkN(C.dem)}${C.imp ? ` · ซื้อเข้าจากตลาดอื่น ${mkN(C.imp)}` : ''}${C.exp ? ` · ขายออก ${mkN(C.exp)}` : ''}</div>`
         + (() => { const [u, n] = mkUnit(cat); return `<div class="erow"><span class="lbl">หนึ่งส่วนเท่ากับ</span><input type="number" data-mu="n" data-cat="${cat}" min="0.0001" step="any" value="${n}" style="width:6em"${editable ? '' : ' disabled'}><input type="text" data-mu="u" data-cat="${cat}" maxlength="20" value="${esc(u)}" style="width:7em"${editable ? '' : ' disabled'}><span class="w">ราคาต่อ${esc(u)} ${mkPiece(C.P / MKP / n)} ${coin} เฉลี่ยทั้งปี</span></div>`; })()
         + `<div class="tr"><b>ชุมชนที่ขาย</b> <span class="w">${C.sellers.map(x => `<a href="#" data-mkc="${esc(x.id)}">${esc(x.name || 'ไม่มีชื่อ')}</a> ${mkN(x.q)}`).join(' · ') || 'ไม่มี'}</span></div></div>`;
     }

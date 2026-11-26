@@ -40,6 +40,10 @@ const COS = [], SIN = [];
 for (let a = 0; a < 6; a++) { COS.push(Math.cos(a * Math.PI / 3)); SIN.push(Math.sin(a * Math.PI / 3)); }
 function hexPath(c, i, s) { c.moveTo(CX[i] + R * s, CY[i]); for (let a = 1; a < 6; a++) c.lineTo(CX[i] + R * s * COS[a], CY[i] + R * s * SIN[a]); c.closePath(); }
 const BI = D.biome, ZO = D.zone, RV = D.river;   // one character per hex: the map as drawn
+// v0.22.0: on the English page the kinds of ground and of places a map brings with it (Gresland's own) take the English names of
+// the same codes; their notes stay as the map wrote them
+const enKinds = (o, def) => { if (window.MME_LANG !== 'en' || !o || !def) return o; const r = {}; for (const k in o) r[k] = def[k] ? { ...o[k], name: def[k].name } : o[k]; return r; };
+if (window.MME_LANG === 'en' && window.MME && MME.DEFAULTS) { D.biomes = enKinds(D.biomes, MME.DEFAULTS.biomes); D.pointKinds = enKinds(D.pointKinds, MME.DEFAULTS.pointKinds); }
 const BIOME = D.biomes, ZONE = D.zones;
 const isW = b => b === 'S' || b === 'L' || b === 'i';
 const isSea = b => b === 'S' || b === 'i';            // the archipelago ('i') is shallow sea strewn with islets
@@ -4193,7 +4197,7 @@ function updateStats() {
       ['ถนนที่วาง', rc.add], ['ถนนเดิมที่แก้', rc.edit], ['ถนนเดิมที่ลบ', ED.rthid.size],
       ['สถานที่น่าสนใจที่วางหรือแก้', ED.points.size], ['สถานที่น่าสนใจเดิมที่ลบ', ED.phid.size], ['ข้อความเขตและภูมิประเทศที่แก้', ED.zinfo.size + ED.binfo.size + ED.kinfo.size],
       ['เส้นการค้าที่วางหรือแก้', ED.tlinks.size], ['เส้นการค้าเดิมที่ลบ', ED.tlhid.size], ['ระดับศูนย์ที่ตั้งเอง', ED.hubs.size], ['ศูนย์ที่ส่งของให้ที่เลือกเอง', ED.tparent.size]];
-    $('stats').innerHTML = (BLANK ? rows.filter(([k]) => !k.includes('เดิม') && !k.includes('สแตนเทอร์')) : rows).map(([k, v]) => `<span>${esc(k)}</span><span>${v}</span>`).join('');
+    $('stats').innerHTML = (BLANK ? rows.filter(([k]) => !/เดิม|สแตนเทอร์|[Oo]riginal|Stanther/.test(k)) : rows).map(([k, v]) => `<span>${esc(k)}</span><span>${v}</span>`).join('');   // i18n:keep
     $('clearAll').disabled = !editable || !(pc + hc + ED.rivers.length + ED.cities.length + ED.bhid.size + ED.labels.size + ED.lhid.size + (ED.stan != null ? 1 : 0) + ED.routes.size + ED.rthid.size + ED.points.size + ED.phid.size + ED.zinfo.size + ED.binfo.size + ED.kinfo.size + ED.tlinks.size + ED.tlhid.size + ED.hubs.size + ED.tparent.size);
     updateLegend(); updateHistory();
   }, 120);
@@ -4780,7 +4784,7 @@ let POL = null, FXS = null, POLG = 0, POLC = 0;               // what each state
 // The levels of people a map can hold (v0.11.1, the owner's three): a few million, a few hundred million, billions. Anything else
 // the owner writes as a number. Before that there were five under other keys; a map that named one of those keeps the people it
 // had, under the level that now means that many or as a number of its own.
-const ETIER = { low: ['ต่ำ', 3e6, 'ไม่กี่ล้านคน'], mid: ['กลาง', 3e8, 'ไม่กี่ร้อยล้านคน'], high: ['สูง', 2e9, 'พันล้านคน'] };
+const ETIER = { low: ['ต่ำ', 3e6, 'ไม่กี่ล้านคน'], mid: ['กลาง', 3e8, 'ไม่กี่ร้อยล้านคน'], high: [window.MME_LANG === 'en' ? 'High' : 'สูง', 2e9, 'พันล้านคน'] };
 const ETIER_OLD = { xs: 3e4, l: 3e5, m: 'low', h: 'high', xl: 2e10 };
 const tierOk = k => typeof k === 'string' && Object.prototype.hasOwnProperty.call(ETIER, k);
 function ecoScale() {
@@ -4848,7 +4852,7 @@ const ETUNE = {
 function TU(k) { const v = ECO.tune[k]; return v == null ? ETUNE[k][0] : v; }
 const SKEYS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', SCOLS = ['#d9534f', '#4f8fd9', '#58b368', '#e0a83a', '#a56cd6', '#3bb5ad', '#e07a3a', '#c95f9c', '#8a9a3a', '#7480e0'];
 const ESYS = {
-  trad: ['ดั้งเดิม', 'ไม่ออกไปค้าเอง ค้ากันเองได้แค่ระยะใกล้ ของไกลต้องรอพ่อค้าต่างรัฐเข้ามา ซึ่งคิดค่าขนแพงขึ้น'],
+  trad: [window.MME_LANG === 'en' ? 'Traditional' : 'ดั้งเดิม', 'ไม่ออกไปค้าเอง ค้ากันเองได้แค่ระยะใกล้ ของไกลต้องรอพ่อค้าต่างรัฐเข้ามา ซึ่งคิดค่าขนแพงขึ้น'],
   feud: ['ศักดินา', 'ชุมชนส่งของเหลือให้ศูนย์ที่ตนขึ้นอยู่ก่อน ของที่ชุมชนขายหรือซื้อกับที่อื่นต้องผ่านศูนย์นั้น แล้วจึงค้าในรัฐ แล้วจึงค้านอกรัฐ'],
   merc: ['พาณิชยนิยม', 'ซื้อของถูก ขายของเหลือให้ผู้ให้ราคาดีที่สุดโดยนับค่าเงินที่แข็งกว่าเป็นราคาที่ดีกว่า ตั้งกำแพงกับสินค้าโรงงานต่างรัฐ และหวงวัตถุดิบไว้ในรัฐ'],
   cap: ['ทุนนิยม', 'ค้าเสรี ค่าขนระหว่างรัฐทุนนิยมด้วยกันถูกลง เลือกผู้ซื้อตามค่าเงินที่แข็งกว่า ตลาดของรัฐที่อยู่บนทางผ่านรับของของผู้อื่นไปส่งต่อในค่าขนที่ถูกลงโดยเก็บค่าฝาก และรับของจากคู่อริสองฝ่ายไปขายต่อให้กันโดยเก็บส่วนคนกลาง'],
@@ -5260,7 +5264,7 @@ function ecoGdpHTML() {
   const rows = ecoIncome(ecoGdp()); let h = `<div class="erow"><label>เงินกลางชื่อ <input type="text" data-f="cenname" maxlength="30" value="${esc(ECO.central.name)}" style="width:8em"></label><label>ข้าวที่คนหนึ่งกินทั้งปีราคา <input type="number" data-f="cenyear" min="0.001" step="1" value="${Math.round(ECO.central.per / ECO.unit * 1000) / 1000}" style="width:6em"> ${esc(ECO.central.name)}</label><label>ประชากรหนึ่งหน่วยของแบบจำลอง = <input type="number" data-f="unit" min="100" step="100" value="${ECO.unit}"> คน</label></div><p class="note">เงินกลางคือไม้บรรทัดวัดมูลค่าของทั้งโลก ตั้งจากราคาข้าว: ข้าวที่คนหนึ่งคนกินตลอดปีราคา ${ecoNumF(ECO.central.per / ECO.unit)} ${esc(ECO.central.name)} เท่ากับ 1 ${esc(ECO.central.name)} ซื้อข้าวได้ราว ${ecoNumF(365 * ECO.unit / ECO.central.per)} วัน ส่วนประชากรหนึ่งหน่วยของแบบจำลองคือจำนวนคนที่นับเป็นหนึ่งก้อนในการคิด หมู่บ้านคือ ${Math.round(EPOP[4] * ECO.unit).toLocaleString('en-US')} คน เมืองหลวงคือ ${Math.round(EPOP[0] * ECO.unit).toLocaleString('en-US')} คน จนกว่าจะกรอกประชากรของเมืองเอง แก้สองตัวเลขนี้แล้วผลการค้าไม่เปลี่ยน เปลี่ยนเฉพาะจำนวนคนกับจำนวนเงินที่แสดง</p>${typeof coinWorldHTML === 'function' ? coinWorldHTML() : ''}`;
   if (!rows.length) return h + `<p class="note">ยังไม่มีเมืองบนแผนที่ หรือยังคิดการค้าไม่เสร็จ</p>`;
   const tot = rows.reduce((a, r) => a + r.gdp, 0), ppl = rows.reduce((a, r) => a + r.people, 0), mean = rows.reduce((a, r) => a + r.inc, 0) / ppl;
-  h += `<div class="tr">ทั้งแผนที่ GDP <b>${ecoNumF(tot)}</b> ${esc(ECO.central.name)} ประชากร ${ppl.toLocaleString('en-US')} คน เฉลี่ยคนละ ${ecoNumF(mean)}</div>`;
+  h += `<div class="tr">ทั้งแผนที่ GDP <b>${ecoNumF(tot)}</b> ${esc(ECO.central.name)} · ประชากร ${ppl.toLocaleString('en-US')} คน · เฉลี่ยคนละ ${ecoNumF(mean)}</div>`;
   const by = new Map(); for (const r of rows) { const key = r.s ? r.s.id : '.'; const o = by.get(key) || { s: r.s, gdp: 0, people: 0, n: 0 }; o.gdp += r.gdp; o.people += r.people; o.n++; by.set(key, o); }
   const orgT = ECO.orgs.length ? orgTableHTML(rows) : '';   // before the rows are put in the order asked for: it reads them by city
   const SK = { name: ['เมือง', (a, b) => a.c.name.localeCompare(b.c.name, 'th')], people: ['ประชากร', (a, b) => a.people - b.people], gdp: ['GDP', (a, b) => a.gdp - b.gdp], inc: ['รายได้', (a, b) => a.inc - b.inc], pc: ['ต่อหัว', (a, b) => a.inc / a.people - b.inc / b.people] };
@@ -5519,7 +5523,7 @@ function clSeasHTML() {
       + `<div class="erow"><label style="flex:1">ตำแหน่งบนวงรอบปี หนาวสุด <input type="range" data-sf="warm" min="0" max="100" step="5" value="${Math.round(s.warm * 100)}" style="flex:1"> ร้อนสุด <b>${Math.round(s.warm * 100)}%</b></label></div>`
       + `<div class="erow"><label>อุณหภูมิ บวกหรือลบ <input type="number" data-sf="dt" min="-40" max="40" step="0.5" value="${s.dt}"> °C</label><label>ฝน <input type="number" data-sf="rain" min="0" max="400" step="5" value="${Math.round(s.rain * 100)}"> %</label></div>`
       + `<div class="erow"><label>ลม <select data-sf="wind">${clWindOpts(s.wind, BLANK ? 'ตามลมประจำของแผนที่' : 'ไม่กำหนด ฝนกระจายตามที่สำรวจ')}</select></label><label>แรงลม <input type="number" data-sf="gust" min="30" max="300" step="10" value="${Math.round((s.gust || 1) * 100)}"> %</label></div>`
-      + `<div class="tr w">เฉลี่ยทั้งแผ่นดิน ${fmtT(m[0])} ฝน ${fmtN(m[1])} มม.${m[2] > 0.02 ? ' แผ่นดินร้อยละ ' + Math.round(m[2] * 100) + ' ต่ำกว่าจุดเยือกแข็ง' : ''} ปลูกพืชได้ร้อยละ ${Math.round(m[3] * 100)} ของแผ่นดิน${w === 'auto' ? ' ลมตามแถบละติจูด' : WDIR[w] ? ' ลมจาก' + WNAME[w] : ''}</div></div>`;
+      + `<div class="tr w">เฉลี่ยทั้งแผ่นดิน ${fmtT(m[0])} · ฝน ${fmtN(m[1])} มม.${m[2] > 0.02 ? ' แผ่นดินร้อยละ ' + Math.round(m[2] * 100) + ' ต่ำกว่าจุดเยือกแข็ง' : ''} ปลูกพืชได้ร้อยละ ${Math.round(m[3] * 100)} ของแผ่นดิน${w === 'auto' ? ' ลมตามแถบละติจูด' : WDIR[w] ? ' ลมจาก' + WNAME[w] : ''}</div></div>`;
   });
   return h + `<p class="note">ความยาวคิดเป็นสัดส่วนกันเอง ไม่ต้องรวมได้เลขใดเลขหนึ่ง ตำแหน่งบนวงรอบปีบอกว่าฤดูนั้นอยู่ใกล้ช่วงหนาวที่สุดหรือร้อนที่สุดของแต่ละช่อง ${BLANK ? 'ซีกใต้ของเส้นศูนย์สูตรกลับฤดูให้เอง ' : ''}ฝนร้อยละร้อยคือส่วนที่แบบจำลองแบ่งให้ฤดูนี้ ลมกำหนดว่าด้านไหนของแผ่นดินและของเทือกเขาได้ฝนของฤดูนี้ แรงลมมากพาความชื้นเข้าไปได้ลึก ถ้าจะแก้เฉพาะบางพื้นที่ กดดูบนแผนที่แล้วใช้เครื่องมือแก้ค่าของชั้นที่ดูอยู่</p></details>`;
 }
@@ -6108,9 +6112,9 @@ function landTipHTML(id) {                           // the hover card's line fo
 // Three levels and a number of one's own (v0.11.1); the number is written in the box beside the list, as a person writes it.
 const tierSel = $('tierSel'), tierNum = $('tierNum');
 function ecoPeople(s) {                               // 250,000,000 · 250 ล้าน · 2.5 พันล้าน · 3 แสน · 2.5e8
-  s = String(s == null ? '' : s).replace(/[,\s_]/g, '').replace(/คน$/, '').toLowerCase();
-  const m = /^(\d+(?:\.\d+)?(?:e\d{1,2})?)(ล้านล้าน|หมื่นล้าน|พันล้าน|ร้อยล้าน|สิบล้าน|ล้าน|แสน|หมื่น|พัน|ร้อย|k|m|b)?$/.exec(s); if (!m) return NaN;
-  const u = { 'ล้านล้าน': 1e12, 'หมื่นล้าน': 1e10, 'พันล้าน': 1e9, 'ร้อยล้าน': 1e8, 'สิบล้าน': 1e7, 'ล้าน': 1e6, 'แสน': 1e5, 'หมื่น': 1e4, 'พัน': 1e3, 'ร้อย': 100, k: 1e3, m: 1e6, b: 1e9 };
+  s = String(s == null ? '' : s).replace(/[,\s_]/g, '').toLowerCase().replace(/(คน|people|persons?)$/, '');   // i18n:keep
+  const m = /^(\d+(?:\.\d+)?(?:e\d{1,2})?)(ล้านล้าน|หมื่นล้าน|พันล้าน|ร้อยล้าน|สิบล้าน|ล้าน|แสน|หมื่น|พัน|ร้อย|trillion|billion|million|thousand|hundred|bn|k|m|b)?$/.exec(s); if (!m) return NaN;   // i18n:keep
+  const u = { 'ล้านล้าน': 1e12, 'หมื่นล้าน': 1e10, 'พันล้าน': 1e9, 'ร้อยล้าน': 1e8, 'สิบล้าน': 1e7, 'ล้าน': 1e6, 'แสน': 1e5, 'หมื่น': 1e4, 'พัน': 1e3, 'ร้อย': 100, trillion: 1e12, billion: 1e9, million: 1e6, thousand: 1e3, hundred: 100, bn: 1e9, k: 1e3, m: 1e6, b: 1e9 };   // i18n:keep
   return Math.round(+m[1] * (m[2] ? u[m[2]] : 1));
 }
 const tierNow = () => ECO.tier === 'own' ? ECO.total : ECON ? ECON.cities.reduce((a, c) => a + c.pop, 0) * ECO.unit : 0;   // with no level named, what the heads come to
@@ -6671,7 +6675,7 @@ function socStateForm(s) {                           // a state's choices: how i
 function socBalanceLine(b) {
   const p = b.plan, pc = x => ecoPc(x) + '%';
   let t = (b.net >= 0 ? `ปีนี้เกินดุล ${socN(b.net)} ${esc(ECO.central.name)}` : `ปีนี้ขาดดุล ${socN(-b.net)} ${esc(ECO.central.name)} คิดเป็น ${pc(b.def)} ของ GDP`) + ' (สินค้ารวมเงินนักท่องเที่ยว)';
-  if (p) t += ` หลังใช้${[...p.tools].map(k => EPOL[k][0]).join(' ')}ที่กำลัง ${pc(p.k)} (ก่อนใช้ขาดดุล ${pc(p.def1)})`;
+  if (p) t += ` หลังใช้${[...p.tools].map(k => EPOL[k][0]).join(' · ')} ที่กำลัง ${pc(p.k)} (ก่อนใช้ขาดดุล ${pc(p.def1)})`;
   if (b.pen >= 0.5) t += ` ความเป็นอยู่ของทุกเมืองในรัฐลด ${Math.round(b.pen)} แต้ม`;
   return t;
 }
@@ -6699,7 +6703,7 @@ function socGdpHTML() {
   const list = rows.slice().sort((a, b) => sk === 'name' ? dir * a.c.name.localeCompare(b.c.name, 'th') : dir * (SK[sk][1](a) - SK[sk][1](b)) || a.c.name.localeCompare(b.c.name, 'th'));
   const wellAvg = rows.reduce((a, r) => a + r.well * r.people, 0) / Math.max(1, rows.reduce((a, r) => a + r.people, 0));
   let h = fold('gpp', `ประชากร การย้ายถิ่น และนักท่องเที่ยว <small>${rows.length} แถว</small>`,
-    `<div class="tr">ผู้อยู่อาศัยดั้งเดิม <b>${socN(T.native)}</b> คน ย้ายถิ่นในปีนี้ <b>${socN(T.moved)}</b> คน${T.season >= 0.5 ? ` ย้ายตามฤดู <b>${socN(T.season)}</b> คน` : ''} นักท่องเที่ยว <b>${socN(T.tour)}</b> คนต่อปี ความเป็นอยู่เฉลี่ย <b>${Math.round(wellAvg)}</b> จาก 100</div>`
+    `<div class="tr">ผู้อยู่อาศัยดั้งเดิม <b>${socN(T.native)}</b> คน ย้ายถิ่นในปีนี้ <b>${socN(T.moved)}</b> คน${T.season >= 0.5 ? ` ย้ายตามฤดู <b>${socN(T.season)}</b> คน` : ''} · นักท่องเที่ยว <b>${socN(T.tour)}</b> คนต่อปี · ความเป็นอยู่เฉลี่ย <b>${Math.round(wellAvg)}</b> จาก 100</div>`
     + `<div class="etable g5 g7"><div class="eth sortable">${Object.entries(SK).map(([k, v]) => `<span data-a="psort" data-k="${k}" title="กดเพื่อเรียงตามช่องนี้">${v[0]}${arrow(k)}</span>`).join('')}</div><div class="eth"><span></span><span>อยู่ดี</span><span>ดั้งเดิม</span><span>ย้ายเข้า</span><span>ย้ายออก</span><span>นักท่องเที่ยว</span><span>ค่าแรง</span></div>`
     + list.map(r => `<div class="etr"><span>${r.s ? `<i class="sdot" style="background:${r.s.color}"></i>` : ''}${esc(r.c.name)}${r.c.reg !== 'shift' ? ` <em>${EREG[r.c.reg][0]}</em>` : ''}${r.c.land && r.c.land.lack >= 0.05 ? ` <em>ที่ดินขาด ${ecoPc(r.c.land.lack)}%</em>` : ''}</span><span>${Math.round(r.well)}</span><span>${socN(r.demo.native)}</span><span>${socN(r.demo.in + r.demo.seasIn)}</span><span>${socN(r.demo.out + r.demo.seasOut)}</span><span>${socN(r.demo.tour)}</span><span>${r.c.lab >= 0.005 ? 'ถูก ' + ecoPc(r.c.lab) + '%' : r.c.lab <= -0.005 ? 'แพง ' + ecoPc(-r.c.lab) + '%' : 'กลาง'}</span></div>`).join('') + `</div>`
     + `<p class="note">ผู้อยู่อาศัยดั้งเดิมคือคนของเมืองที่ยังอยู่ คนย้ายออกจากเมืองที่ความเป็นอยู่และรายได้ต่ำกว่าค่าเฉลี่ยของรัฐไปเมืองที่ดีกว่า ร้อยละ ${ecoPc(TU('migWorld'))} ไปนอกรัฐ นักท่องเที่ยวไม่นับเป็นประชากร แต่ละคนใช้เงินราว ${ecoNumF(SOC.spend)} ${coin} ในเมืองที่ไป แรงดึงดูดนักท่องเที่ยวมาจากสี่อย่าง: สิ่งดึงดูดรอบเมืองในสามช่อง ความเป็นชุมทางการค้า ความมั่งคั่งกับความเป็นอยู่ และองค์กรในเมือง คูณด้วยเสน่ห์ของเมืองที่สุ่มไว้ ค่าแรงถูกหมายถึงโรงงานผลิตได้มากขึ้นและคาราวานรอบเมืองถูกลง ระเบียบงาน สัดส่วนคนดั้งเดิม และเสน่ห์ของเมือง ตั้งได้ในการ์ดของเมืองในโหมดการค้า</p>`);
@@ -6852,7 +6856,7 @@ function clsVerdictHTML(G, rows, b) {
   const ppl = rows.reduce((a, r) => a + r.people, 0) || 1, rich = rows.reduce((a, r) => a + (r.c.rich0 == null ? TU('richRef') : r.c.rich0) * r.people, 0) / ppl;
   L.push(`ชนชั้นสูงและกลางมีรายได้รวมร้อยละ ${ecoPc(rich)} ความต้องการของฟุ่มเฟือย (ของหายาก โลหะมีค่า ตำรา เครื่องกล สมุนไพร) จึงเป็น <b>×${clamp(rich / TU('richRef'), 0.2, 2.5).toFixed(2)}</b> ของค่ากลาง`);
   const c0 = rows[0] && rows[0].c, miss = b && c0 && c0.dom ? ERAW.filter(cat => ECAT[cat] && !SOC_BASIC.has(cat) && !SOC_LUX.has(cat) && rows.some(r => ENEED[cat] && ENEED[cat][r.c.ki] > 0) && !c0.dom.has(cat)) : [];
-  if (miss.length) L.push(`${b ? 'รัฐนี้' : 'เมืองเหล่านี้'}ไม่มี${miss.map(c => esc(ECAT[c].name)).join(' ')}เอง คนที่ไม่มั่งคั่งจึงไม่ซื้อ ความต้องการเหลือราวร้อยละ ${ecoPc(rich)}`);
+  if (miss.length) L.push(`${b ? 'รัฐนี้ไม่มี' : 'เมืองเหล่านี้ไม่มี'}${miss.map(c => esc(ECAT[c].name)).join(' · ')}เอง คนที่ไม่มั่งคั่งจึงไม่ซื้อ ความต้องการเหลือราวร้อยละ ${ecoPc(rich)}`);
   if (b) L.push(`ของพื้นฐานจากนอกรัฐต้องถูกกว่าของในรัฐราวร้อยละ ${ecoPc(TU('homePref') * (1 - rich))} คนจึงยอมซื้อ`);
   if (o.slave && o.slave.n >= 1) L.push(`ทาส ${ecoNumF(Math.round(o.slave.n))} คน อยู่ดี <b>${Math.round(o.slave.well)}</b> ${o.mid && o.slave.well > o.mid.well ? '<b>ดีกว่าชนชั้นกลาง</b> (' + Math.round(o.mid.well) + ') เพราะเงินกระจุกอยู่กับชนชั้นสูงที่ถือทาส' : 'ต่ำกว่าชนชั้นกลาง (' + (o.mid ? Math.round(o.mid.well) : 0) + ') ยิ่งเงินไปกระจุกกับชนชั้นสูง ทาสยิ่งอยู่ดี'}`);
   if (o.poor) L.push(`ล่างสุด ร้อยละ ${ecoPc(o.poor.p)} ของคน อยู่ดี ${Math.round(o.poor.well)} อยู่ได้ด้วยทาน${o.low ? ` ชนชั้นล่างอยู่ดี ${Math.round(o.low.well)}` : ''}`);
@@ -6902,7 +6906,7 @@ function reachDraw() {
 }
 { const under = drawUnderNames; drawUnderNames = function () { if (under) under(); reachDraw(); }; }
 { const t = tradeCityHTML; tradeCityHTML = function (k) { const h = t(k); if (!ECON || !ECON.hin) return h; const P = reachOf(k), c = ECON.cities[k], line = `<div class="tr">เก็บเกี่ยวรอบเมือง <b>${P.ni}</b> ช่อง${P.nw ? ` และจับปลาในน้ำ <b>${P.nw}</b> ช่อง` : ''} ไกลสุด ${c.reach} ช่อง <span class="w">และอีก ${P.no} ช่องที่ส่งคนไปหาของบางอย่าง เช่น ไม้ แร่ และของป่า (กรอบทองทึบกับกรอบประบนแผนที่)</span></div>`, at = h.indexOf('<h3>ประชากรและความเป็นอยู่</h3>'); return at >= 0 ? h.slice(0, at) + line + h.slice(at) : h + line; }; }
-{ const cf = ecoCityForm; ecoCityForm = function () { cf(); if (!sel || !ECON || !ECON.hin || !$('cfHint')) return; const k = ECON.cities.findIndex(c => c.id === sel); if (k < 0) return; const P = reachOf(k), tx = `เก็บเกี่ยวรอบเมือง ${P.ni} ช่อง${P.nw ? ' จับปลา ' + P.nw + ' ช่อง' : ''} ไกลสุด ${ECON.cities[k].reach} ช่อง (กรอบทองบนแผนที่)`, cur = $('cfHint').textContent.split(' · ').filter(x => !x.startsWith('เก็บเกี่ยวรอบเมือง')); $('cfHint').textContent = [...cur, tx].join(' · '); requestDraw(); }; }
+{ const cf = ecoCityForm; ecoCityForm = function () { cf(); if (!sel || !ECON || !ECON.hin || !$('cfHint')) return; const k = ECON.cities.findIndex(c => c.id === sel); if (k < 0) return; const P = reachOf(k), tx = `เก็บเกี่ยวรอบเมือง ${P.ni} ช่อง${P.nw ? ' จับปลา ' + P.nw + ' ช่อง' : ''} ไกลสุด ${ECON.cities[k].reach} ช่อง (กรอบทองบนแผนที่)`, cur = $('cfHint').textContent.split(' · ').filter(x => !/^(เก็บเกี่ยวรอบเมือง|Harvests around the city)/.test(x)); $('cfHint').textContent = [...cur, tx].join(' · '); requestDraw(); }; }
 
 // ---------- one card for each state, one card for each city (v0.14.0, the owner: easy, friendly, not scattered) ----------
 // Everything about a state is set in one card in the states tab, in sections in the order a person thinks of them: what it is
@@ -6976,7 +6980,7 @@ function socFold(html, tag, keys, first) {
     const n = kids[i];
     if (n.nodeType === 1 && (n.tagName === tag || (tag === 'H3' && n.tagName === 'H4')) && keys[n.textContent.trim()]) { if (cur) groups.push(cur); cur = { key: keys[n.textContent.trim()][0], def: keys[n.textContent.trim()][1], title: n.innerHTML, nodes: [] }; continue; }
     if (n.nodeType === 1 && n.tagName === 'DETAILS' && n.classList.contains('tfold')) { if (cur) groups.push(cur); groups.push({ raw: n }); cur = null; continue; }
-    if (n.nodeType === 1 && n.matches('.tr') && /^เก็บเกี่ยวรอบเมือง/.test(n.textContent.trim())) { head.appendChild(n); continue; }
+    if (n.nodeType === 1 && n.matches('.tr') && /^(เก็บเกี่ยวรอบเมือง|Harvests around the city)/.test(n.textContent.trim())) { head.appendChild(n); continue; }
     if (!cur) { if (!groups.length) { head.appendChild(n); continue; } cur = { key: 'more', title: 'อื่น ๆ', nodes: [] }; }
     cur.nodes.push(n);
   }
@@ -7638,7 +7642,7 @@ function trvGdpHTML() {
     + `<div class="etable g5"><div class="eth"><span>เมือง</span><span>มาเยือน</span><span>แสวงบุญ</span><span>ธุรกิจ</span><span>ใช้เงินในเมือง</span></div>`
     + list.map(r => `<div class="etr"><span>${r.s ? `<i class="sdot" style="background:${r.s.color}"></i>` : ''}${esc(r.c.name)}${r.holy && r.holy.h > 0 ? ' <em>ที่ศักดิ์สิทธิ์</em>' : ''}</span><span>${socN(sumO(r.trv.inn))}</span><span>${socN(r.trv.inn.pilg)}</span><span>${socN(r.trv.inn.biz)}</span><span>${socN(r.trv.spendIn)}</span></div>`).join('') + `</div>`
     + (holy.length ? `<div class="tr">ที่ศักดิ์สิทธิ์ <span class="w">${holy.map(([r, x]) => `${esc(r.c.name)} ${x.h.toFixed(1)}`).join(' · ')}</span></div>` : `<div class="tr w">แผนที่นี้ยังไม่มีที่ศักดิ์สิทธิ์ จึงยังไม่มีผู้แสวงบุญ ตั้งเมืองศักดิ์สิทธิ์ได้ในการ์ดของเมือง</div>`)
-    + `<p class="note">ผู้เดินทางทุกคนไปทางที่ถูกที่สุดของเครือข่าย ทางรถไฟและถนนจึงดึงคนเหมือนดึงคาราวาน การเดินทางส่วนตัวส่วนใหญ่อยู่ในรัฐ ผู้แสวงบุญยอมไปไกล นักธุรกิจตามมูลค่าการค้าระหว่างสองเมือง เงินที่ผู้เดินทางส่วนตัว ผู้แสวงบุญ และนักธุรกิจใช้นับเป็นรายได้ของเมืองที่ไป ข้ามเขตรัฐนับในดุลของรัฐด้วย (ราว ${ecoNumF(TRV.sp.per)} ${ecoNumF(TRV.sp.pilg)} และ ${ecoNumF(TRV.sp.biz)} ${coin} ต่อคน) ตัวเลขทั้งหมดอยู่ในแท็บตัวเลข หมวดการเดินทางของผู้คน</p></details>`;
+    + `<p class="note">ผู้เดินทางทุกคนไปทางที่ถูกที่สุดของเครือข่าย ทางรถไฟและถนนจึงดึงคนเหมือนดึงคาราวาน การเดินทางส่วนตัวส่วนใหญ่อยู่ในรัฐ ผู้แสวงบุญยอมไปไกล นักธุรกิจตามมูลค่าการค้าระหว่างสองเมือง เงินที่ผู้เดินทางส่วนตัว ผู้แสวงบุญ และนักธุรกิจใช้นับเป็นรายได้ของเมืองที่ไป ข้ามเขตรัฐนับในดุลของรัฐด้วย (ราว ${ecoNumF(TRV.sp.per)}, ${ecoNumF(TRV.sp.pilg)} และ ${ecoNumF(TRV.sp.biz)} ${coin} ต่อคน) ตัวเลขทั้งหมดอยู่ในแท็บตัวเลข หมวดการเดินทางของผู้คน</p></details>`;
 }
 { const g = ecoGdpHTML; ecoGdpHTML = function () { return g() + trvGdpHTML(); }; }
 // on the map: a dotted line beside the trade, as wide as the people on it
@@ -8029,7 +8033,7 @@ function taxStateForm(s) {
     + `<div class="tr w">ภาษีรายหัวคิดจากรายได้เฉลี่ยต่อหัวของรัฐ เท่ากันทุกคน ภาษีที่ดินคิดจากผลผลิตของที่ดินและเหมือง ภาษีนิติบุคคลคิดจากผลผลิตของโรงงาน ภาษีมูลค่าเพิ่มคิดจากการใช้จ่าย ค่าใบอนุญาตตลาดคิดจากของที่ตลาดขายออกนอกรัฐ ภาษีนำเข้าเก็บที่ด่านตามกฎข้างล่าง</div>`
     + `<div class="tr"><b>งบประมาณส่วนกลาง</b> <span class="w">ส่วนของภาษีส่วนกลางที่ถึงคลังกลาง ที่เหลือเก็บเข้าคลัง</span></div><div class="ftax">${Object.entries(FBUD).map(([k, n]) => `<label>${n} ${inp('b.' + k, F.bud[k], d.bud[k], 100)} %${S ? ` <small>${socN(S.bud[k])}</small>` : ''}</label>`).join('')}</div>`
     + `<div class="tr"><b>ภาษีท้องถิ่น</b> <span class="w">แต่ละระดับเก็บจากคนในเขตของตัวเอง แล้วใช้จ่ายในเขตเอง ไม่ส่งขึ้นส่วนกลาง ตั้งอัตราเฉพาะหน่วยได้ในแท็บการปกครอง</span></div><div class="ftax">${[0, 1, 2].map(t => `<label>${esc(admNames(s)[t])} ${inp('l.' + t, F.loc[t], d.loc[t], 50)} % ของ <select data-fz="lb.${t}"${dis}>${Object.entries(LBASE).map(([k, n]) => `<option value="${k}"${F.lbase[t] === k ? ' selected' : ''}>${n}</option>`).join('')}</select></label>`).join('')}</div>`
-    + `<div class="tr w">หน่วยแบบ${esc(admNames(s).princ)}เก็บภาษีท้องถิ่นสูงขึ้นครึ่งหนึ่งและส่วนกลางเก็บภาษีในเขตได้ครึ่งเดียว ${esc(admNames(s).march)}ส่วนกลางเก็บได้ 90%</div>`
+    + `<div class="tr w">หน่วยแบบ${esc(admNames(s).princ)}เก็บภาษีท้องถิ่นสูงขึ้นครึ่งหนึ่งและส่วนกลางเก็บภาษีในเขตได้ครึ่งเดียว ${esc(admNames(s).march)}: ส่วนกลางเก็บได้ 90%</div>`
     + `<div class="tr"><b>งบของหน่วยการปกครอง</b> <span class="w">ส่วนของภาษีท้องถิ่นที่หน่วยใช้ ที่เหลือเข้าคลังของหน่วย</span></div><div class="ftax">${Object.entries(FBUD).map(([k, n]) => `<label>${n} ${inp('lb2.' + k, F.lbud[k], d.lbud[k], 100)} %</label>`).join('')}<label>คอร์รัปชัน ${inp('corr', F.corr, d.corr, 60)} %</label></div>`;
   if (S) {
     const lk = S.total + S.local > 0 ? S.leak / (S.total + S.local) : 0, st = (() => { let a = 0, n = 0; for (const [id, U] of FISC.unit) { const u = admById(id); if (u && u.t === 0 && U.ppl) { a += U.stab * U.ppl; n += U.ppl; } } return n ? a / n : null; })();
@@ -9077,7 +9081,7 @@ function belNewId(k) { let id; do { id = k[0] + Math.random().toString(36).slice
 function belHTML(k) {
   const L = belList(k), a = belCells(k), T = belTraits(k), dis = editable ? '' : ' disabled', n = {}; for (const id of a) if (id) n[id] = (n[id] || 0) + 1;
   const cs = ECON ? ECON.cities : [], cn = {}; for (const c of cs) { const b = belCity(c.id)[k]; if (b) cn[b.id] = (cn[b.id] || 0) + 1; }
-  let h = `<div class="btns" style="margin:0 0 6px"><button type="button" class="btn" data-bl="new"${dis}>เพิ่ม${belName[k]}</button><button type="button" class="btn" data-bl="states"${dis}>สร้างหนึ่ง${belName[k]}ต่อรัฐ</button><button type="button" class="btn" data-bl="spread"${dis}>กระจายจากชุมชนใหญ่</button><label>จำนวน <select id="belSeeds"${dis}>${[2, 3, 4, 6, 8, 12].map(x => `<option${x === (k === 'cul' ? 6 : 3) ? ' selected' : ''}>${x}</option>`).join('')}</select></label></div>`
+  let h = `<div class="btns" style="margin:0 0 6px"><button type="button" class="btn" data-bl="new"${dis}>${window.MME_LANG === 'en' ? 'Add ' + belName[k].toLowerCase() : 'เพิ่ม' + belName[k]}</button><button type="button" class="btn" data-bl="states"${dis}>${window.MME_LANG === 'en' ? 'One ' + belName[k].toLowerCase() + ' per state' : 'สร้างหนึ่ง' + belName[k] + 'ต่อรัฐ'}</button><button type="button" class="btn" data-bl="spread"${dis}>กระจายจากชุมชนใหญ่</button><label>จำนวน <select id="belSeeds"${dis}>${[2, 3, 4, 6, 8, 12].map(x => `<option${x === (k === 'cul' ? 6 : 3) ? ' selected' : ''}>${x}</option>`).join('')}</select></label></div>`
     + `<div class="erow"><span class="lbl">แปรง</span><div class="seg" id="belBrush">${[[1, '1 ช่อง'], [2, '7 ช่อง'], [3, '19 ช่อง'], [4, '37 ช่อง']].map(([v, t]) => `<button type="button" data-n="${v}" aria-pressed="${BEL.n === v}">${t}</button>`).join('')}</div><label><input type="checkbox" id="belErase"${BEL.erase ? ' checked' : ''}${dis}> ลบออก</label></div>`;
   for (const o of L) {
     const on = BEL.pick === o.id && ecoTab === k, R = k === 'rel' ? BEL.tithe && BEL.tithe[o.id] : null;
@@ -9096,7 +9100,7 @@ function belHTML(k) {
     h += `<div class="btns"><button type="button" class="btn warn" data-bl="del"${dis}>ลบ${belName[k]}นี้</button></div></div></details>`;
   }
   if (!L.length) h += `<p class="note">ยังไม่มี${belName[k]} กดเพิ่ม หรือให้สร้างจากรัฐหรือกระจายจากชุมชนใหญ่</p>`;
-  return h + `<p class="note">${k === 'cul' ? 'วัฒนธรรมที่ต่างกันทำให้ค่าขนระหว่างสองชุมชนแพงขึ้นร้อยละ ' + ecoPc(TU('culFar')) : 'ศาสนาที่ต่างกันทำให้ค่าขนระหว่างสองชุมชนแพงขึ้นร้อยละ ' + ecoPc(TU('relFar')) + ' ผู้แสวงบุญไปศาสนสถานของศาสนาอื่นน้อยลงเหลือร้อยละ ' + ecoPc(TU('relPilgOther'))} ตัวเลขเหล่านี้แก้ได้ในแท็บตัวเลข</p>`;
+  return h + `<p class="note">${k === 'cul' ? `วัฒนธรรมที่ต่างกันทำให้ค่าขนระหว่างสองชุมชนแพงขึ้นร้อยละ ${ecoPc(TU('culFar'))}` : `ศาสนาที่ต่างกันทำให้ค่าขนระหว่างสองชุมชนแพงขึ้นร้อยละ ${ecoPc(TU('relFar'))} ผู้แสวงบุญไปศาสนสถานของศาสนาอื่นน้อยลงเหลือร้อยละ ${ecoPc(TU('relPilgOther'))}`} ตัวเลขเหล่านี้แก้ได้ในแท็บตัวเลข</p>`;
 }
 $('ecobody').addEventListener('click', e => {
   if (ecoTab !== 'cul' && ecoTab !== 'rel') return; const k = ecoTab;
@@ -9379,7 +9383,7 @@ function admTitlesHTML(s, X) {
 function admHTML() {
   const X = admIndex(), dis = editable ? '' : ' disabled', lv = ADM.lv, NC = admNames(admCtx());
   let h = `<div class="erow"><span class="lbl">คลิกเลือกระดับ</span><div class="seg" id="admLv">${[0, 1, 2, 3].map(t => `<button type="button" data-lv="${t}" aria-pressed="${t === lv}">${esc(NC[t])}</button>`).join('')}</div></div>`
-    + (editable && ECO.states.length ? `<div class="btns" style="margin:4px 0 8px">${[0, 1, 2].map(t => `<button type="button" class="btn" data-aa="new" data-t="${t}">ตั้ง${esc(NC[t])}ใหม่</button>`).join('')}</div>` : '');
+    + (editable && ECO.states.length ? `<div class="btns" style="margin:4px 0 8px">${[0, 1, 2].map(t => `<button type="button" class="btn" data-aa="new" data-t="${t}">${window.MME_LANG === 'en' ? 'New ' + esc(NC[t]).toLowerCase() : 'ตั้ง' + esc(NC[t]) + 'ใหม่'}</button>`).join('')}</div>` : '');
   // the chosen unit
   if (ADM.sel && ADM.sel.startsWith('S:')) { const s = ECO.states.find(x => x.id === ADM.sel.slice(2)); if (s) h += `<div class="scard" style="padding:8px"><b>${esc(admNames(s)[3])} ${esc(s.name)}</b><div class="tr w">กด Shift ค้างแล้วคลิกบนแผนที่เพื่อผนวกหน่วยที่ใหญ่ที่สุดใต้ช่องนั้นพร้อมดินแดน</div><button type="button" class="btn" data-sopen="${s.id}">การ์ดของรัฐ</button>${admTitlesHTML(s, X)}</div>`; }
   const u = ADM.sel && !ADM.sel.startsWith('S:') ? admById(ADM.sel) : null;
@@ -9865,7 +9869,7 @@ function coinStateForm(s) {
     const users = ECO.states.filter(x => x !== s && coinIssuer(x) === s), Y = COINY.get(s.id);
     h += `<div class="tr w">${users.length ? 'รัฐที่ใช้เงินนี้ด้วย: ' + users.map(x => esc(x.name)).join(' · ') + ' ค้ากันไม่ต้องแลกเงิน ' : 'ยังไม่มีรัฐอื่นใช้เงินนี้ '}${Y ? `· ปีนี้ได้จากการผลิตเงิน ${socN(Y.got)} ${cen}${users.length ? ` (จากรัฐอื่น ${socN([...Y.from].filter(([id]) => id !== s.id).reduce((a, [, v]) => a + v, 0))})` : ''}` : ''}</div>`;
   } else if (I) {
-    h += `<div class="tr w">ใช้${esc(coinName(s))}ที่${esc(I.name)}ออก (${esc(COINF[form].name)}) 1 หน่วย = ${I.rate} ${cen} ค่าเงินขึ้นลงพร้อมกับ${esc(I.name)} ค้ากับรัฐที่ใช้เงินเดียวกันไม่ต้องแลกเงิน และจ่ายค่าผลิตเงินร้อยละ ${ecoPc(COINF[form].seig)} ของ GDP ต่อปีให้คลังของ${esc(I.name)}</div>`;
+    h += `<div class="tr w">ใช้${esc(coinName(s))}ที่ออกโดย${esc(I.name)} (${esc(COINF[form].name)}) 1 หน่วย = ${I.rate} ${cen} ค่าเงินขึ้นลงพร้อมกับ${esc(I.name)} ค้ากับรัฐที่ใช้เงินเดียวกันไม่ต้องแลกเงิน และจ่ายค่าผลิตเงินร้อยละ ${ecoPc(COINF[form].seig)} ของ GDP ต่อปีให้คลังของ${esc(I.name)}</div>`;
   } else h += `<div class="tr w">${cen} เป็นหน่วยวัดมูลค่ากลาง ไม่มีรัฐใดออก ค่าไม่ขึ้นลงตามดุลการค้า ค้ากับรัฐที่ใช้เงินของตัวเองต้องแลกเงิน</div>`;
   if (b && Math.abs(b.fx) >= 0.001) h += `<div class="tr w">ปีนี้ค่าเงิน${b.fx > 0 ? 'แข็งขึ้น' : 'อ่อนลง'}ร้อยละ ${ecoPc(Math.abs(b.fx))} ตามดุลการค้า${use !== 'own' && I ? 'ของทุกรัฐที่ใช้เงินนี้รวมกัน' : ''}</div>`;
   return h;
@@ -9905,10 +9909,11 @@ const MK = { stamp: -1, regions: [], at: null };
 // v0.19.0: a price for one piece too. A portion (a person's year of a good) holds this many pieces of the good's usual unit; the
 // counts are Claude's reading of what one person uses in a year (grain about 200 kg, a weapon kept a year, a ship shared by many),
 // and each can be changed in the market window.
-const MKUNIT0 = { grain: ['กก.', 200], protein: ['กก.', 60], salt: ['กก.', 6], herbs: ['กก.', 3], timber: ['ท่อน', 5], fuel: ['มัด', 100], stone: ['ก้อน', 20], ore: ['กก.', 50], cloth: ['ผืน', 4], mana: ['ก้อน', 2], rare: ['บาท (น้ำหนัก)', 20], luxury: ['ชิ้น', 5], tools: ['ชิ้น', 2], arms: ['ชิ้น', 1], tech: ['ชิ้น', 1], ships: ['ลำ', 0.01], books: ['เล่ม', 3] , livestock: ['ตัว', 0.5], drink: ['ไห', 2], furniture: ['ชิ้น', 1], build: ['ก้อน', 100], fert: ['กระสอบ', 4], feed: ['กระสอบ', 4], textile: ['ผืน', 3], pottery: ['ใบ', 10], food: ['ไห', 2], medicine: ['ขวด', 5], jewelry: ['ชิ้น', 0.2] };
+const MKBOLT = window.MME_LANG === 'en' ? 'bolt' : 'ผืน';   // v0.22.0: ผืน also counts maps, which takes the English word first
+const MKUNIT0 = { grain: ['กก.', 200], protein: ['กก.', 60], salt: ['กก.', 6], herbs: ['กก.', 3], timber: ['ท่อน', 5], fuel: ['มัด', 100], stone: ['ก้อน', 20], ore: ['กก.', 50], cloth: [MKBOLT, 4], mana: ['ก้อน', 2], rare: ['บาท (น้ำหนัก)', 20], luxury: ['ชิ้น', 5], tools: ['ชิ้น', 2], arms: ['ชิ้น', 1], tech: ['ชิ้น', 1], ships: ['ลำ', 0.01], books: ['เล่ม', 3] , livestock: ['ตัว', 0.5], drink: ['ไห', 2], furniture: ['ชิ้น', 1], build: ['ก้อน', 100], fert: ['กระสอบ', 4], feed: ['กระสอบ', 4], textile: [MKBOLT, 3], pottery: ['ใบ', 10], food: ['ไห', 2], medicine: ['ขวด', 5], jewelry: ['ชิ้น', 0.2] };
 ECO.munit = {};
 const mkUnit = cat => { const o = ECO.munit[cat], d = MKUNIT0[cat] || ['ชิ้น', 1]; return [o && o[0] || d[0], o && o[1] > 0 ? o[1] : d[1]]; };
-const mkPiece = x => x >= 100 ? Math.round(x).toLocaleString('th-TH') : x >= 1 ? x.toFixed(2) : x >= 0.01 ? x.toFixed(3) : x.toPrecision(2);
+const mkPiece = x => x >= 100 ? Math.round(x).toLocaleString(window.MME_LANG === 'en' ? 'en-GB' : 'th-TH') : x >= 1 ? x.toFixed(2) : x >= 0.01 ? x.toFixed(3) : x.toPrecision(2);
 {
   const ld = ecoLoad, sr = ecoSerial;
   ecoLoad = function (b) { ld(b); b = b || {}; ECO.munit = {}; for (const [c, v] of Object.entries(b.munit || {})) if (ECAT[c] && Array.isArray(v) && typeof v[0] === 'string' && +v[1] > 0) ECO.munit[c] = [v[0].slice(0, 20), Math.min(1e6, +v[1])]; };
@@ -9967,7 +9972,7 @@ function mkClose() { mkEl.hidden = true; }
 $('mkClose').onclick = mkClose; mkEl.addEventListener('pointerdown', e => { if (e.target === mkEl) mkClose(); e.stopPropagation(); });
 for (const ev of ['wheel', 'click', 'keydown']) mkEl.addEventListener(ev, e => { if (ev === 'keydown' && e.key === 'Escape') mkClose(); e.stopPropagation(); });
 // shown in portions: a load is what a thousand people use in a year, so a portion is one person's year of that good
-const MKP = 1000, mkN = x => { x *= MKP; return x >= 100 ? Math.round(x).toLocaleString('th-TH') : x >= 10 ? x.toFixed(1) : x.toFixed(2); }, mkPr = x => { x /= MKP; return x >= 100 ? Math.round(x).toLocaleString('th-TH') : x >= 10 ? x.toFixed(1) : x.toFixed(2); };
+const MKP = 1000, mkN = x => { x *= MKP; return x >= 100 ? Math.round(x).toLocaleString(window.MME_LANG === 'en' ? 'en-GB' : 'th-TH') : x >= 10 ? x.toFixed(1) : x.toFixed(2); }, mkPr = x => { x /= MKP; return x >= 100 ? Math.round(x).toLocaleString(window.MME_LANG === 'en' ? 'en-GB' : 'th-TH') : x >= 10 ? x.toFixed(1) : x.toFixed(2); };
 function mkSeasonIdx(M) { if (MKV.s >= 0) return MKV.s; const id = typeof clSeas !== 'undefined' ? clSeas : ''; const i = M.seas.findIndex(s => s.id && s.id === id); return i >= 0 ? i : 0; }
 function mkSpark(vals, w, h, col) {
   const lo = Math.min(...vals), hi = Math.max(...vals), sp = hi - lo || 1, n = vals.length;
@@ -9995,7 +10000,7 @@ function mkRender() {
     h += `<button type="button" class="mkrow${on ? ' on' : ''}" data-cat="${cat}"><span><i class="sdot" style="background:${ECAT[cat].col}"></i>${esc(ECAT[cat].name)}</span><span class="r">${mkN(r.sup + r.imp)}</span><span class="r">${mkN(r.dem + r.exp)}</span><span class="r">${mkN(r.stock0)}</span><span class="r">${mkPr(r.price)} <small class="${d > 0.02 ? 'up' : d < -0.02 ? 'dn' : ''}">${d > 0.02 ? '▲' : d < -0.02 ? '▼' : '·'}${Math.abs(Math.round(d * 100))}%</small></span><span class="r">${(() => { const [u, n] = mkUnit(cat); return mkPiece(r.price / MKP / n) + ' <small>/' + esc(u) + '</small>'; })()}</span><span class="w">${C.sellers.slice(0, 3).map(x => esc(x.name || 'ไม่มีชื่อ')).join(' · ')}</span></button>`;
     if (on) {
       h += `<div class="mkdet"><div class="mkplot"><div><b>ราคา</b> ${mkSpark(C.rows.map(x => x.price), 220, 54, 'var(--brass)')}</div><div><b>สต็อก</b> ${mkSpark(C.rows.map(x => x.stock0), 220, 54, '#7fb6ff')}</div></div>`
-        + `<div class="tr w">ราคาเฉลี่ยทั้งปี ${mkPr(C.P)} ${coin} ต่อส่วน (เฉลี่ยจากราคาในทุกชุมชน ถ่วงด้วยปริมาณที่แต่ละชุมชนซื้อ ถูกสุด ${mkPr(C.lo)} แพงสุด ${mkPr(C.hi)}) · ทั้งปีผลิต ${mkN(C.sup)} ใช้ ${mkN(C.dem)}${C.imp ? ` · ซื้อเข้าจากตลาดอื่น ${mkN(C.imp)}` : ''}${C.exp ? ` · ขายออก ${mkN(C.exp)}` : ''}</div>`
+        + `<div class="tr w">ราคาเฉลี่ยทั้งปี ${mkPr(C.P)} ${coin} ต่อส่วน (เฉลี่ยจากราคาในทุกชุมชน ถ่วงด้วยปริมาณที่แต่ละชุมชนซื้อ ถูกสุด ${mkPr(C.lo)} แพงสุด ${mkPr(C.hi)}) · ทั้งปีผลิต ${mkN(C.sup)} บริโภค ${mkN(C.dem)}${C.imp ? ` · ซื้อเข้าจากตลาดอื่น ${mkN(C.imp)}` : ''}${C.exp ? ` · ขายออก ${mkN(C.exp)}` : ''}</div>`
         + (() => { const [u, n] = mkUnit(cat); return `<div class="erow"><span class="lbl">หนึ่งส่วนเท่ากับ</span><input type="number" data-mu="n" data-cat="${cat}" min="0.0001" step="any" value="${n}" style="width:6em"${editable ? '' : ' disabled'}><input type="text" data-mu="u" data-cat="${cat}" maxlength="20" value="${esc(u)}" style="width:7em"${editable ? '' : ' disabled'}><span class="w">ราคาต่อ${esc(u)} ${mkPiece(C.P / MKP / n)} ${coin} เฉลี่ยทั้งปี</span></div>`; })()
         + `<div class="tr"><b>ชุมชนที่ขาย</b> <span class="w">${C.sellers.map(x => `<a href="#" data-mkc="${esc(x.id)}">${esc(x.name || 'ไม่มีชื่อ')}</a> ${mkN(x.q)}`).join(' · ') || 'ไม่มี'}</span></div></div>`;
     }
@@ -10123,7 +10128,7 @@ pressPow = (s, b) => { const a = ARMY.st.get(s.id), any = ARMY.st.size > 1; retu
       + `<div class="ftax"><label>ทหารต่อประชากร <input type="number" data-am="mob" min="0" max="30" step="0.1" value="${pc1(A.mob)}" style="width:4.6em"${dis}> %</label><label>คนต่อกรม <input type="number" data-am="reg" min="50" max="100000" step="50" value="${A.reg}" style="width:6em"${dis}></label></div>`
       + `<div class="ftax">${Object.entries(UT).map(([k, u]) => `<label>${esc(u.name)} <input type="number" data-am="mix.${k}" min="0" max="100" step="5" value="${Math.round((A.mix[k] || 0) * 100)}" style="width:4.2em"${dis}> ส่วน</label>`).join('')}</div>`;
     if (R) {
-      h += `<div class="tr">ทหาร <b>${socN(R.men)}</b> คน <span class="w">${R.can < R.want ? `งบกลาโหมจ่ายได้ ${socN(R.can)} จากที่ต้องการ ${socN(R.want)} · ` : ''}กำลังรบ ${Math.round(R.pow)} · ค่าใช้จ่ายต่อคนต่อปี ${socN(R.perMan)} ${esc(ECO.central.name)} · ประจำการที่ ${R.seats.map(id => esc((visibleCities().find(c => c.id === id) || {}).name || '')).join(' ')}</span></div>`
+      h += `<div class="tr">ทหาร <b>${socN(R.men)}</b> นาย · <span class="w">${R.can < R.want ? `งบกลาโหมจ่ายได้ ${socN(R.can)} จากที่ต้องการ ${socN(R.want)} · ` : ''}กำลังรบ ${Math.round(R.pow)} · ค่าใช้จ่ายต่อคนต่อปี ${socN(R.perMan)} ${esc(ECO.central.name)} · ประจำการที่ ${R.seats.map(id => esc((visibleCities().find(c => c.id === id) || {}).name || '')).join(' ')}</span></div>`
         + Object.entries(R.units).filter(([, u]) => u.men >= 1).map(([k, u]) => `<div class="tr w">${esc(UT[k] ? UT[k].name : k)}: ${u.regs} กรม ${socN(u.men)} คน กำลังรบ ${Math.round(u.pow)}</div>`).join('')
         + `<div class="tr w">ความพร้อมของอุปกรณ์: ${Object.entries(R.ready).map(([c, r]) => `${esc(ECAT[c].name)} ${Math.round(r * 100)}%`).join(' · ')}</div>`;
     }
@@ -10165,7 +10170,7 @@ function armyHTML() {
     + `<div class="btns"><button type="button" class="btn warn" data-aa2="edel"${dis}>${AEQ0[e] ? 'ซ่อนอุปกรณ์นี้' : 'ลบอุปกรณ์นี้'}</button></div></div></details>`;
   h += `<div class="btns"><button type="button" class="btn" data-aa2="enew"${dis}>เพิ่มอุปกรณ์</button><button type="button" class="btn" data-aa2="reset"${dis}>คืนค่าตั้งต้นทั้งหมด</button></div>`;
   const rows = [...ARMY.st.values()].sort((a, b) => b.pow - a.pow);
-  if (rows.length) h += `<h4>กำลังของแต่ละรัฐ</h4>` + rows.map(R => `<div class="tr"><a href="#" data-sopen="${R.s.id}">${esc(R.s.name)}</a> <span class="w">ทหาร ${socN(R.men)} คน · กำลังรบ ${Math.round(R.pow)}</span></div>`).join('') + `<p class="note">รัฐที่กำลังรบมากกว่ากดราคาสินค้าของรัฐเพื่อนบ้านที่ไม่ใช่พันธมิตรได้ เดิมระบบใช้ขนาดเศรษฐกิจของรัฐ</p>`;
+  if (rows.length) h += `<h4>กำลังของแต่ละรัฐ</h4>` + rows.map(R => `<div class="tr"><a href="#" data-sopen="${R.s.id}">${esc(R.s.name)}</a> <span class="w">ทหาร ${socN(R.men)} นาย · กำลังรบ ${Math.round(R.pow)}</span></div>`).join('') + `<p class="note">รัฐที่กำลังรบมากกว่ากดราคาสินค้าของรัฐเพื่อนบ้านที่ไม่ใช่พันธมิตรได้ เดิมระบบใช้ขนาดเศรษฐกิจของรัฐ</p>`;
   return h;
 }
 $('ecobody').addEventListener('change', e => {

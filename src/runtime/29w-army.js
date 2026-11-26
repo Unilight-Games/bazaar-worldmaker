@@ -104,7 +104,7 @@ pressPow = (s, b) => { const a = ARMY.st.get(s.id), any = ARMY.st.size > 1; retu
       + `<div class="ftax"><label>ทหารต่อประชากร <input type="number" data-am="mob" min="0" max="30" step="0.1" value="${pc1(A.mob)}" style="width:4.6em"${dis}> %</label><label>คนต่อกรม <input type="number" data-am="reg" min="50" max="100000" step="50" value="${A.reg}" style="width:6em"${dis}></label></div>`
       + `<div class="ftax">${Object.entries(UT).map(([k, u]) => `<label>${esc(u.name)} <input type="number" data-am="mix.${k}" min="0" max="100" step="5" value="${Math.round((A.mix[k] || 0) * 100)}" style="width:4.2em"${dis}> ส่วน</label>`).join('')}</div>`;
     if (R) {
-      h += `<div class="tr">ทหาร <b>${socN(R.men)}</b> คน <span class="w">${R.can < R.want ? `งบกลาโหมจ่ายได้ ${socN(R.can)} จากที่ต้องการ ${socN(R.want)} · ` : ''}กำลังรบ ${Math.round(R.pow)} · ค่าใช้จ่ายต่อคนต่อปี ${socN(R.perMan)} ${esc(ECO.central.name)} · ประจำการที่ ${R.seats.map(id => esc((visibleCities().find(c => c.id === id) || {}).name || '')).join(' ')}</span></div>`
+      h += `<div class="tr">ทหาร <b>${socN(R.men)}</b> นาย · <span class="w">${R.can < R.want ? `งบกลาโหมจ่ายได้ ${socN(R.can)} จากที่ต้องการ ${socN(R.want)} · ` : ''}กำลังรบ ${Math.round(R.pow)} · ค่าใช้จ่ายต่อคนต่อปี ${socN(R.perMan)} ${esc(ECO.central.name)} · ประจำการที่ ${R.seats.map(id => esc((visibleCities().find(c => c.id === id) || {}).name || '')).join(' ')}</span></div>`
         + Object.entries(R.units).filter(([, u]) => u.men >= 1).map(([k, u]) => `<div class="tr w">${esc(UT[k] ? UT[k].name : k)}: ${u.regs} กรม ${socN(u.men)} คน กำลังรบ ${Math.round(u.pow)}</div>`).join('')
         + `<div class="tr w">ความพร้อมของอุปกรณ์: ${Object.entries(R.ready).map(([c, r]) => `${esc(ECAT[c].name)} ${Math.round(r * 100)}%`).join(' · ')}</div>`;
     }
@@ -146,7 +146,7 @@ function armyHTML() {
     + `<div class="btns"><button type="button" class="btn warn" data-aa2="edel"${dis}>${AEQ0[e] ? 'ซ่อนอุปกรณ์นี้' : 'ลบอุปกรณ์นี้'}</button></div></div></details>`;
   h += `<div class="btns"><button type="button" class="btn" data-aa2="enew"${dis}>เพิ่มอุปกรณ์</button><button type="button" class="btn" data-aa2="reset"${dis}>คืนค่าตั้งต้นทั้งหมด</button></div>`;
   const rows = [...ARMY.st.values()].sort((a, b) => b.pow - a.pow);
-  if (rows.length) h += `<h4>กำลังของแต่ละรัฐ</h4>` + rows.map(R => `<div class="tr"><a href="#" data-sopen="${R.s.id}">${esc(R.s.name)}</a> <span class="w">ทหาร ${socN(R.men)} คน · กำลังรบ ${Math.round(R.pow)}</span></div>`).join('') + `<p class="note">รัฐที่กำลังรบมากกว่ากดราคาสินค้าของรัฐเพื่อนบ้านที่ไม่ใช่พันธมิตรได้ เดิมระบบใช้ขนาดเศรษฐกิจของรัฐ</p>`;
+  if (rows.length) h += `<h4>กำลังของแต่ละรัฐ</h4>` + rows.map(R => `<div class="tr"><a href="#" data-sopen="${R.s.id}">${esc(R.s.name)}</a> <span class="w">ทหาร ${socN(R.men)} นาย · กำลังรบ ${Math.round(R.pow)}</span></div>`).join('') + `<p class="note">รัฐที่กำลังรบมากกว่ากดราคาสินค้าของรัฐเพื่อนบ้านที่ไม่ใช่พันธมิตรได้ เดิมระบบใช้ขนาดเศรษฐกิจของรัฐ</p>`;
   return h;
 }
 $('ecobody').addEventListener('change', e => {

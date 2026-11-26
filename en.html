@@ -1,0 +1,1267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<script>window.MME_LANG = "en"; window.MME_PAGES = {"th": "index.html", "en": "en.html"}; (function () { try { var l = localStorage.getItem("mme.lang"); if (l && l !== window.MME_LANG && window.MME_PAGES[l]) location.replace(window.MME_PAGES[l] + location.search + location.hash); } catch (e) {} })();</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bazaar Worldmaker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;700&family=Noto+Serif+Thai:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* a cartographer's desk: ink panels around a painted hex map */
+  --ink: #15171c;
+  --panel: #1e2128;
+  --line: #333844;
+  --text: #ebe4d1;
+  --muted: #a7a190;
+  --brass: #cfa95e;
+  --display: 'Noto Serif Thai', 'Sarabun', Georgia, serif;
+  --body: 'Noto Sans Thai', 'Sarabun', 'Leelawadee UI', Tahoma, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; background: var(--ink); color: var(--text); font-family: var(--body); font-size: var(--ufs, 17px); line-height: 1.6; }
+header { padding: 18px 20px 10px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; }
+h1 { font-family: var(--display); font-weight: 700; font-size: 1.75rem; margin: 0; text-wrap: balance; }
+.sub { color: var(--muted); font-size: .92rem; }
+.wrap { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; padding: 0 20px 20px; align-items: start; }
+@media (max-width: 980px) { .wrap { grid-template-columns: 1fr; } }
+.mapcol { min-width: 0; }
+/* the editing bar rides above the map and stays in reach while the page scrolls */
+.toolbar { position: sticky; top: 0; z-index: 6; background: var(--ink); padding: 0 0 8px; }
+.tbrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--panel); }
+.seg button { border: 0; border-right: 1px solid var(--line); background: transparent; color: var(--text); padding: 6px 11px; font: 500 .84rem/1.3 var(--body); cursor: pointer; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: #2a2e37; color: var(--brass); box-shadow: inset 0 -2px 0 var(--brass); }
+.seg button:hover:not(:disabled), .seg button:focus-visible { background: #262a32; outline: none; }
+button:disabled { opacity: .42; cursor: default; }
+.btn { border: 1px solid var(--line); background: var(--panel); color: var(--text); padding: 6px 11px; border-radius: 6px; font: 500 .84rem/1.3 var(--body); cursor: pointer; }
+.btn:hover:not(:disabled), .btn:focus-visible { border-color: var(--brass); outline: none; }
+.btn.warn { color: #e7b0a0; }
+.status { margin-left: auto; font-size: .8rem; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+.status::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.status.ok::before { background: #7fae6a; }
+.status.busy::before { background: var(--brass); }
+.status.bad::before { background: #d07a64; }
+.opts { margin-top: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+.pal { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.grp { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.grp > span { color: var(--muted); font-size: .76rem; margin-right: 2px; }
+.sw { display: inline-flex; align-items: center; gap: 5px; padding: 3px 7px 3px 4px; border: 1px solid var(--line); border-radius: 5px; background: #191c22; color: var(--text); font: 500 .78rem/1.25 var(--body); cursor: pointer; }
+.sw i { width: 14px; height: 14px; border-radius: 3px; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .25); flex: none; }
+.sw i.rs { background: repeating-linear-gradient(45deg, #5a5f6b 0 3px, #2a2d35 3px 6px); }
+.sw[aria-pressed="true"] { border-color: var(--brass); color: var(--brass); background: #262a32; }
+.sw:hover, .sw:focus-visible { border-color: var(--brass); outline: none; }
+.optrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 7px; }
+.lbl { color: var(--muted); font-size: .8rem; }
+.hint { color: var(--muted); font-size: .8rem; margin: 7px 0 0; line-height: 1.55; }
+.cf label { display: inline-flex; align-items: center; gap: 6px; font-size: .82rem; color: var(--muted); }
+.cf label.full { display: flex; margin-top: 7px; align-items: flex-start; }
+.cf input, .cf select, .cf textarea { background: #14161b; color: var(--text); border: 1px solid var(--line); border-radius: 5px; font: 400 .86rem/1.45 var(--body); padding: 5px 8px; }
+.cf input { width: 190px; }
+.cf textarea { flex: 1; min-width: 0; resize: vertical; }
+.cf input:focus, .cf select:focus, .cf textarea:focus { border-color: var(--brass); outline: none; }
+.mapbox { position: relative; background: #0f1114; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; touch-action: none; }
+canvas { display: block; width: 100%; cursor: grab; }
+#fx { position: absolute; left: 0; top: 0; pointer-events: none; }
+.mapbox[data-mode="terrain"] canvas, .mapbox[data-mode="river"] canvas, .mapbox[data-mode="city"] canvas, .mapbox[data-mode="label"] canvas, .mapbox[data-mode="route"] canvas, .mapbox[data-mode="info"] canvas { cursor: crosshair; }
+.mapbox canvas.overcity { cursor: move; }
+.mapbox canvas.pick { cursor: pointer; }
+.mapbox canvas.pan, .mapbox canvas.drag { cursor: grabbing; }
+/* the two city panes share one cell, so the bar keeps its height and the map never jumps under the pointer */
+.panes { display: grid; }
+.panes > * { grid-area: 1 / 1; min-width: 0; }
+.pane-off { visibility: hidden; }
+#cfHint, #lfHint { min-height: 1.55em; }
+.cf input#lfAng { width: 130px; padding: 0; accent-color: var(--brass); }
+#lfAngV { min-width: 3.2em; font-variant-numeric: tabular-nums; color: var(--text); }
+#lfColor { display: flex; flex-wrap: wrap; gap: 4px; }
+.chk { display: inline-flex; align-items: center; gap: 6px; font-size: .82rem; color: var(--muted); cursor: pointer; }
+.chk input { accent-color: var(--brass); }
+#rfInfo { color: var(--text); font-size: .84rem; display: inline-block; min-height: 1.4em; }
+.layers { position: absolute; left: 10px; top: 46px; z-index: 4; background: rgba(21, 23, 28, .96); border: 1px solid var(--line); border-radius: 6px; padding: 8px 11px; display: grid; gap: 5px; font-size: .82rem; }
+.layers label { display: flex; align-items: center; gap: 8px; cursor: pointer; white-space: nowrap; }
+.layers input { accent-color: var(--brass); }
+.layers i { display: inline-block; width: 24px; height: 0; }
+.layers .fxrow { display: grid; gap: 5px; margin-top: 3px; padding-top: 7px; border-top: 1px solid var(--line); color: var(--muted); }
+.layers .seg button { padding: 4px 9px; font-size: .8rem; }
+.nsize label { display: grid; grid-template-columns: 6.2em 9em 3.2em; align-items: center; gap: 8px; }
+.nsize input[type=range] { width: 100%; accent-color: var(--brass); }
+.nsize output { font-variant-numeric: tabular-nums; color: var(--text); text-align: right; }
+.nsize .hint { color: var(--muted); font-size: .76rem; max-width: 19em; white-space: normal; }
+.nsize button { justify-self: start; border: 1px solid var(--line); background: transparent; color: var(--text); border-radius: 5px; padding: 3px 9px; font: 500 .78rem/1.25 var(--body); cursor: pointer; }
+#infocard h3, #tradecard h3 { font-family: var(--display); font-size: .95rem; margin: 12px 0 4px; }
+#tradecard h3:first-of-type { margin-top: 2px; }
+#tradecard .note { margin-top: 12px; }
+#fixbody .tr { margin: 8px 0; }
+#fixbody .btns { margin-top: 4px; }
+.tl { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 1px 8px; align-items: center; font-size: .84rem; }
+.tl i { width: 10px; height: 10px; border-radius: 2px; box-shadow: 0 0 0 1px rgba(255, 255, 255, .18) inset; }
+.tl .n { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+.tl span[title] { cursor: help; }
+.tr { font-size: .84rem; margin: 4px 0; line-height: 1.5; }
+.tr b { font-weight: 600; }
+.tr .w, .tr.w { color: var(--muted); }
+#tdCat { background: #14161b; color: var(--text); border: 1px solid var(--line); border-radius: 5px; font: 400 .84rem/1.4 var(--body); padding: 4px 6px; }
+#infocard h3:first-of-type { margin-top: 2px; }
+#infocard label.full { display: flex; flex-direction: column; align-items: stretch; gap: 3px; }
+#infocard input:not([type]), #infocard textarea, #infocard select { width: 100%; }
+.zoom { position: absolute; right: 10px; top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.zoom button, .ctl button { border: 1px solid var(--line); background: rgba(21, 23, 28, .88); color: var(--text); font: 500 .8rem/1.25 var(--body); border-radius: 5px; cursor: pointer; }
+.zoom button { width: 34px; height: 34px; font: 600 18px/1 var(--body); }
+.ctl { position: absolute; left: 10px; top: 10px; display: flex; gap: 6px; }
+.ctl button { padding: 6px 10px; }
+.ctl button[aria-pressed="true"] { border-color: var(--brass); color: var(--brass); }
+.zoom button:hover, .zoom button:focus-visible, .ctl button:hover, .ctl button:focus-visible { border-color: var(--brass); outline: none; }
+.tip { position: absolute; pointer-events: none; min-width: 220px; max-width: 310px; background: rgba(21, 23, 28, .95); border: 1px solid var(--line); border-left: 4px solid var(--c, var(--brass)); border-radius: 5px; padding: 9px 11px; font-size: .85rem; line-height: 1.5; display: none; z-index: 2; }
+.tip b { font-family: var(--display); font-size: 1rem; }
+.tip .s { color: var(--brass); }
+.tip .m { color: var(--muted); }
+.tip .lore { margin: 4px 0 2px; }
+.tip .mine { color: #e9c98a; }
+.toast { position: absolute; left: var(--toastx, 50%); bottom: var(--toastb, 14px); transform: translateX(-50%); background: rgba(21, 23, 28, .94); border: 1px solid var(--brass); color: var(--text); border-radius: 6px; padding: 6px 12px; font-size: .84rem; pointer-events: none; opacity: 0; transition: opacity .2s; z-index: 3; max-width: 90%; text-align: center; }
+.toast.on { opacity: 1; }
+aside { display: flex; flex-direction: column; gap: 12px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; }
+.card h2 { font-family: var(--display); font-size: 1.05rem; margin: 0 0 8px; font-weight: 700; }
+.legend { display: grid; grid-template-columns: 1fr; gap: 4px; }
+.lg { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: .86rem; }
+.lg .chip { width: 16px; height: 16px; border-radius: 3px; box-shadow: 0 0 0 1px rgba(255, 255, 255, .22) inset; }
+.lg .n { color: var(--muted); font-variant-numeric: tabular-nums; font-size: .78rem; }
+.stats { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; font-size: .86rem; }
+.stats span:nth-child(even) { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+.btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+#climcard h3 { font-family: var(--display); font-size: .95rem; margin: 12px 0 4px; }
+.clleg { margin: 8px 0 2px; }
+.clbar { height: 12px; border-radius: 3px; box-shadow: 0 0 0 1px rgba(255, 255, 255, .18) inset; }
+.clticks { position: relative; height: 18px; margin: 2px 8px 0; font-size: .74rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.clticks span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+.clticks span.cloud { color: var(--brass); }
+.cltbl { max-height: 270px; overflow: auto; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1px 10px; font-size: .84rem; margin-top: 4px; padding-right: 4px; }
+.cltbl button { all: unset; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cltbl button:hover, .cltbl button:focus-visible { color: var(--brass); }
+.cltbl .n, .clfx .n { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.clfx { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; font-size: .84rem; }
+.clfx .n.hi { color: var(--text); }
+.clfx span[title] { cursor: help; }
+.method { padding: 0 20px 26px; }
+.method .card { max-width: 980px; }
+.method h3 { font-family: var(--display); font-size: .98rem; margin: 12px 0 4px; }
+.method ol { margin: 0; padding-left: 1.3em; }
+.method li { margin: 3px 0; max-width: 74ch; }
+.note { color: var(--muted); font-size: .85rem; margin-top: 8px; }/* v0.18.5: the list of points of interest places one */
+.lg.ptadd { grid-template-columns: 16px minmax(0, 1fr) auto auto; cursor: pointer; border-radius: 6px; padding: 1px 4px; margin: 0 -4px; }
+.lg.ptadd:hover, .lg.ptadd:focus-visible { background: rgba(255, 255, 255, .06); outline: none; }
+.lg.ptadd .add { font-size: .74rem; color: var(--brass, #cfa95e); }
+.ptwhy { margin: 6px 0 0; font-size: .78rem; line-height: 1.5; color: var(--muted, #a7a192); }
+/* v0.18.5: a community's marks */
+.optrow.traits { gap: 4px 12px; }
+.optrow.traits .trait { display: inline-flex; align-items: center; gap: 4px; font-size: .84rem; white-space: nowrap; cursor: pointer; }
+/* v0.20.1: the community's form gives its text boxes a fixed width, and its ticks took it too: each box sat in the middle of a
+   190 px field with its name far off to the right (the owner, 26 Nov 2026). Ticks are their own size, beside their names. */
+.cf input[type=checkbox], .cf input[type=radio] { width: auto; padding: 0; margin: 0; border: 0; background: none; accent-color: var(--brass); flex: none; }
+.optrow.traits { justify-content: flex-start; }
+#cfFx { margin-top: 2px; }
+/* v0.19.0: the writer of notes, the world's line, and the windows over the map */
+.mmodal { position: absolute; inset: 0; z-index: 20; background: rgba(10, 11, 14, .55); display: flex; align-items: center; justify-content: center; padding: 18px; }
+.mmodal[hidden] { display: none; }
+.mmcard { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; width: min(720px, 100%); max-height: 100%; display: flex; flex-direction: column; padding: 12px 14px; box-shadow: 0 10px 30px rgba(0, 0, 0, .5); }
+.mmhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.mmhead h3 { margin: 0; font-family: var(--display); font-size: 1.1rem; }
+.ntworld { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-bottom: 8px; font-size: .9rem; }
+.ntworld input { width: 12em; }
+.nttools { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.nttools button { background: var(--ink); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 3px 8px; font: inherit; font-size: .85rem; cursor: pointer; }
+.nttools button:hover { border-color: var(--brass); }
+.ntedit { flex: 1; min-height: 240px; overflow: auto; background: var(--ink); border: 1px solid var(--line); border-radius: 5px; padding: 10px 12px; line-height: 1.7; outline: none; }
+.ntedit:focus { border-color: var(--brass); }
+.ntedit h3, .ntedit h4 { font-family: var(--display); margin: .6em 0 .3em; }
+.ntedit blockquote { margin: .4em 0; padding-left: 10px; border-left: 3px solid var(--brass); color: var(--muted); }
+.worldline { position: absolute; left: 10px; bottom: 32px; z-index: 2; font-family: var(--display); font-size: .85rem; color: var(--text); background: rgba(21, 23, 28, .7); border: 1px solid var(--line); border-radius: 4px; padding: 2px 8px; cursor: pointer; }
+.worldline[hidden] { display: none; }
+.peek { position: absolute; z-index: 6; pointer-events: none; min-width: 180px; max-width: 280px; background: rgba(21, 23, 28, .96); border: 1px solid var(--line); border-left: 3px solid var(--brass); border-radius: 5px; padding: 7px 10px; font-size: .82rem; line-height: 1.5; box-shadow: 0 4px 14px rgba(0, 0, 0, .45); }
+.peek[hidden], .peekring[hidden] { display: none; }
+.peek b { font-family: var(--display); font-size: .98rem; }
+.peek .m { color: var(--muted); } .peek .s { color: var(--brass); } .peek .lore { margin-top: 3px; }
+.peekring { position: absolute; z-index: 6; pointer-events: none; width: 16px; height: 16px; border-radius: 50%; background: conic-gradient(var(--brass) var(--p, 0deg), rgba(255, 255, 255, .18) 0); -webkit-mask: radial-gradient(circle, transparent 4px, #000 5px); mask: radial-gradient(circle, transparent 4px, #000 5px); }
+.tripbox { position: absolute; z-index: 5; right: 64px; top: var(--uitop, 54px); width: min(340px, calc(100% - 90px)); max-height: calc(100% - var(--uitop, 54px) - var(--minib, 16px)); overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 7px; padding: 10px 12px; font-size: .88rem; box-shadow: 0 6px 18px rgba(0, 0, 0, .45); }
+.tripbox[hidden] { display: none; }
+.tripbox .mmhead h3 { font-size: 1rem; }
+.tripbox .btn.on, .infobody .btn.on { border-color: var(--brass); color: var(--brass); }
+canvas.measuring { cursor: crosshair; }
+.pinrow { position: sticky; top: -8px; z-index: 3; background: inherit; margin: -8px -10px 6px; padding: 8px 10px 6px; background: rgba(27, 30, 37, .98); border-bottom: 1px solid var(--line); }
+.admtree, .admtree ul { list-style: none; margin: 4px 0; padding-left: 14px; font-size: .86rem; }
+.admtree { padding-left: 2px; }
+.admtree a { color: var(--text); text-decoration: none; border-bottom: 1px dotted var(--muted); }
+.admtree a.on, .admtree a:hover { color: var(--brass); }
+#ecobody a[data-adm], #ecobody a[data-city], #ecobody a[data-sopen] { color: var(--brass); }
+.ftax { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 10px; margin: 4px 0 6px; font-size: .86rem; }
+.ftax label { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.ftax small { color: var(--muted); }
+.ftax input.chg { border-color: var(--brass); }
+.frule { flex-wrap: wrap; gap: 4px; }
+.mkcard { width: min(900px, 100%); max-height: 100%; overflow: auto; }
+.mktbl { display: grid; grid-template-columns: minmax(150px, 1.4fr) repeat(5, minmax(70px, .8fr)) minmax(110px, 1.3fr); gap: 0 10px; font-size: .86rem; margin-top: 6px; }
+.mkh { font-weight: 600; color: var(--muted); padding: 4px 0; border-bottom: 1px solid var(--line); }
+.mkh.r, .mkrow .r { text-align: right; }
+.mkh.mks { background: none; border: 0; border-bottom: 1px solid var(--line); font: inherit; font-weight: 600; color: var(--muted); cursor: pointer; text-align: left; border-radius: 0; }
+.mkh.mks.r { text-align: right; }
+.mkh.mks:hover, .mkh.mks:focus-visible { color: var(--text); }
+.mkh.mks.on { color: var(--brass); }
+.mkrow { display: contents; cursor: pointer; font: inherit; color: inherit; background: none; border: 0; }
+.mkrow > span { padding: 5px 0; border-bottom: 1px solid rgba(255, 255, 255, .05); }
+.mkrow:hover > span, .mkrow.on > span { background: rgba(207, 169, 94, .08); }
+.mkrow small.up { color: #e98a6a; } .mkrow small.dn { color: #8fc48a; }
+.mkdet { grid-column: 1 / -1; padding: 6px 4px 10px; border-bottom: 1px solid var(--line); }
+.mkplot { display: flex; gap: 24px; flex-wrap: wrap; }
+.mkplot b { display: block; font-size: .8rem; color: var(--muted); }
+.mkdet a { color: var(--brass); }
+/* v0.19.0: the bar of figures, the small map, the hotbar, the ring menu, floating cards */
+.hud { position: absolute; z-index: 4; left: 10px; bottom: 10px; display: flex; gap: 2px; align-items: center; flex-wrap: wrap; max-width: calc(100% - 260px); background: linear-gradient(180deg, rgba(34, 31, 26, .94), rgba(20, 21, 26, .94)); border: 1px solid rgba(207, 169, 94, .45); border-radius: 8px; padding: 3px 4px; box-shadow: 0 4px 14px rgba(0, 0, 0, .45); }
+.hud[hidden], .minimap[hidden], .hotbar[hidden], .ringmenu[hidden] { display: none; }
+.hud button { position: relative; background: none; border: 0; color: #f1e6c8; font: inherit; font-size: .82rem; padding: 3px 8px; border-radius: 5px; cursor: pointer; white-space: nowrap; }
+.hud button:hover { background: rgba(207, 169, 94, .16); }
+.hud button[data-hud="world"] { font-family: var(--display); font-weight: 600; color: #e9cf91; }
+.hud .hudsp { flex: 1; min-width: 8px; }
+.hudfloat { position: absolute; left: 50%; top: -6px; transform: translateX(-50%); font-size: .8rem; font-weight: 700; pointer-events: none; animation: hudUp 1.5s ease-out forwards; }
+.hudfloat.up { color: #9fe08a; } .hudfloat.dn { color: #f08a6a; }
+@keyframes hudUp { from { opacity: 1; transform: translate(-50%, 0); } to { opacity: 0; transform: translate(-50%, -22px); } }
+.minimap { position: absolute; z-index: 4; right: 10px; bottom: 10px; width: 200px; border: 1px solid rgba(207, 169, 94, .55); border-radius: 6px; box-shadow: 0 4px 14px rgba(0, 0, 0, .5); background: #0f1114; cursor: crosshair; }
+.hotbar { position: absolute; z-index: 4; left: 50%; transform: translateX(-50%); bottom: 50px; display: flex; gap: 3px; background: rgba(20, 21, 26, .9); border: 1px solid var(--line); border-radius: 8px; padding: 3px; }
+.hotbar button { background: none; border: 1px solid transparent; color: var(--text); font: inherit; font-size: .78rem; padding: 3px 7px; border-radius: 5px; cursor: pointer; white-space: nowrap; }
+.hotbar button[aria-pressed="true"] { border-color: var(--brass); color: var(--brass); background: rgba(207, 169, 94, .1); }
+.hotbar kbd { font-family: inherit; font-size: .7rem; color: var(--muted); margin-right: 4px; border: 1px solid var(--line); border-radius: 3px; padding: 0 3px; }
+.ringmenu { position: absolute; z-index: 9; width: 0; height: 0; }
+.ringmenu .ringhub { position: absolute; transform: translate(-50%, -50%); background: rgba(21, 23, 28, .95); border: 1px solid var(--brass); border-radius: 50%; width: 64px; height: 64px; display: flex; align-items: center; justify-content: center; text-align: center; font-size: .72rem; padding: 4px; color: #e9cf91; }
+.ringmenu button { position: absolute; transform: translate(-50%, -50%) scale(.6); opacity: 0; background: rgba(27, 30, 37, .97); border: 1px solid rgba(207, 169, 94, .6); color: var(--text); border-radius: 16px; padding: 5px 10px; font: inherit; font-size: .8rem; white-space: nowrap; cursor: pointer; transition: transform .16s ease, opacity .16s ease; }
+.ringmenu.on button { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+.ringmenu button:hover { border-color: var(--brass); color: var(--brass); }
+aside .card h2 { position: relative; }
+.popbtn { position: absolute; right: 26px; top: 50%; transform: translateY(-50%); background: none; border: 1px solid transparent; color: var(--muted); font-size: .85rem; cursor: pointer; border-radius: 4px; padding: 0 4px; }
+.popbtn:hover { color: var(--brass); border-color: var(--line); }
+.card.floating { position: absolute; z-index: 8; width: 320px; max-height: calc(100% - var(--uitop, 54px) - var(--minib, 16px)); overflow: auto; box-shadow: 0 10px 28px rgba(0, 0, 0, .55); border: 1px solid var(--brass); }
+.card.floating.dragging, .tripbox.dragging { opacity: .9; }
+.toast.long { max-width: min(900px, 90%); white-space: normal; }
+.mmodal:not([hidden]) .mmcard { animation: winIn .18s ease-out; }
+@keyframes winIn { from { opacity: 0; transform: translateY(8px) scale(.98); } }
+@media (prefers-reduced-motion: reduce) { .mmodal:not([hidden]) .mmcard, .ringmenu button, .hudfloat { animation: none; transition: none; } }
+.mapopt { position: absolute; z-index: 4; top: 10px; right: 10px; display: flex; gap: 4px; align-items: center; }
+.mapopt button { border: 1px solid var(--line); background: rgba(21, 23, 28, .88); color: var(--text); font: 500 .8rem/1.25 var(--body); border-radius: 5px; padding: 6px 9px; cursor: pointer; white-space: nowrap; }
+.mapopt button:hover { border-color: var(--brass); }
+.mapopt button.w { font-family: var(--display); color: #e9cf91; max-width: 22em; overflow: hidden; text-overflow: ellipsis; }
+#modes button { position: relative; }
+#modes .modekey { position: absolute; top: 1px; right: 2px; font-family: inherit; font-size: .56rem; line-height: 1; color: var(--muted); opacity: .8; pointer-events: none; }
+
+/* v0.19.2: the keys, as a card under the "?" button */
+.keyspanel { position: absolute; z-index: 6; width: min(330px, calc(100% - 20px)); max-height: calc(100% - var(--uitop, 54px) - var(--minib, 16px)); overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px 10px; box-shadow: 0 10px 28px rgba(0, 0, 0, .5); font-size: .84rem; }
+.keyspanel dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 6px 0 0; }
+.keyspanel dt { font-weight: 600; color: #e9cf91; white-space: nowrap; }
+.keyspanel dd { margin: 0; color: var(--text); }
+/* v0.19.2: on a short map the hover card stops short of the buttons along the top */
+#mapbox > .tip { max-height: calc(100% - var(--uitop, 54px) - 64px); overflow: auto; }
+/* v0.19.2: everything over the map put away (U) */
+#mapbox.bare .ctl, #mapbox.bare .mapopt, #mapbox.bare .minimap, #mapbox.bare > .tip, #mapbox.bare .zoom, #mapbox.bare .layers, #mapbox.bare .nsize, #mapbox.bare .keyspanel, #mapbox.bare .peek, #mapbox.bare .peekring { display: none !important; }
+.barechip { position: absolute; z-index: 7; top: 10px; right: calc(var(--barer, 10px)); font-size: .8rem; padding: 4px 10px; opacity: .85; }
+.barechip:hover { opacity: 1; }
+
+/* v0.19.5: the small map's fold button, in its top right corner, or alone in the map's corner when folded */
+.minitog { position: absolute; z-index: 5; font-size: .78rem; padding: 3px 9px; opacity: .88; }
+.minitog.open { padding: 0 7px; line-height: 1.5; opacity: .75; }
+.minitog:hover { opacity: 1; }
+#mapbox.bare .minitog { display: none !important; }
+/* v0.21.0: the keys of the tool in hand, on the map */
+.keyhint { position: absolute; z-index: 5; left: 50%; transform: translateX(-50%); bottom: 54px; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 12px; max-width: min(92%, 760px); background: rgba(20, 21, 26, .9); border: 1px solid rgba(207, 169, 94, .5); border-radius: 7px; padding: 4px 10px; font-size: .8rem; color: var(--text); pointer-events: none; box-shadow: 0 3px 10px rgba(0, 0, 0, .4); }
+.keyhint[hidden] { display: none; }
+.keyhint .kh { white-space: nowrap; color: var(--muted); }
+.keyhint .kh.on { color: #bfe8ff; }
+.keyhint kbd { font-family: inherit; font-size: .74rem; color: var(--text); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; margin: 0 1px; background: rgba(255, 255, 255, .05); }
+.keyhint .kh.on kbd { border-color: #8fd4ff; color: #e6f6ff; background: rgba(120, 200, 255, .18); }
+.polset.gtr { justify-content: flex-start; }
+.polset.gtr { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5em, 1fr)); gap: 2px 10px; }
+.eform select { max-width: 100%; }
+
+/* ---------- Bazaar Worldmaker: the menu, the library and the room, in the map's own ink and brass ---------- */
+:root { --good: #7cc47f; --warn: #e2748a; --panel2: #262a33; }
+body { min-height: 100vh; }
+.btn.brass { background: var(--brass); color: #1a1508; border-color: var(--brass); font-weight: 700; }
+.btn.brass:hover { filter: brightness(1.08); }
+.btn.ghost { background: transparent; }
+.btn:disabled { opacity: .5; cursor: default; }
+#menu { max-width: 1180px; margin: 0 auto; padding: 28px 20px 64px; }
+.brand { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 22px; padding-bottom: 18px; border-bottom: 1px solid var(--line); margin-bottom: 22px; }
+.brand h1 { font-size: 2.3rem; letter-spacing: .01em; line-height: 1.15; }
+.brand h1 small { display: block; font-family: var(--body); font-size: .8rem; font-weight: 500; color: var(--brass); letter-spacing: .14em; text-transform: uppercase; margin-bottom: 4px; }
+.brand p { margin: 0; color: var(--muted); max-width: 46ch; }
+.menugrid { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 22px; align-items: start; }
+@media (max-width: 900px) { .menugrid { grid-template-columns: 1fr; } }
+.side { display: flex; flex-direction: column; gap: 14px; }
+.mcard { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+.mcard h2 { font-family: var(--display); font-size: 1.12rem; margin: 0 0 6px; }
+.mcard p { margin: 0 0 12px; color: var(--muted); font-size: .9rem; }
+.mcard.lead { border-color: #6b5a34; background: linear-gradient(180deg, #2a2618, var(--panel) 70%); }
+.field { display: flex; flex-direction: column; gap: 4px; font-size: .86rem; color: var(--muted); margin-bottom: 10px; }
+.field input[type=text], .field input[type=number], .field select, .inp { background: var(--ink); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; font: inherit; font-size: .95rem; min-width: 0; }
+.field input:focus-visible, .inp:focus-visible, .btn:focus-visible, .sizeopt:focus-within { outline: 2px solid var(--brass); outline-offset: 1px; }
+.rowx { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.code { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; letter-spacing: .22em; text-transform: uppercase; }
+.tutor { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 10px; align-items: start; overflow: hidden; }
+.tutor img { width: 150px; max-width: none; height: auto; display: block; margin: -6px 0 -70px -26px; align-self: start; transform: scaleX(-1); }
+.tutor h2 { margin-bottom: 4px; }
+.tu-go { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 10px; }
+.tu-prog { font-size: .78rem; color: var(--muted); }
+.tu-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.tu-chips button { font: inherit; font-size: .74rem; color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 99px; padding: 1px 8px; cursor: pointer; }
+.tu-chips button:hover { color: var(--ink, #eee); border-color: var(--brass); }
+.tu-chips button.done { color: var(--good); border-color: #3c5c3f; }
+/* ---------- the lesson's stage: her figure and her words, over the map ---------- */
+body.tutoring { padding-bottom: 250px; }
+#tutor { position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; pointer-events: none; padding: 0 12px 12px 0; --w: min(clamp(380px, 40vw, 620px), 82vh); }
+#tutor[hidden] { display: none; }
+/* her figure stands against the page's left edge, large, behind the box. The picture is mirrored, so every arm she holds out
+   reaches into the page and her place never changes from one pose to the next; the frame starts off the page by the width of
+   its empty margin, and sits high enough for a held-out hand to show above the box */
+#tutor .tu-fig { position: absolute; left: calc(var(--w) * -0.16); bottom: calc(var(--w) * -0.22); width: var(--w); z-index: 1; filter: drop-shadow(0 6px 18px rgba(0, 0, 0, .6)); }
+#tutor .tu-fig img { display: block; width: 100%; height: auto; transform: scaleX(-1); }
+#tutor .tu-box { position: relative; z-index: 2; pointer-events: auto; margin-left: calc(var(--w) * 0.5); max-width: 940px; background: #181a21; border: 1px solid #6b5a34; border-radius: 12px; padding: 10px 14px 10px 22px; box-shadow: 0 10px 40px rgba(0, 0, 0, .6); }
+#tutor .tu-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+#tutor .tu-gap { flex: 1; }
+#tutor .tu-name { font-family: var(--display); font-weight: 700; color: #f0b9ae; font-size: 1.02rem; }
+#tutor .tu-name small { font-family: var(--body); font-weight: 500; font-size: .74rem; color: var(--brass); margin-left: 8px; letter-spacing: .04em; }
+#tutor .tu-chap { font-size: .78rem; color: var(--muted); }
+#tutor .tu-head .btn, #tutor .tu-foot .btn { font-size: .78rem; padding: 3px 10px; }
+#tutor .tu-text { margin: 8px 0 6px; min-height: 4.9em; font-size: 1rem; line-height: 1.62; cursor: default; }
+#tutor .tu-task { font-size: .84rem; color: var(--brass); border-left: 3px solid var(--brass); padding: 2px 0 2px 9px; margin-bottom: 6px; }
+#tutor .tu-task.ok { color: var(--good); border-color: var(--good); }
+#tutor .tu-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+#tutor .tu-count { font-size: .76rem; color: var(--muted); }
+#tutor .tu-toc { position: absolute; right: 10px; bottom: calc(100% + 8px); width: min(330px, 86vw); max-height: 60vh; overflow: auto; background: var(--panel); border: 1px solid #6b5a34; border-radius: 10px; padding: 6px; box-shadow: 0 10px 30px rgba(0, 0, 0, .55); display: grid; gap: 2px; }
+#tutor .tu-toc[hidden] { display: none; }
+#tutor .tu-toc button { font: inherit; font-size: .88rem; text-align: left; color: inherit; background: transparent; border: 0; border-radius: 6px; padding: 5px 8px; cursor: pointer; display: flex; gap: 8px; align-items: baseline; }
+#tutor .tu-toc button:hover, #tutor .tu-toc button.on { background: var(--panel2); }
+#tutor .tu-toc button b { color: var(--brass); min-width: 1.4em; text-align: right; }
+#tutor .tu-toc button i { margin-left: auto; font-style: normal; color: var(--good); }
+#tuChip { position: fixed; left: 14px; bottom: 14px; z-index: 60; box-shadow: 0 6px 20px rgba(0, 0, 0, .5); }
+#tuChip[hidden] { display: none; }
+.tu-spot { outline: 2px solid #f0c860 !important; outline-offset: 3px; border-radius: 6px; animation: tuPulse 1.5s ease-in-out infinite; position: relative; z-index: 3; }
+#scalebar.tu-spot, .mapopt.tu-spot, .minimap.tu-spot { position: absolute; }
+@keyframes tuPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(240, 200, 96, .55); } 50% { box-shadow: 0 0 0 9px rgba(240, 200, 96, 0); } }
+@media (prefers-reduced-motion: reduce) { .tu-spot { animation: none; } }
+@media (max-width: 760px) { #tutor { --w: min(64vw, 320px); padding: 0 8px 8px; display: flex; flex-direction: column; } #tutor .tu-fig { position: relative; left: auto; bottom: auto; align-self: flex-start; margin-left: calc(var(--w) * -0.16); margin-bottom: calc(var(--w) * -0.6); } #tutor .tu-box { margin-left: 0; padding-left: 14px; } #tutor .tu-text { font-size: .93rem; min-height: 6.4em; } body.tutoring { padding-bottom: 300px; } }
+.libhead { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.libhead h2 { font-family: var(--display); font-size: 1.35rem; margin: 0; }
+.libhead span { color: var(--muted); font-size: .88rem; }
+.lib { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
+.mapcard { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
+.mapcard .th { aspect-ratio: 4 / 3; background: #101a24 center / cover no-repeat; border-bottom: 1px solid var(--line); cursor: pointer; display: block; width: 100%; border-width: 0 0 1px; padding: 0; }
+.mapcard .th:hover { filter: brightness(1.12); }
+.mapcard .bd { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.mapcard h3 { font-family: var(--display); font-size: 1.05rem; margin: 0; overflow-wrap: break-word; }
+.mapcard .mt { color: var(--muted); font-size: .82rem; font-variant-numeric: tabular-nums; }
+.mapcard .mt.bk::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--good); margin-right: 6px; vertical-align: 1px; }
+.mapcard .mt.bk.due::before { background: var(--brass); }
+.mapcard .mt.bk.due { color: var(--brass); }
+.mapcard .acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; }
+.mapcard .acts .btn { padding: 4px 10px; font-size: .84rem; }
+.tag { display: inline-block; font-size: .74rem; color: var(--brass); border: 1px solid #6b5a34; border-radius: 99px; padding: 0 8px; margin-left: 6px; vertical-align: 2px; font-family: var(--body); font-weight: 500; }
+.note2 { color: var(--muted); font-size: .84rem; margin: 14px 0 0; max-width: 70ch; }
+.note2.bad { color: var(--warn); }
+#vtag { position: fixed; right: 10px; bottom: 8px; z-index: 40; font-size: .76rem; color: var(--muted); background: rgba(21, 23, 28, .82); border: 1px solid var(--line); border-radius: 6px; padding: 2px 9px; font-variant-numeric: tabular-nums; pointer-events: none; }
+#mtoast { position: fixed; left: 50%; bottom: 44px; transform: translateX(-50%); z-index: 60; background: #2b2f3a; border: 1px solid var(--brass); color: var(--text); border-radius: 8px; padding: 9px 16px; max-width: min(92vw, 560px); box-shadow: 0 8px 30px rgba(0, 0, 0, .5); }
+/* the new map sheet */
+.veil { position: fixed; inset: 0; z-index: 50; background: rgba(8, 9, 12, .72); display: flex; align-items: flex-start; justify-content: center; overflow: auto; padding: 24px 14px; }
+.sheet { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; width: min(940px, 100%); padding: 20px; }
+.sheet h2 { font-family: var(--display); font-size: 1.4rem; margin: 0 0 14px; }
+.sheetgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+@media (max-width: 760px) { .sheetgrid { grid-template-columns: 1fr; } }
+.sizes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
+.sizeopt { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; cursor: pointer; background: var(--ink); display: block; }
+.sizeopt input { position: absolute; opacity: 0; }
+.sizeopt b { display: block; font-family: var(--display); }
+.sizeopt span { display: block; color: var(--muted); font-size: .78rem; font-variant-numeric: tabular-nums; }
+.sizeopt.on { border-color: var(--brass); background: #2a2618; }
+.seg2 { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; flex-wrap: wrap; }
+.seg2 button { background: var(--ink); color: var(--text); border: 0; border-right: 1px solid var(--line); padding: 6px 12px; font: inherit; font-size: .88rem; cursor: pointer; }
+.seg2 button:last-child { border-right: 0; }
+.seg2 button[aria-pressed=true] { background: var(--brass); color: #1a1508; font-weight: 700; }
+.lblx { font-size: .86rem; color: var(--muted); margin: 10px 0 4px; display: block; }
+.rng { display: grid; grid-template-columns: 1fr 54px; gap: 8px; align-items: center; }
+.rng output { text-align: right; font-variant-numeric: tabular-nums; color: var(--text); font-size: .88rem; }
+input[type=range] { accent-color: var(--brass); width: 100%; }
+#nmPrev { width: 100%; border: 1px solid var(--line); border-radius: 8px; background: #20384c; image-rendering: pixelated; display: block; }
+.sheet .foot { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; flex-wrap: wrap; }
+/* the map screen's bar and the room */
+.mapbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 12px 20px 10px; }
+.mapbar h1 { font-size: 1.45rem; }
+.mapbar .grow { flex: 1; }
+.roomchip { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--good); color: var(--good); border-radius: 99px; padding: 3px 12px; font-size: .86rem; }
+.roomchip i { width: 8px; height: 8px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 3px rgba(124, 196, 127, .25); }
+#roomPanel { margin: 0 20px 12px; }
+#roomPanel .big { font-size: 1.7rem; color: var(--brass); }
+.people { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 0; padding: 0; list-style: none; }
+.people li { display: inline-flex; align-items: center; gap: 6px; font-size: .9rem; }
+.people i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.people .btn { padding: 0 8px; font-size: .78rem; }
+#scalebar { position: absolute; left: 10px; bottom: 10px; z-index: 3; pointer-events: none; font-size: .74rem; color: #f1ead6; text-shadow: 0 1px 2px #000, 0 0 4px #000; font-variant-numeric: tabular-nums; }
+#scalebar i { display: block; height: 6px; border: 2px solid #f1ead6; border-top: 0; box-shadow: 0 1px 2px rgba(0, 0, 0, .7); margin-top: 2px; }
+#mapscreen.blank .sw[data-b="restore"], #mapscreen.blank section.method { display: none; }
+.autobox { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); }
+.autobox label { font-size: .84rem; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+.autobox select { background: var(--ink); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; font: inherit; font-size: .86rem; }
+#mapload { padding: 60px 20px; text-align: center; color: var(--muted); }
+
+/* the economy card */
+#ecocard h3 { font-family: var(--display); font-size: 1rem; margin: 0 0 6px; }
+#ecocard h4 { font-size: .86rem; margin: 10px 0 4px; color: var(--brass); font-weight: 700; }
+#ecocard .ecat { display: flex; align-items: center; gap: 6px; font-size: .8rem; color: var(--muted); margin: 9px 0 4px; }
+#ecocard .ecat i, #ecocard .etr i, .sdot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; flex: none; }
+.sdot { border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
+#ecocard .elist { display: flex; flex-wrap: wrap; gap: 4px; }
+#ecocard .egood { border: 1px solid var(--line); background: var(--ink); color: var(--text); border-radius: 5px; padding: 2px 8px; font: 500 .8rem/1.5 var(--body); cursor: pointer; display: inline-flex; gap: 6px; }
+#ecocard .egood span { color: var(--muted); font-variant-numeric: tabular-nums; }
+#ecocard .egood.on { border-color: var(--brass); color: var(--brass); }
+#ecocard .egood.off { opacity: .5; text-decoration: line-through; }
+#ecocard .eform { border: 1px solid var(--line); border-radius: 6px; padding: 10px; margin-bottom: 10px; background: #1a1d23; }
+#ecocard .ef { display: flex; flex-direction: column; gap: 3px; font-size: .8rem; color: var(--muted); margin-bottom: 8px; }
+#ecocard input[type=text], #ecocard input[type=number], #ecocard select { background: var(--ink); color: var(--text); border: 1px solid var(--line); border-radius: 5px; padding: 4px 6px; font: inherit; font-size: .84rem; min-width: 0; }
+#ecocard input[type=number] { width: 5.2em; }
+#ecocard input[type=color] { width: 34px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 5px; background: var(--ink); }
+#ecocard .erow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: .8rem; color: var(--muted); margin: 6px 0; }
+#ecocard .erow label { display: inline-flex; align-items: center; gap: 5px; }
+#ecocard .eterm { border-top: 1px dashed var(--line); padding-top: 6px; margin-top: 6px; }
+#ecocard .echips { display: flex; flex-wrap: wrap; gap: 3px; margin: 4px 0; }
+#ecocard .echip { border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 4px; padding: 0 5px; font: 400 .72rem/1.6 var(--body); cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+#ecocard .echip i { width: 8px; height: 8px; border-radius: 2px; }
+#ecocard .echip.on { border-color: var(--brass); color: var(--text); background: #2a2618; }
+#ecocard .etable { display: grid; gap: 3px 8px; font-size: .8rem; font-variant-numeric: tabular-nums; }
+#ecocard .etable .eth, #ecocard .etable .etr { display: grid; grid-template-columns: minmax(0, 1fr) 5.4em 5.4em; gap: 6px; align-items: center; }
+#ecocard .etable.g4 .eth, #ecocard .etable.g4 .etr { grid-template-columns: minmax(0, 1.5fr) 1fr 1fr .8fr; }
+#ecocard .etable .eth { color: var(--muted); border-bottom: 1px solid var(--line); padding-bottom: 2px; }
+#ecocard .etr > span:first-child { display: flex; align-items: center; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+#ecocard .etr > span:first-child input { flex: 1; }
+#ecocard .etr em { color: var(--brass); font-style: normal; font-size: .72rem; }
+#ecocard .etable.g4 .etr span:not(:first-child), #ecocard .etable.g4 .eth span:not(:first-child), #ecocard .etable.g5 .etr span:not(:first-child), #ecocard .etable.g5 .eth span:not(:first-child) { text-align: right; }
+#ecocard .etable.g5 .eth, #ecocard .etable.g5 .etr { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 0; }
+#ecocard .etable.g5 .eth > span:first-child, #ecocard .etable.g5 .etr > span:first-child { grid-column: 1 / -1; }
+#ecocard .etable.g5 .etr { padding: 3px 0; border-bottom: 1px solid var(--line); }
+#ecocard .etable.g5.g7 .eth, #ecocard .etable.g5.g7 .etr { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+#ecocard .etable.g5.g7 .eth span:not(:first-child) { font-size: .92em; }
+#ecocard .tr.w, #ecocard .note { color: var(--muted); font-size: .8rem; }
+.mapbox.ecopaint canvas { cursor: crosshair; }
+
+/* the save status keeps one width, so the bar never re-wraps and the map never jumps when the wording changes */
+#mapscreen .status { min-width: 15.5em; justify-content: flex-end; white-space: nowrap; }
+
+/* ---------- the fitted screen: the map takes the window, the tool's options and the cards lie over it and can be put away ---------- */
+#mapscreen.fit { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+#mapscreen.fit > * { flex: 0 0 auto; }
+#mapscreen.fit .mapbar { padding: 8px 14px 6px; }
+#mapscreen.fit .mapbar h1 { font-size: 1.2rem; }
+#mapscreen.fit #roomPanel { margin-bottom: 8px; }
+#mapscreen.fit .wrap { flex: 1 1 0; min-height: 0; display: block; position: relative; padding: 0 12px 12px; }
+#mapscreen.fit .mapcol { height: 100%; display: flex; flex-direction: column; }
+#mapscreen.fit .toolbar { position: relative; flex: 0 0 auto; padding: 0 0 6px; z-index: 7; }
+#mapscreen.fit .mapbox { flex: 1 1 0; min-height: 0; }
+#mapscreen.fit .opts { position: absolute; left: 10px; top: calc(100% + 14px + var(--ctlh, 38px)); margin: 0; max-width: min(820px, calc(100% - 408px)); max-height: 44vh; overflow: auto; background: rgba(27, 30, 37, .96); box-shadow: 0 8px 26px rgba(0, 0, 0, .5); scrollbar-width: thin; }
+#mapscreen.fit.noside .opts { max-width: min(820px, calc(100% - 66px)); }
+#mapscreen.fit.noopts .opts, #mapscreen.fit .mapcol:has(#mapbox[data-mode="view"]) .opts { display: none; }
+#mapscreen.fit .layers, #mapscreen.fit .nsize { z-index: 9; }
+#mapscreen.fit .zoom { right: 352px; }
+#mapscreen.fit .ctl { right: 392px; }
+#mapscreen.fit.noside .ctl { right: 52px; }
+#mapscreen.fit.noside .zoom { right: 10px; }
+#mapscreen.fit aside { position: absolute; top: var(--tbh, 46px); right: 12px; bottom: 12px; width: 330px; z-index: 6; overflow-y: auto; overscroll-behavior: contain; padding: 0 0 4px; scrollbar-width: thin; }
+#mapscreen.fit.noside aside { display: none; }
+#mapscreen.fit aside .card { background: rgba(27, 30, 37, .97); box-shadow: 0 6px 22px rgba(0, 0, 0, .45); }
+#mapscreen.fit aside section.method { padding: 0; }
+#mapscreen .panseg button { font-size: .8rem; }
+#mapscreen .panseg [hidden] { display: none; }
+/* during a lesson her words lie over the foot of the map: the map keeps its size, and what sat at its foot moves clear */
+body.tutoring:has(#mapscreen.fit:not([hidden])) { padding-bottom: 0; }
+body.tutoring #mapscreen.fit aside { bottom: 214px; }
+body.tutoring #mapscreen.fit #scalebar { bottom: auto; top: 50px; }
+body.tutoring #mapscreen.fit .toast { bottom: 226px; }
+/* the floating options stay low: a line of guidance shows its first line, and opens under the pointer */
+#mapscreen.fit .opts .hint { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 5px; }
+#mapscreen.fit .opts .hint:hover, #mapscreen.fit .opts .hint:focus { white-space: normal; }
+#mapscreen.fit .opts .autobox span.lbl:last-child, #mapscreen.fit .opts .autobox > span:last-child { max-width: 26em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#mapscreen.fit .opts .autobox > span:last-child:hover { white-space: normal; }
+/* a window wide for its height: the options stand in the strip left of the map */
+#mapscreen.fit.dock .opts { width: 310px; max-width: 310px; max-height: calc(100vh - 150px); max-height: calc(100dvh - 150px); box-shadow: none; }
+#mapscreen.fit.dock .opts .hint { white-space: normal; }
+#mapscreen.fit.dock .opts .autobox > span:last-child { white-space: normal; max-width: none; }
+#mapscreen.fit.dock .mapcol:has(#mapbox[data-mode="view"]) .opts { display: block; }
+#mapscreen.fit.dock.noopts .opts { display: none; }
+body.tutoring #mapscreen.fit.dock .opts { max-height: calc(100vh - 380px); max-height: calc(100dvh - 380px); }
+#mapscreen.fit.dock #scalebar { left: 342px; }
+body.tutoring #mapscreen.fit.dock #scalebar { left: 342px; top: 12px; }
+
+/* the second copy on the host page */
+.mapcard .mt.bk2::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--ink3, #8a8272); margin-right: 6px; vertical-align: 1px; }
+.mapcard .mt.bk2.ok::before { background: var(--good); }
+.mapcard .mt.bk2.due::before { background: var(--brass); }
+.mapcard .mt.bk2.due { color: var(--brass); }
+#bakOn { margin-top: 8px; }
+
+/* the model's numbers and the workshops' recipes */
+#ecocard .etune { display: grid; gap: 4px; }
+#ecocard .etu { display: grid; grid-template-columns: minmax(0, 1fr) 5.6em 5.6em; gap: 8px; align-items: center; font-size: .8rem; }
+#ecocard .etu input { width: 100%; }
+#ecocard .etu em { font-style: normal; font-size: .72rem; color: var(--brass); white-space: nowrap; }
+#ecocard .etu.ch span { color: var(--brass); }
+#ecocard [data-w] select { max-width: 100%; }
+
+/* the seasons of the year */
+#climcard .clseas { margin: 2px 0 12px; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+#climcard .clseas summary { cursor: pointer; font-weight: 700; padding: 4px 0; }
+#climcard .clseas .eform { border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin: 8px 0; display: grid; gap: 6px; }
+#climcard .clseas .eform.on { border-color: var(--brass); }
+#climcard .clseas .erow { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: .8rem; }
+#climcard .clseas .erow label { display: flex; gap: 6px; align-items: center; }
+#climcard .clseas input[type="number"] { width: 5em; }
+#climcard .clseas input[type="text"] { min-width: 0; }
+#climcard .clseas select { max-width: 13em; }
+.clsl { display: grid; grid-template-columns: minmax(0, 1fr) auto auto minmax(0, 1.2fr); gap: 1px 8px; margin: 4px 0; font-size: .92em; }
+.clsl .n { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* the notice about the browser */
+#brVeil { z-index: 80; align-items: center; }
+.brsheet { width: min(560px, 100%); }
+.brsheet p { margin: 0 0 10px; line-height: 1.6; }
+.brsheet .brkeep { display: flex; gap: 8px; align-items: center; font-size: .9rem; margin-top: 4px; }
+
+/* in a lesson on a short screen the options and the scale stand to her right (see applyFit) */
+body.tutoring #mapscreen.fit .opts { left: calc(10px + var(--tush, 0px)); max-height: min(44vh, var(--tumax, 9999px)); }
+body.tutoring #mapscreen.fit.dock .opts { max-height: min(var(--tuh, var(--tuh0, calc(100vh - 380px))), var(--tumax, 9999px)); max-height: min(var(--tuh, var(--tuh0, calc(100dvh - 380px))), var(--tumax, 9999px)); }
+body.tutoring #mapscreen.fit.dock #scalebar { left: calc(342px + var(--tush, 0px)); }
+
+/* ================= v0.7.0: Bazaar Worldmaker ================= */
+/* ---------- the menu over a painting, and tighter ---------- */
+#menu { position: relative; max-width: 1240px; padding: 14px 18px 40px; }
+#menubg { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; background: #0d0f13; }
+#menubg i { position: absolute; inset: -3%; background: center / cover no-repeat; will-change: opacity, transform; }
+#menubg i.a { background-image: url(assets/bg/valley.webp); animation: bgDrift 60s ease-in-out infinite alternate; }
+#menubg i.b { background-image: url(assets/bg/forest.webp); opacity: 0; animation: bgSwap 64s ease-in-out infinite, bgDrift 60s ease-in-out infinite alternate-reverse; }
+#menubg::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(13, 15, 19, .26), rgba(13, 15, 19, .52) 46%, rgba(13, 15, 19, .86)); }
+@keyframes bgSwap { 0%, 40% { opacity: 0; } 50%, 90% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes bgDrift { from { transform: scale(1); } to { transform: scale(1.05) translateY(-1%); } }
+@media (prefers-reduced-motion: reduce) { #menubg i { animation: none !important; } }
+#menu > :not(#menubg) { position: relative; z-index: 1; }
+.brand { gap: 4px 22px; padding-bottom: 10px; margin-bottom: 12px; border-bottom-color: rgba(255, 255, 255, .16); }
+.brand h1 { font-size: 1.75rem; text-shadow: 0 2px 14px rgba(0, 0, 0, .75); }
+.brand h1 small { font-size: .68rem; margin-bottom: 1px; }
+.brand h1 em { font-style: normal; font-weight: 500; font-size: 1rem; color: var(--brass); margin-left: 12px; letter-spacing: .03em; }
+.brand p { font-size: .86rem; max-width: 56ch; color: #d6cfbb; text-shadow: 0 1px 8px rgba(0, 0, 0, .85); line-height: 1.5; }
+.menugrid { grid-template-columns: 300px minmax(0, 1fr); gap: 14px; }
+.side { gap: 10px; }
+.mcard, .mapcard { background: rgba(28, 31, 38, .88); -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px); border-color: rgba(255, 255, 255, .1); }
+.mcard { padding: 10px 12px; border-radius: 8px; }
+.mcard.lead { background: linear-gradient(180deg, rgba(48, 42, 24, .92), rgba(28, 31, 38, .88) 75%); }
+.mcard h2 { font-size: 1rem; margin-bottom: 2px; }
+.mcard p { font-size: .8rem; margin-bottom: 8px; line-height: 1.5; }
+.field { font-size: .76rem; margin-bottom: 6px; gap: 2px; }
+.field input[type=text], .field input[type=number], .field select, .inp { padding: 5px 8px; font-size: .88rem; border-radius: 6px; }
+.joinrow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.tutor { grid-template-columns: 72px minmax(0, 1fr); gap: 8px; }
+.tutor img { width: 122px; margin: -6px 0 -58px -24px; }
+.tu-go { margin-bottom: 6px; }
+.tu-chips { gap: 3px; }
+.tu-chips button { font-size: .7rem; padding: 0 7px; }
+.libhead { margin-bottom: 8px; gap: 8px; }
+.libhead h2 { font-size: 1.15rem; text-shadow: 0 2px 10px rgba(0, 0, 0, .7); }
+.libhead .btn { padding: 3px 9px; font-size: .78rem; }
+.lib { grid-template-columns: repeat(auto-fill, minmax(212px, 1fr)); gap: 10px; }
+.mapcard { border-radius: 8px; }
+.mapcard .th { aspect-ratio: 16 / 9; }
+.mapcard .bd { padding: 8px 10px 9px; gap: 3px; }
+.mapcard h3 { font-size: .94rem; line-height: 1.35; }
+.mapcard .mt { font-size: .74rem; line-height: 1.45; }
+.mapcard .acts { margin-top: 4px; gap: 4px; }
+.mapcard .acts .btn { padding: 2px 8px; font-size: .76rem; }
+.note2 { font-size: .76rem; margin-top: 10px; color: #c2bba8; text-shadow: 0 1px 6px rgba(0, 0, 0, .8); }
+#bakOn { padding: 3px 9px; font-size: .78rem; }
+.sheet { padding: 14px 16px; }
+.sheet h2 { font-size: 1.2rem; margin-bottom: 8px; }
+
+/* ---------- the map's screen, tighter: one bar, thinner cards ---------- */
+#mapscreen.fit { position: relative; }
+#mapscreen.fit .mapbar { padding: 5px 8px; gap: 5px 8px; align-items: center; }
+#mapscreen.fit .mapbar h1 { font-size: 1rem; max-width: 13ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#mapscreen.fit .mapbar .btn, #mapscreen.fit .mapbar .seg button { padding: 4px 8px; font-size: .8rem; }
+#mapscreen.fit.onebar .mapbar .sub { display: none; }
+@media (min-width: 1780px) { #mapscreen.fit.onebar .mapbar .sub { display: inline; font-size: .8rem; } #mapscreen.fit .mapbar h1 { max-width: 22ch; } }
+#mapscreen.fit.onebar .toolbar { padding: 0; }
+#mapscreen.fit.onebar .status { min-width: 0; max-width: 11.5em; overflow: hidden; text-overflow: ellipsis; display: inline-block; white-space: nowrap; }
+#mapscreen.fit.onebar .status::before { display: inline-block; margin-right: 6px; }
+#mapscreen.fit .wrap { padding: 0 8px 8px; }
+#mapscreen.fit aside { right: 8px; bottom: 8px; gap: 8px; }
+#mapscreen.fit.onebar aside { top: 0; }
+#mapscreen .card { padding: 8px 11px; }
+#mapscreen .card h2 { font-size: .95rem; margin-bottom: 6px; }
+#mapscreen aside .field { margin-bottom: 6px; }
+#mapscreen .btns { margin-top: 7px; gap: 5px; }
+#mapscreen aside .btn { padding: 4px 9px; font-size: .8rem; }
+#mapscreen .zoom { gap: 4px; }
+#mapscreen .zoom button { width: 30px; height: 30px; font-size: 16px; }
+#mapscreen .ctl button { padding: 4px 9px; }
+#mapscreen .ctl { right: 52px; flex-wrap: wrap; pointer-events: none; }   /* a narrow window: the chips take a second row and stay clear of the zoom */
+#mapscreen .ctl > * { pointer-events: auto; }
+#mapscreen.fit .opts { padding: 7px 9px; }
+#mapscreen.fit .opts .optrow { margin-top: 5px; gap: 6px 10px; }
+#mapscreen.fit .opts .seg button { padding: 4px 9px; font-size: .8rem; }
+/* a card of the side panel folds to its heading */
+#mapscreen aside .card > h2[role=button] { cursor: pointer; display: flex; align-items: center; gap: 6px; user-select: none; }
+#mapscreen aside .card > h2[role=button]::after { content: '▾'; margin-left: auto; font: 500 .7rem/1 var(--body); color: var(--muted); }
+#mapscreen aside .card > h2[role=button]:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; border-radius: 4px; }
+body:not(.tutoring) #mapscreen aside .card.shut > h2[role=button]::after { content: '▸'; color: var(--brass); }
+body:not(.tutoring) #mapscreen aside .card.shut > :not(h2) { display: none !important; }
+body:not(.tutoring) #mapscreen aside .card.shut > h2 { margin-bottom: 0; }
+
+/* ---------- the tool's options: a title bar to drag them by, and to fold them to ---------- */
+.ohead { display: none; }
+#mapscreen.fit .ohead { display: flex; align-items: center; gap: 6px; margin: -7px -9px 6px; padding: 2px 3px 2px 8px; border-bottom: 1px solid var(--line); cursor: grab; user-select: none; touch-action: none; background: #23262e; position: sticky; top: -7px; z-index: 2; }
+body.tutoring #mapscreen.fit .ohead { cursor: default; }
+.ohead .ogrip, .tiphead .tipgrip { color: var(--muted); font-size: .86rem; line-height: 1; }
+.ohead .otitle { flex: 1; min-width: 0; font-size: .76rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ohead button, .tiphead button { all: unset; box-sizing: border-box; cursor: pointer; width: 22px; height: 20px; text-align: center; color: var(--brass); border-radius: 4px; font-size: .8rem; line-height: 20px; }
+.ohead button:hover, .ohead button:focus-visible, .tiphead button:hover, .tiphead button:focus-visible { background: #343945; }
+.opts.dragging, .tip.dragging { opacity: .9; }
+.opts.dragging .ohead, .tip.dragging .tiphead { cursor: grabbing; }
+#mapscreen.fit .opts.moved { width: 310px; max-width: 310px; max-height: min(70vh, 560px); box-shadow: 0 8px 26px rgba(0, 0, 0, .5); }
+#mapscreen.fit .opts.moved .hint, #mapscreen.fit .opts.moved .autobox > span:last-child { white-space: normal; max-width: none; }
+#mapscreen.fit .opts.folded { width: auto; min-width: 180px; max-width: 280px; overflow: hidden; }
+#mapscreen.fit .opts.folded > :not(.ohead) { display: none !important; }
+#mapscreen.fit .opts.folded .ohead { margin-bottom: -7px; border-bottom: 0; position: static; }
+#mapscreen.fit .mapcol:has(#mapbox[data-mode="view"]) .opts.folded, #mapscreen.fit .mapcol:has(#mapbox[data-mode="view"]) .opts.moved { display: block; }
+#mapscreen.fit.noopts .opts { display: none !important; }
+
+/* ---------- the card of what is pointed at: it rests where it is put, and folds to its title ---------- */
+.tip { pointer-events: auto; padding: 0; min-width: 190px; max-width: 300px; z-index: 5; box-shadow: 0 6px 22px rgba(0, 0, 0, .5); }
+.tiphead { display: flex; align-items: center; gap: 6px; padding: 2px 3px 2px 8px; cursor: grab; user-select: none; touch-action: none; border-bottom: 1px solid var(--line); background: rgba(255, 255, 255, .03); }
+.tiphead .tiptitle { flex: 1; min-width: 0; font-size: .74rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tipbody { padding: 6px 10px 8px; max-height: min(44vh, 360px); overflow: auto; scrollbar-width: thin; }
+.tip.folded { min-width: 0; }
+.tip.folded .tipbody { display: none; }
+.tip.folded .tiphead { border-bottom: 0; }
+.tip.folded .tiptitle { color: var(--text); font-family: var(--display); font-weight: 700; font-size: .88rem; }
+
+/* ---------- the room: its panel hangs under its chip ---------- */
+.roomchip { background: transparent; font: inherit; font-size: .8rem; cursor: pointer; padding: 2px 10px; }
+.roomchip:hover, .roomchip:focus-visible { background: rgba(124, 196, 127, .12); outline: none; }
+.roomchip.ping { animation: chipPing 1.1s ease-out 3; }
+@keyframes chipPing { 0% { box-shadow: 0 0 0 0 rgba(124, 196, 127, .75); } 100% { box-shadow: 0 0 0 14px rgba(124, 196, 127, 0); } }
+@media (prefers-reduced-motion: reduce) { .roomchip.ping { animation: none; outline: 2px solid var(--good); } }
+#mapscreen.fit #roomPanel { position: absolute; right: 8px; top: 40px; z-index: 30; width: min(480px, calc(100vw - 16px)); max-height: calc(100vh - 56px); max-height: calc(100dvh - 56px); overflow: auto; margin: 0; box-shadow: 0 14px 44px rgba(0, 0, 0, .65); border-color: #3c5c3f; background: #1c1f26; }
+#roomPanel .big { font-size: 1.25rem; }
+.people { display: grid; gap: 5px; margin: 7px 0; }
+.people li { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 8px; font-size: .86rem; }
+.people li small { font-size: .68rem; color: var(--brass); border: 1px solid #6b5a34; border-radius: 99px; padding: 0 6px; line-height: 1.5; }
+.people .pp { border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; background: #181b21; }
+.people .pst { color: var(--good); font-size: .78rem; }
+.people .pp .pst { flex-basis: 100%; }
+.people .btn.armed { background: #5a2a2a; border-color: #e7b0a0; color: #ffd9cf; }
+.people .pact { margin-left: auto; display: inline-flex; gap: 4px; }
+.people .pmeta { flex-basis: 100%; color: var(--muted); font-size: .74rem; font-variant-numeric: tabular-nums; }
+.bans { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; margin: 6px 0; font-size: .8rem; }
+.banrow { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 6px; padding: 1px 3px 1px 8px; }
+.banrow small { color: var(--muted); font-size: .72rem; }
+.banrow .btn { padding: 0 7px; font-size: .74rem; }
+.roomlog { list-style: none; margin: 6px 0; padding: 6px 0 0; border-top: 1px dashed var(--line); font-size: .76rem; color: var(--muted); max-height: 7.6em; overflow: auto; scrollbar-width: thin; }
+.roomlog time { font-variant-numeric: tabular-nums; color: var(--text); margin-right: 4px; }
+
+/* Where the window is too narrow for the strip, the options float over the map. They keep to their title bar and first row while
+   nobody is in them, so the map's corner shows; a pointer over them or a keyboard inside them opens them whole. Dragged to a
+   place of the owner's choosing they stay open, and folded they are the title bar alone. */
+#mapscreen.fit:not(.dock) .opts:not(.moved):not(.folded) { transition: max-height .16s ease; }
+body:not(.tutoring) #mapscreen.fit:not(.dock) .opts:not(.moved):not(.folded):not(.dragging):not(:hover):not(:has(:focus-visible)) { max-height: 4.9rem; overflow: hidden; }
+body:not(.tutoring) #mapscreen.fit:not(.dock) .opts:not(.moved):not(.folded):not(.dragging):not(:hover):not(:has(:focus-visible))::after { content: '⌄'; position: absolute; left: 0; right: 0; bottom: 0; height: 1.05rem; display: flex; align-items: flex-end; justify-content: center; font-size: .8rem; line-height: 1; color: var(--brass); background: linear-gradient(rgba(27, 30, 37, 0), rgba(27, 30, 37, .98) 70%); pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { #mapscreen.fit:not(.dock) .opts { transition: none !important; } }
+#mapscreen.fit .opts select, #mapscreen.fit .opts input[type=text] { max-width: 100%; }
+
+/* ---------- the account, on a page that signs people in itself ---------- */
+.acct { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: rgba(255, 255, 255, .03); font-size: .8rem; color: var(--muted); }
+.acct img { width: 22px; height: 22px; border-radius: 50%; flex: none; }
+.acct span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acct span b { color: var(--text); font-weight: 600; }
+.acct .btn { flex: none; padding: 3px 9px; font-size: .78rem; }
+
+/* ---- v0.9.0: the size of the page's letters, folds in the GDP list, organisations, a state's balance of trade ---- */
+.uisize { display: inline-flex; align-items: center; gap: 8px; font-size: .8rem; color: var(--muted); }
+.uisize.fixed { position: fixed; right: 12px; bottom: 44px; z-index: 5; background: rgba(20,22,27,.82); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+.uisize .seg button[data-ui="s"] { font-size: .72rem; } .uisize .seg button[data-ui="l"] { font-size: 1rem; }
+#ecocard details.efold { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 6px; }
+#ecocard details.efold > summary { cursor: pointer; font-family: var(--display, inherit); font-weight: 700; font-size: .92rem; padding: 2px 0 6px; list-style-position: inside; }
+#ecocard details.efold > summary small { font-weight: 400; color: var(--muted); font-size: .76rem; margin-left: 6px; }
+#ecocard .etable .eth.sortable span { cursor: pointer; user-select: none; }
+#ecocard .etable .eth.sortable span:hover { color: var(--text); }
+#ecocard .eform.picked { border-color: var(--brass, #d9b25c); box-shadow: 0 0 0 1px var(--brass, #d9b25c) inset; }
+#ecocard .ochip { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--line); border-radius: 999px; padding: 0 4px 0 8px; margin: 2px 4px 2px 0; font-size: .78rem; white-space: nowrap; }
+#ecocard .ochip button { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: .95rem; line-height: 1; padding: 2px 4px; }
+#ecocard .ochip button:hover { color: var(--warn); }
+.odot { width: 9px; height: 9px; display: inline-block; transform: rotate(45deg); margin-right: 6px; vertical-align: 0; flex: none; }
+#ecocard .btn.on { border-color: var(--brass, #d9b25c); color: var(--brass, #d9b25c); }
+.mapbox.orgpick canvas { cursor: pointer; }
+#tradecard .etable { display: grid; gap: 3px 8px; font-size: .8rem; font-variant-numeric: tabular-nums; }
+#tradecard .etable .eth, #tradecard .etable .etr { display: grid; grid-template-columns: minmax(0, 1.5fr) 1fr 1fr .9fr; gap: 6px; align-items: center; }
+#tradecard .etable .eth { color: var(--muted); border-bottom: 1px solid var(--line); padding-bottom: 2px; }
+#tradecard .etable span:not(:first-child) { text-align: right; }
+#tradecard .etable .pos { color: var(--good); } #tradecard .etable .neg { color: var(--warn); }
+#tradecard h4 { margin: 10px 0 4px; font-size: .86rem; }
+body:has(#mapscreen:not([hidden])) .uisize.fixed { display: none; }
+.lsw { width: 11px; height: 11px; display: inline-block; border: 1px solid rgba(255,255,255,.25); margin: 0 5px 0 8px; vertical-align: -1px; }
+.tr .lsw:first-child { margin-left: 0; }
+.tierpick { order: 9; display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 4px 0 8px; background: var(--panel, rgba(20,22,27,.9)); }
+.tierpick select { border: 0; background: transparent; color: var(--text); font: inherit; padding: 5px 2px; max-width: 11em; }
+.tierpick select option { background: #1b1e24; color: #eee; }
+.tierpick.own select { width: 6.3em; }
+.tierpick input { width: 7.4em; border: 0; border-left: 1px solid var(--line); background: transparent; color: var(--text); font: inherit; padding: 5px 4px 5px 7px; text-align: right; font-variant-numeric: tabular-nums; }
+.tierpick input:focus { outline: 1px solid var(--brass); outline-offset: -1px; border-radius: 3px; }
+.tierpick input.bad, .erow input.bad { color: #ff9a8a; outline: 1px solid #c8553d; outline-offset: -1px; }
+.tierpick input[hidden], .tierpick input[hidden] + .tu { display: none; }
+.tierpick .tu { padding-right: 4px; }
+
+/* ---- v0.13.0: the city's folding tables, a state's choices, a city's lot ---- */
+#tradecard details.tfold { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 5px; }
+#tradecard details.tfold > summary { cursor: pointer; font-family: var(--display, inherit); font-weight: 700; font-size: .9rem; padding: 2px 0 5px; list-style-position: inside; }
+#tradecard details.tfold > summary small { font-weight: 400; color: var(--muted); font-size: .76rem; margin-left: 6px; }
+#tradecard .etable.g6 .eth, #tradecard .etable.g6 .etr { grid-template-columns: minmax(0, 1.9fr) repeat(5, minmax(0, .8fr)); gap: 4px; }
+#tradecard .etable .eth.sortable span { cursor: pointer; user-select: none; }
+#tradecard .etable .eth.sortable span:hover { color: var(--text); }
+#tradecard .etable .etr span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#tradecard .etable .etr span:first-child i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
+#tradecard .soclot { flex-wrap: wrap; gap: 6px 10px; font-size: .84rem; }
+#tradecard .soclot label { display: inline-flex; align-items: center; gap: 4px; }
+#tradecard .soclot input { width: 4.2em; }
+#ecocard details.stfold > summary .sdot { margin-right: 6px; }
+#ecocard .polset { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 4px 0 6px; font-size: .84rem; }
+#ecocard .polset label { display: inline-flex; align-items: center; gap: 4px; cursor: help; }
+#ecocard .etable .etr em, #ecocard .etable .etr span em { font-style: normal; color: var(--brass); font-size: .88em; }
+
+/* ---- v0.14.0: classes ---- */
+#ecocard .etable.g5c .eth, #ecocard .etable.g5c .etr, #tradecard .etable.g5c .eth, #tradecard .etable.g5c .etr { grid-template-columns: minmax(0, 1.4fr) repeat(4, minmax(0, 1fr)); }
+#ecocard .etable.g5c span:not(:first-child), #tradecard .etable.g5c span:not(:first-child) { text-align: right; }
+#ecocard .etable.g5c .etr span:first-child, #tradecard .etable.g5c .etr span:first-child { cursor: help; }
+#ecocard .clsgrp { margin: 6px 0 10px; }
+#ecocard .clsgrp h4 { margin: 6px 0 4px; }
+#ecocard .clsgrp h4 small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+#ecocard .clsv .tr, #tradecard .clsv .tr { font-size: .8rem; margin: 3px 0; }
+#mapscreen .vfoot { font-size: .74rem; color: var(--muted); text-align: right; padding: 4px 4px 10px; font-variant-numeric: tabular-nums; }
+/* ---- v0.14.0: one card a state, one card a city ---- */
+#ecocard details.scard { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px 8px; margin-top: 8px; background: rgba(255, 255, 255, .015); }
+#ecocard details.scard > summary { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; list-style: none; }
+#ecocard details.scard > summary::-webkit-details-marker { display: none; }
+#ecocard details.scard > summary::before { content: '▸'; color: var(--muted); width: 1em; }
+#ecocard details.scard[open] > summary::before { content: '▾'; }
+.schips { display: flex; flex-wrap: wrap; gap: 4px; flex-basis: 100%; margin-top: 2px; }
+.chip0 { display: inline-flex; align-items: center; gap: 4px; font-size: .74rem; font-weight: 400; color: var(--text); background: rgba(255, 255, 255, .06); border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; font-variant-numeric: tabular-nums; }
+.chip0.pos { color: var(--good, #7fc97f); } .chip0.neg { color: var(--warn, #e9806e); } .chip0.ok { color: var(--brass); }
+.chip0.link { cursor: pointer; } .chip0.link:hover { border-color: var(--brass); }
+#ecocard .ssec { border-top: 1px dashed var(--line); padding-top: 6px; margin-top: 8px; }
+#ecocard .ssec h5 { margin: 0 0 4px; font-size: .82rem; color: var(--brass); font-weight: 700; }
+#ecocard .sbtns { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 6px 0 2px; }
+#ecocard .sbtns .btn.on { border-color: var(--brass); color: var(--brass); }
+#ecocard .srel { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 4px 10px; }
+#ecocard .srel label { display: flex; align-items: center; gap: 6px; font-size: .84rem; }
+#ecocard .srel label span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ecocard details.sinner { margin-top: 8px; }
+.lnk { all: unset; cursor: pointer; color: var(--brass); font-size: .78em; font-weight: 400; margin-left: 6px; }
+.lnk:hover, .lnk:focus-visible { text-decoration: underline; }
+#ecocard .etr .lnk { color: var(--text); font-size: inherit; margin-left: 0; }
+
+/* v0.15.1: the settings of four modes live in the side panel; when it is hidden, the options say so and bring it back */
+.sidehint { display: none; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; padding: 6px 10px; border: 1px solid var(--gold, #d9b45a); border-radius: 8px; font-size: 13px; }
+#mapscreen.fit.noside .sidehint { display: flex; }
+/* v0.15.1: the world's settings, on the map beside its people (the owner's): each opens its settings in the side panel */
+.setpick { order: 10; display: inline-flex; align-items: center; gap: 2px; font-size: .8rem; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 2px 2px 2px 8px; background: var(--panel, rgba(20,22,27,.9)); }
+.setpick > span { margin-right: 4px; }
+#mapscreen .ctl .setpick button { padding: 3px 8px; border: 0; border-radius: 4px; background: transparent; color: var(--text); font: inherit; cursor: pointer; }
+#mapscreen .ctl .setpick button:hover { background: rgba(217,180,90,.15); }
+#mapscreen .ctl .setpick button[aria-pressed="true"] { background: rgba(217,180,90,.28); color: var(--brass, #d9b45a); }
+/* v0.16.0: the features of the ground, a row of the painting tool */
+.fprow { align-items: flex-start; }
+.fpal { display: flex; flex-wrap: wrap; gap: 4px; }
+#featbody .fk summary { cursor: pointer; }
+#featbody .fk .erow input[type=number] { width: 5.5em; }
+#featbody .fk .erow input[type=text] { width: 11em; }
+
+/* v0.18.0: people online, the public chat and the back office (hub.js) */
+.hubhead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.hubhead h2 { margin: 0; }
+#hubOnline { color: var(--muted, #b9b2a2); font-size: .92em; }
+#hubOnline b { color: #8fdc8a; }
+.hublist { height: 210px; overflow-y: auto; margin: 8px 0; padding: 6px 8px; background: rgba(0, 0, 0, .22); border: 1px solid var(--line, #3a3a3a); border-radius: 6px; font-size: .93em; }
+.hubm { padding: 3px 0; line-height: 1.45; }
+.hubm b { color: #e8c37a; margin-right: 6px; font-weight: 600; }
+.hubm.mine b { color: #9fd0f0; }
+.hubm time { color: var(--muted, #9a9384); font-size: .82em; margin-right: 6px; }
+.hubm span { word-break: break-word; }
+.hubm em { font-style: normal; margin-left: 6px; }
+.hubm em .lnk { font-size: .82em; margin-left: 4px; }
+.hubempty { color: var(--muted, #9a9384); margin: 6px 0; }
+.hubin { display: flex; gap: 6px; }
+.hubin input { flex: 1; min-width: 0; }
+.hubsheet { max-width: 920px; width: min(920px, 96vw); }
+#hubBoTabs { margin: 6px 0 10px; flex-wrap: wrap; }
+#hubBo { max-height: 62vh; overflow: auto; }
+.hubt > div { display: grid; gap: 8px; padding: 4px 0; border-bottom: 1px solid rgba(255, 255, 255, .06); align-items: baseline; }
+.hubt.hub4 > div { grid-template-columns: 2fr 1.4fr 1fr 1fr; }
+.hubt.hub5 > div { grid-template-columns: 2fr 1.3fr 1.3fr .8fr 1.1fr; }
+.hubt .hubh { color: var(--muted, #9a9384); font-size: .88em; }
+#acctId code, .hubt code { font-size: .85em; user-select: all; }
+
+/* v0.18.1: sharing the page */
+.sharebtn { align-self: center; margin-left: auto; }
+.sharesheet { max-width: 520px; width: min(520px, 94vw); }
+.sharerow { display: flex; gap: 6px; margin: 10px 0; }
+.sharerow input { flex: 1; min-width: 0; font-size: .92em; }
+.sharevia { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* v0.18.3: the statistics page, and what each account left with the owner */
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; margin-bottom: 6px; }
+.tile { background: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+.tile span { color: var(--muted); font-size: .8rem; }
+.tile b { font-size: 1.35rem; color: var(--text); font-variant-numeric: tabular-nums; }
+.tile small { color: var(--muted); font-size: .76rem; }
+h3.ch { font-size: .92rem; font-weight: 600; margin: 14px 0 4px; color: var(--text); }
+svg.chart { width: 100%; height: auto; display: block; }
+svg.chart .bar { fill: var(--brass); }
+svg.chart .hit { fill: transparent; }
+svg.chart .hit:hover { fill: rgba(255, 255, 255, .05); }
+svg.chart .grid { stroke: rgba(255, 255, 255, .07); stroke-width: 1; }
+svg.chart .base { stroke: var(--line); stroke-width: 1; }
+svg.chart .ax { fill: var(--muted); font-size: 10px; font-family: var(--body); }
+.hbars > div { display: grid; grid-template-columns: minmax(90px, 1.3fr) 3fr 70px; gap: 8px; align-items: center; padding: 3px 0; font-size: .86rem; }
+.hbars > div > span:last-child { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.hb, .quotabar, .minibar { display: block; background: rgba(255, 255, 255, .06); border-radius: 4px; height: 10px; overflow: hidden; }
+.hb i, .quotabar i, .minibar i { display: block; height: 100%; background: var(--brass); border-radius: 4px; }
+.minibar { display: inline-block; width: 60px; height: 7px; vertical-align: middle; }
+.quota { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 10px; font-size: .88rem; color: var(--muted); }
+.quotabar { height: 12px; }
+.quotabar.hot i { background: var(--warn); }
+.cloudfull { border: 1px solid var(--warn); background: rgba(226, 116, 138, .08); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+.cloudfull b { color: var(--warn); }
+.cloudfull p { margin: 4px 0 8px; font-size: .9rem; }
+.cloudt > div { grid-template-columns: 1.7fr 1.2fr .6fr 2.1fr; }
+.cloudt .lnk { white-space: nowrap; }
+b.warn { color: var(--warn); font-weight: 600; }
+.hubtip { position: fixed; z-index: 80; pointer-events: none; background: #0e1014; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font-size: .8rem; max-width: 280px; }
+/* v0.19.0: the terms of use */
+.policysheet { width: min(860px, 94vw); max-height: 88vh; display: flex; flex-direction: column; }
+.policybody { overflow: auto; flex: 1; padding: 4px 6px 4px 2px; line-height: 1.75; font-size: .95rem; outline: none; }
+.policybody h1 { font-size: 1.3rem; } .policybody h2 { font-size: 1.1rem; margin: 1.2em 0 .4em; }
+.policybody table { border-collapse: collapse; width: 100%; margin: .6em 0; font-size: .9rem; }
+.policybody th, .policybody td { border: 1px solid var(--line, #333844); padding: 5px 8px; text-align: left; vertical-align: top; }
+.policybody ol, .policybody ul { padding-left: 1.4em; }
+/* v0.19.0: the front row of the menu, as a game's */
+.gamebar { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: 12px; margin: 6px 0 18px; }
+.gbtn { flex: 1 1 180px; min-height: 74px; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 2px; padding: 12px 18px; border-radius: 10px; border: 1px solid rgba(207, 169, 94, .35); background: linear-gradient(160deg, rgba(40, 36, 30, .88), rgba(22, 24, 30, .92)); color: #f1e6c8; cursor: pointer; text-align: left; box-shadow: 0 6px 18px rgba(0, 0, 0, .35); transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease; }
+.gbtn:hover, .gbtn:focus-visible { transform: translateY(-2px); border-color: #cfa95e; box-shadow: 0 10px 24px rgba(0, 0, 0, .45), 0 0 0 1px rgba(207, 169, 94, .35) inset; }
+.gbtn .gk { font-family: 'Noto Serif Thai', Georgia, serif; font-size: 1.25rem; font-weight: 700; letter-spacing: .01em; }
+.gbtn small { color: #b9ad8e; font-size: .85rem; }
+.gbtn.main { background: linear-gradient(160deg, #cfa95e, #9b7a3a); color: #1d1a14; border-color: #e5c682; }
+.gbtn.main small { color: #3a2e1a; }
+.mcard.tutor.glow { animation: tglow 1.6s ease 2; }
+@keyframes tglow { 50% { box-shadow: 0 0 0 3px rgba(207, 169, 94, .8), 0 0 30px rgba(207, 169, 94, .5); } }
+@media (prefers-reduced-motion: reduce) { .gbtn { transition: none; } .mcard.tutor.glow { animation: none; } }
+/* v0.19.2: four sizes (automatic first): the label above, the buttons on one line */
+.uisize { flex-wrap: wrap; row-gap: 4px; }
+.uisize .seg { flex-wrap: nowrap; }
+.uisize .seg button { white-space: nowrap; }
+/* v0.19.2: on a phone the letter size and the version sit at the foot of the menu, in the flow, so they cover nothing */
+@media (max-width: 760px) {
+  .uisize.fixed { position: static; margin: 12px 10px 4px; }
+  #vtag { position: static; display: block; width: max-content; margin: 4px 10px 12px auto; }
+}
+#nmImage .rng { grid-template-columns: 1fr 84px; }
+#nmImage .rowx { align-items: center; flex-wrap: wrap; }
+#nmInv[aria-pressed=true] { background: var(--brass); color: #1a1508; }
+#nmSeedRow[hidden], #nmGenHint[hidden], #nmImage[hidden] { display: none; }
+/* v0.21.0: a size of the player's own */
+.sizeopt .sizein { display: flex; align-items: center; gap: 4px; margin: 3px 0; color: var(--text); }
+.sizeopt .sizein input { position: static; opacity: 1; width: 4.6em; padding: 2px 4px; background: var(--paper, #1b1e25); color: var(--text); border: 1px solid var(--line); border-radius: 4px; font: inherit; }
+.sizeopt .heavy { color: #e8b26a; }
+</style>
+</head>
+<body>
+<div id="menu">
+  <div id="menubg" aria-hidden="true"><i class="a"></i><i class="b"></i></div>
+  <div class="brand">
+    <h1><small>Kirana Worldbuilding Tools</small>Bazaar Worldmaker<em>The World Bazaar</em></h1>
+    <p>Build hex maps, paint the land, lay rivers, cities, roads and trade routes, then invite friends to edit the same map with you at the same time</p>
+    <button type="button" class="btn sharebtn" id="shareBtn">Share Bazaar Worldmaker</button>
+    <button type="button" class="btn sharebtn" id="policyBtn">Terms of use</button>
+    <button type="button" class="btn sharebtn" id="langBtn" hidden>English</button>
+  </div>
+  <nav class="gamebar" id="gameBar" aria-label="Main menu">
+    <button type="button" class="gbtn main" id="gContinue" hidden><span class="gk">Continue</span><small id="gContinueName"></small></button>
+    <button type="button" class="gbtn" id="gNew"><span class="gk">New world</span><small>Empty sea or random land</small></button>
+    <button type="button" class="gbtn" id="gLib"><span class="gk">Map library</span><small id="gLibCount"></small></button>
+    <button type="button" class="gbtn" id="gLearn"><span class="gk">Lessons</span><small>Learn with Nemessiah</small></button>
+  </nav>
+  <div class="menugrid">
+    <div class="side">
+      <div class="mcard lead">
+        <h2>New map</h2>
+        <p>Choose a size, then start from an empty sea or let the engine scatter land, mountains and rivers for you</p>
+        <div class="rowx"><button type="button" class="btn brass" id="newBtn">New map</button>
+        <button type="button" class="btn" id="impBtn">Import a map file</button></div>
+        <input type="file" id="impFile" accept=".json,application/json" hidden>
+      </div>
+      <div class="mcard">
+        <h2>Edit maps together</h2>
+        <p>Join a friend's room with the code the map's owner gives you. To invite friends to edit your map, open it and press Open a shared room</p>
+        <div class="acct" id="acct" hidden><img id="acctPic" alt="" hidden><span id="acctWho"></span><button type="button" class="btn" id="acctBtn"></button></div>
+        <div class="note2" id="acctId" hidden></div>
+        <div class="joinrow"><label class="field" for="myName">Name your friends will see<input type="text" id="myName" maxlength="24" autocomplete="off" placeholder="e.g. Non"></label>
+        <label class="field" for="joinCode">Room code<input type="text" id="joinCode" class="code" maxlength="12" autocomplete="off" placeholder="K7Q2XD-9FAB"></label></div>
+        <button type="button" class="btn brass" id="joinBtn">Join room</button>
+      </div>
+      <div class="mcard hubnote" id="hubNote" hidden></div>
+      <div class="mcard hubcard" id="hubCard" hidden>
+        <div class="hubhead"><h2>Public chat</h2><span id="hubOnline"></span><span style="flex:1"></span><button type="button" class="btn" id="hubAdminBtn" data-hub="open" hidden>Back office</button></div>
+        <div class="hublist" id="hubList" aria-live="polite"></div>
+        <div class="hubin"><input type="text" id="hubMsg" maxlength="300" autocomplete="off" aria-label="Message in the public chat"><button type="button" class="btn brass" id="hubSend" data-hub="send">Send</button></div>
+        <p class="note2" id="hubWhy"></p>
+      </div>
+      <div class="mcard tutor">
+        <img src="assets/nem/smile.webp" alt="Nemessiah, the Vermilion Prophet" width="950" height="1100">
+        <div id="tutorCard"></div>
+      </div>
+    </div>
+    <div>
+      <div class="libhead"><h2>Map library</h2><span id="libCount"></span><span style="flex:1"></span><button type="button" class="btn" id="gresAgain" hidden>Read Gresland from the old page again</button><button type="button" class="btn" id="bakAll">Back up the whole library as one file</button></div>
+      <div class="lib" id="lib"></div>
+      <p class="note2" id="storeNote"></p>
+      <button type="button" class="btn" id="bakOn" hidden></button>
+      <p class="note2" id="hubCloud" hidden></p>
+    </div>
+  </div>
+</div>
+<div id="mapscreen" hidden></div>
+<div class="veil" id="newVeil" hidden>
+  <div class="sheet" role="dialog" aria-labelledby="nmHead">
+    <h2 id="nmHead">New map</h2>
+    <div class="sheetgrid">
+      <div>
+        <label class="field" for="nmTitle">Map name<input type="text" id="nmTitle" maxlength="80" autocomplete="off" placeholder="New map"></label>
+        <span class="lblx">Canvas size</span>
+        <div class="sizes" id="nmSizes"></div>
+        <label class="field" for="nmKm">Distance per hex (km)<input type="number" id="nmKm" min="0.1" max="1000" step="0.5" value="30"></label>
+        <div class="lbl" id="nmKmNote"></div>
+        <div class="lbl">30 km is about a day's walk or caravan travel. The Gresland map uses 34 km a hex, for a continent of 12 million km²</div>
+        <span class="lblx">Starting ground</span>
+        <div class="seg2" id="nmStart"><button type="button" data-v="random">Random terrain</button><button type="button" data-v="blank">Empty sea</button><button type="button" data-v="image">From a picture</button></div>
+        <div id="nmImage" hidden>
+          <span class="lblx">Source picture</span>
+          <div class="rowx"><button type="button" class="btn" id="nmPick">Choose a picture</button><span class="lbl" id="nmPicName">No picture chosen yet</span></div>
+          <input type="file" id="nmPicFile" accept="image/*" hidden>
+          <span class="lblx">Read it as</span>
+          <div class="seg2" id="nmRead"><button type="button" data-v="auto">Automatic</button><button type="button" data-v="blue">Blue is water</button><button type="button" data-v="dark">Dark is land</button><button type="button" data-v="light">Light is land</button><button type="button" data-v="line">Line drawing</button></div>
+          <label class="lblx" for="nmCut">Land and water split</label>
+          <div class="rng"><input type="range" id="nmCut" min="0" max="100" value="50"><output id="nmCutV">Automatic</output></div>
+          <span class="lblx">Placement</span>
+          <div class="seg2" id="nmFit"><button type="button" data-v="fit">Fit inside, the rest is sea</button><button type="button" data-v="fill">Stretch to fill</button></div>
+          <div class="rowx" style="margin-top:8px"><button type="button" class="btn" id="nmInv" aria-pressed="false">Swap land and water</button><label class="lbl"><input type="checkbox" id="nmClean" checked> Drop one-hex islands and ponds</label></div>
+          <p class="hint">The picture is read on this computer only and sent nowhere. The map you get has only grassland, sea and lakes; add mountains and rivers in terrain mode</p>
+        </div>
+        <div id="nmRandom">
+          <span class="lblx">Landmass</span>
+          <div class="seg2" id="nmStyle"><button type="button" data-v="continent">One continent</button><button type="button" data-v="continents">Several continents</button><button type="button" data-v="isles">Archipelago</button></div>
+          <label class="lblx" for="nmLand">Land share</label>
+          <div class="rng"><input type="range" id="nmLand" min="12" max="65" value="38"><output id="nmLandV">38%</output></div>
+          <label class="lblx" for="nmRelief">Mountains</label>
+          <div class="rng"><input type="range" id="nmRelief" min="0" max="100" value="45"><output id="nmReliefV">45%</output></div>
+          <span class="lblx">Climate</span>
+          <div class="seg2" id="nmClimate"><button type="button" data-v="mixed">Cold north, hot south</button><button type="button" data-v="cold">Cold</button><button type="button" data-v="temperate">Temperate</button><button type="button" data-v="hot">Hot</button></div>
+          <span class="lblx">Prevailing wind from</span>
+          <div class="seg2" id="nmWind"><button type="button" data-v="W">West</button><button type="button" data-v="E">East</button></div>
+          <span class="lblx">Rivers</span>
+          <div class="seg2" id="nmRivers"><button type="button" data-v="-1">None</button><button type="button" data-v="0">Few</button><button type="button" data-v="1">Some</button><button type="button" data-v="2">Many</button></div>
+        </div>
+      </div>
+      <div>
+        <span class="lblx" style="margin-top:0">Preview</span>
+        <canvas id="nmPrev" width="318" height="209"></canvas>
+        <div class="lbl" id="nmStat" style="margin-top:6px"></div>
+        <div class="rowx" id="nmSeedRow" style="margin-top:10px">
+          <label class="field" for="nmSeed" style="margin:0;flex:1">Seed<input type="number" id="nmSeed" min="1" max="999999" step="1"></label>
+          <button type="button" class="btn" id="nmReroll" style="align-self:flex-end">New seed</button>
+        </div>
+        <p class="hint" id="nmGenHint">The windward side is wetter and the lee of the ranges drier. Rivers start in the mountains and run to the sea or a lake. Everything can be edited after creation</p>
+      </div>
+    </div>
+    <div class="foot"><button type="button" class="btn" id="nmCancel">Cancel</button><button type="button" class="btn brass" id="nmCreate">Create map</button></div>
+  </div>
+</div>
+<div class="veil" id="brVeil" hidden>
+  <div class="sheet brsheet" role="dialog" aria-labelledby="brHead" aria-describedby="brText">
+    <h2 id="brHead">Best used in Google Chrome</h2>
+    <p id="brText">Bazaar Worldmaker is tested only on Google Chrome on a computer. Other browsers may open it but have not been tested; the riskiest parts are saving maps on this computer and shared rooms</p>
+    <p id="brNow" class="note2"></p>
+    <p id="brOff" class="note2" hidden>This is the offline file. Maps are kept only in the browser that opens this file; opened in another browser, the same file will not show the same maps. Shared rooms work only between tabs of one browser, and before real work you should always export your map files as a backup</p>
+    <label class="brkeep"><input type="checkbox" id="brKeep"> Don't show this again in this browser</label>
+    <div class="foot"><button type="button" class="btn brass" id="brOk">Got it, let's start</button></div>
+  </div>
+</div>
+<div class="veil" id="hubVeil" hidden>
+  <div class="sheet hubsheet" role="dialog" aria-labelledby="hubBoHead">
+    <h2 id="hubBoHead">Developer back office</h2>
+    <div class="seg" id="hubBoTabs"><button type="button" data-hub="view" data-v="dash">Statistics</button><button type="button" data-hub="view" data-v="on">Online now</button><button type="button" data-hub="view" data-v="stat">Daily log</button><button type="button" data-hub="view" data-v="maps">Stored maps</button><button type="button" data-hub="view" data-v="chat">Chat</button></div>
+    <div id="hubBo"></div>
+    <div class="foot"><button type="button" class="btn" data-hub="close">Close</button></div>
+  </div>
+</div>
+<div class="veil" id="cloudVeil" hidden>
+  <div class="sheet hubsheet" role="dialog" aria-labelledby="cloudHead">
+    <h2 id="cloudHead">Maps stored with the developer</h2>
+    <div id="cloudBody"></div>
+    <div class="foot"><button type="button" class="btn" data-hub="storeclose">Close</button></div>
+  </div>
+</div>
+<div id="hubTip" class="hubtip" hidden></div>
+<div class="veil" id="shareVeil" hidden>
+  <div class="sheet sharesheet" role="dialog" aria-labelledby="shareHead">
+    <h2 id="shareHead">Share Bazaar Worldmaker</h2>
+    <p class="note2">Send your friends the link to the official page. They can use it in their browser at once, with nothing to install</p>
+    <div class="sharerow"><input type="text" id="shareUrl" readonly aria-label="Bazaar Worldmaker link"><button type="button" class="btn brass" id="shareCopy">Copy link</button></div>
+    <div class="sharevia">
+      <button type="button" class="btn" id="shareNative" hidden>Share through an app on this device</button>
+      <button type="button" class="btn" data-share="facebook">Facebook</button>
+      <button type="button" class="btn" data-share="line">LINE</button>
+      <button type="button" class="btn" data-share="x">X</button>
+    </div>
+    <div class="foot"><button type="button" class="btn" id="shareClose">Close</button></div>
+  </div>
+</div>
+<div class="veil" id="policyVeil" hidden>
+  <div class="sheet policysheet" role="dialog" aria-labelledby="policyHead">
+    <h2 id="policyHead">Terms of use</h2>
+    <div class="policybody" id="policyBody" tabindex="0"></div>
+    <div class="foot"><button type="button" class="btn" id="policyClose">Close</button></div>
+  </div>
+</div>
+<div id="mtoast" role="status" hidden></div>
+<div class="uisize fixed"><span>Text size</span><div class="seg"><button type="button" data-ui="a">Automatic</button><button type="button" data-ui="s">Small</button><button type="button" data-ui="m">Medium</button><button type="button" data-ui="l">Large</button></div></div>
+<div id="vtag"></div>
+<template id="tpl-map">
+<header class="mapbar">
+  <button type="button" class="btn" id="mmBack">← Map library</button>
+  <h1 id="mmTitle"></h1>
+  <span class="sub" id="mmSub"></span>
+  <span class="grow"></span>
+  <button type="button" class="roomchip" id="roomChip" hidden title="Show or hide the room panel" aria-controls="roomPanel"><i></i><span id="roomChipText"></span></button>
+  <button type="button" class="btn brass" id="roomOpen">Open a shared room</button>
+</header>
+<div class="card" id="roomName" hidden style="margin:0 20px 12px"><label class="field" for="roomNameIn" style="margin:0">The name friends will see in the room; type it and press Enter<input type="text" class="inp" id="roomNameIn" maxlength="24" autocomplete="off"></label></div>
+<div class="card" id="roomPanel" hidden>
+  <div class="rowx"><span class="lbl">Room code</span><b class="code big" id="roomCode"></b><button type="button" class="btn" id="roomCopy">Copy code</button><span class="grow" style="flex:1"></span><button type="button" class="btn warn" id="roomClose">Close room</button><button type="button" class="btn" id="roomHide" title="Hide this panel; press the room tag on the bar to open it again">Hide</button></div>
+  <ul class="people" id="roomPeople"></ul>
+  <div class="bans" id="roomBans" hidden></div>
+  <ul class="roomlog" id="roomLog" hidden></ul>
+  <p class="hint" id="roomWhere" style="margin:0"></p>
+</div>
+<div class="wrap">
+  <div class="mapcol">
+    <div class="toolbar" id="toolbar">
+      <div class="tbrow">
+        <div class="seg" id="modes" role="group" aria-label="Tools">
+          <button type="button" data-mode="view" aria-pressed="true">View map</button>
+          <button type="button" data-mode="terrain" aria-pressed="false">Paint terrain</button>
+          <button type="button" data-mode="river" aria-pressed="false">Draw rivers</button>
+          <button type="button" data-mode="city" aria-pressed="false">Place communities</button>
+          <button type="button" data-mode="label" aria-pressed="false">Name places</button>
+          <button type="button" data-mode="route" aria-pressed="false">Roads</button>
+          <button type="button" data-mode="trade" aria-pressed="false">Trade</button>
+          <button type="button" data-mode="climate" aria-pressed="false">Climate</button>
+          <button type="button" data-mode="econ" aria-pressed="false">Economy</button>
+          <button type="button" data-mode="info" aria-pressed="false">Places and info</button>
+        </div>
+        <div class="seg" id="history">
+          <button type="button" id="undo" title="Undo (Ctrl+Z)" disabled>↶ Undo</button>
+          <button type="button" id="redo" title="Redo (Ctrl+Shift+Z)" disabled>↷ Redo</button>
+        </div>
+        <span class="status" id="status" role="status"></span>
+      </div>
+      <div class="opts" id="opts">
+        <div data-for="view">
+          <p class="hint" style="margin:0">Point at a hex to read about that place. Turn the mouse wheel to zoom, use the arrow keys or W A S D to move, drag to pan. Trade mode and climate mode are on the bar above <span id="viewEditHint"> Drag a city, a place name or the peak of Mount Stanther to move it. Pick another tool above to edit the map</span></p>
+        </div>
+        <div data-for="terrain" hidden>
+          <div class="pal" id="pal"></div>
+          <div class="optrow"><span class="lbl">Brush size</span>
+            <div class="seg" id="bsize"><button type="button" data-n="1">1 hex</button><button type="button" data-n="2">7 hexes</button><button type="button" data-n="3">19 hexes</button><button type="button" data-n="4">37 hexes</button></div>
+            <span class="lbl" id="bname"></span></div>
+          <p class="hint">Pick a terrain and drag on the map. Paint onto the sea to add land. The restore swatch removes what was painted and brings back hidden original rivers. Pan with the right mouse button, or hold Space and drag; on a touch screen use two fingers</p>
+          <div class="autobox"><button type="button" class="btn" id="autoMt">Place mountain ranges automatically</button><label for="autoMtAmt">Amount <select id="autoMtAmt"><option value="20">Few</option><option value="50" selected>Some</option><option value="85">Many</option></select></label><span class="lbl">Laid as ranges on the painted land, set back from the coast, with passes through them; small islands get a short ridge</span></div>
+          <div class="optrow fprow"><span class="lbl">Special features</span><div class="pal fpal" id="featPal"></div></div>
+          <div class="autobox"><button type="button" class="btn" id="featAuto">Place special features automatically</button><label for="featAutoAmt">Amount <select id="featAutoAmt"><option value="0.5">Few</option><option value="1" selected>Some</option><option value="2">Many</option></select></label><span class="lbl" id="featAutoSay">Read from the map's terrain, rivers, mountains, sea and climate. Hexes that already have a feature are left alone. One undo takes it all back</span></div>
+        </div>
+        <div data-for="river" hidden>
+          <div class="optrow" style="margin-top:0">
+            <div class="seg" id="rtool"><button type="button" data-rt="draw">Draw line</button><button type="button" data-rt="erase">Erase rivers</button></div>
+            <div class="seg" id="rkind"></div>
+            <div class="seg" id="rsize" hidden><button type="button" data-n="1">One at a time</button><button type="button" data-n="2">Small circle</button><button type="button" data-n="3">Large circle</button></div>
+            <button type="button" class="btn" id="rfinish">Finish line</button>
+            <button type="button" class="btn" id="rcancel">Cancel line</button>
+          </div>
+          <p class="hint" id="rhint"></p>
+          <div class="autobox"><button type="button" class="btn" id="autoRiv">Place rivers automatically</button><label for="autoRivAmt">Number <select id="autoRivAmt"><option value="0">Few</option><option value="1" selected>Some</option><option value="2">Many</option></select></label><span class="lbl">Sources start in the mountains or high ground and always run downhill; tributaries join the main stream, ending at the sea or a lake. Dry land gets seasonal streams</span></div>
+        </div>
+        <div data-for="city" hidden>
+          <div class="panes">
+          <div id="cityNew">
+            <div class="optrow" style="margin-top:0"><span class="lbl">Kind of new community</span><div class="seg" id="ckind"></div></div>
+            <p class="hint">Click an empty spot to place a city, type its name and press Enter. Click a city to rename it and save. Drag a city or its name to move it; place names and Mount Stanther can be dragged too. Drag empty ground to pan. Cities that came with the map can also be moved, edited and deleted</p>
+            <div class="btns" style="margin:6px 0 0"><button type="button" class="btn warn" id="cityDelAll">Delete all cities</button></div>
+          </div>
+          <div id="cityForm" class="cf pane-off">
+            <div class="optrow" style="margin-top:0">
+              <label>Name <input id="cfName" maxlength="60" autocomplete="off"></label>
+              <label>Kind of community <select id="cfKind"></select></label>
+              <button type="button" class="btn warn" id="cfDel">Delete this city</button>
+              <button type="button" class="btn" id="cfDone">Done</button>
+            </div>
+            <label class="full">Save <textarea id="cfNote" rows="2" maxlength="600"></textarea></label>
+            <div class="optrow"><label>Population <input id="cfPop" type="number" min="0" step="100" style="width:8em" autocomplete="off"> people</label><span class="lbl">Leave empty to use the value for the kind of community and its traits. Population sets demand, the output of workshops, and the order in which merchants pick where to sell</span></div>
+            <div class="optrow"><label>Tax <input id="cfTax" type="number" min="0" max="90" step="1" style="width:5em" autocomplete="off"> %</label><span class="lbl" id="cfTaxNote"></span></div><div class="optrow traits" id="cfTraits"></div>
+            <div class="optrow" id="cfSpec"></div>
+            <div class="optrow"><label>Answers to <select id="cfUp"></select></label><span class="lbl" id="cfUpNote"></span></div>
+            <p class="hint" id="cfFx" hidden></p>
+            <p class="hint" id="cfHint"></p>
+          </div>
+          </div>
+        </div>
+        <div data-for="label" hidden>
+          <div class="panes">
+          <div id="labelNew">
+            <div class="optrow" style="margin-top:0"><span class="lbl">Size of new names</span><div class="seg" id="lsizeSeg"></div></div>
+            <p class="hint">Click an empty spot to place a name, type it and press Enter. Click an existing name to edit its text, size, angle and colour. Drag a name to move it; drag empty ground to pan. Names that came with the map can be edited and deleted too</p>
+          </div>
+          <div id="labelForm" class="cf pane-off">
+            <div class="optrow" style="margin-top:0">
+              <label>Name <input id="lfText" maxlength="60" autocomplete="off"></label>
+              <label>Size <select id="lfSize"></select></label>
+              <label>Angle <input id="lfAng" type="range" min="-90" max="90" step="5"><span id="lfAngV"></span></label>
+              <button type="button" class="btn warn" id="lfDel">Delete this name</button>
+              <button type="button" class="btn" id="lfDone">Done</button>
+            </div>
+            <div class="optrow"><span class="lbl">Colour</span><div id="lfColor"></div></div>
+            <p class="hint" id="lfHint"></p>
+          </div>
+          </div>
+        </div>
+        <div data-for="route" hidden>
+          <div class="panes">
+          <div id="routeNew">
+            <div class="optrow" style="margin-top:0">
+              <div class="seg" id="rtCls"></div>
+              <button type="button" class="btn" id="rtLoose">Connect cities that have no road</button>
+              <button type="button" class="btn warn" id="rtDelAll">Delete all roads</button>
+            </div>
+            <p class="hint" id="rtHint"></p>
+          </div>
+          <div id="routeForm" class="cf pane-off">
+            <div class="optrow" style="margin-top:0">
+              <span id="rfInfo"></span>
+            </div>
+            <div class="optrow">
+              <div class="seg" id="rfCls"></div>
+              <button type="button" class="btn" id="rfFlat">Clear bend points</button>
+              <button type="button" class="btn warn" id="rfDel">Delete this line</button>
+              <button type="button" class="btn" id="rfDone">Done</button>
+            </div>
+            <p class="hint">Drag the line to bend it, drag a round point to move it, double-click a round point to remove it. Drag the square point at an end onto another city or empty ground to move that end</p>
+          </div>
+          </div>
+        </div>
+        <div data-for="trade" hidden>
+          <div class="sidehint"><span>City and trade-line cards are in the side panel on the right, which is hidden now</span><button type="button" class="btn" data-reveal="tradecard">Open side panel</button></div>
+          <div class="optrow" style="margin-top:0">
+            <div class="seg" id="tdTool" hidden><button type="button" data-t="pick">Select</button><button type="button" data-t="add">Lay a trade line</button></div>
+            <div class="seg" id="tdMode" hidden></div>
+            <label class="chk">Goods class <select id="tdCat"></select></label>
+            <button type="button" class="btn" id="tdReset" hidden>Restore the automatic network</button>
+          </div>
+          <p class="hint" id="tdHint"></p>
+        </div>
+        <div data-for="climate" hidden>
+          <div class="sidehint"><span>The numbers and climate tools are in the side panel on the right, which is hidden now</span><button type="button" class="btn" data-reveal="climcard">Open side panel</button></div>
+          <div class="optrow" style="margin-top:0"><span class="lbl">Part of the year</span><div class="seg" id="clSeason"></div></div>
+          <div class="optrow"><div class="seg" id="clLayer"></div></div>
+          <div class="optrow" id="clEditRow"><span class="lbl">Edit the layer in view</span><div class="seg" id="clTool"><button type="button" data-t="">No edit</button><button type="button" data-t="up">Raise</button><button type="button" data-t="down">Lower</button><button type="button" data-t="clear">Back to the computed value</button></div><div class="seg" id="clBrush"><button type="button" data-n="1">1 hex</button><button type="button" data-n="2">7 hexes</button><button type="button" data-n="3">19 hexes</button></div><div class="seg"><button type="button" id="clUndo" disabled>↶ Undo</button><button type="button" id="clRedo" disabled>↷ Redo</button></div><span class="lbl" id="clStep"></span></div>
+          <div class="optrow" id="clSetRow"><label class="lbl" for="clW">Mean land temperature in the coldest season <input id="clW" type="number" step="1" style="width:5em"> °C</label><label class="lbl" for="clS">in the warmest season <input id="clS" type="number" step="1" style="width:5em"> °C</label><label class="lbl" for="clG" id="clGL">The south edge is warmer than the north edge <input id="clG" type="number" step="1" style="width:5em"> °C</label><label class="lbl" for="clLat0" id="clLatL">Latitude of the top edge <input id="clLat0" type="number" step="1" min="-89" max="89" style="width:4.6em"> Bottom edge <input id="clLat1" type="number" step="1" min="-89" max="89" style="width:4.6em" aria-label="Latitude of the bottom edge"> degrees (negative south of the equator)</label><label class="lbl" for="clWind">The map's prevailing wind <select id="clWind"></select></label><label class="lbl" for="clWa">Weight of the wind on the year's rain <input id="clWa" type="number" step="0.1" min="0" max="1" style="width:4.6em"> (0 means the year's rain follows the painted ground only)</label></div>
+          <p class="hint" id="clHint"></p>
+        </div>
+        <div data-for="econ" hidden>
+          <div class="sidehint"><span>Goods, goods classes, states, organizations, currency and numbers are set in the side panel on the right, which is hidden now</span><button type="button" class="btn" data-reveal="ecocard">Open side panel</button></div>
+          <div class="optrow" style="margin-top:0"><div class="seg" id="ecoTab"><button type="button" data-t="goods">Goods</button><button type="button" data-t="cats">Classes and prices</button><button type="button" data-t="states">States and borders</button><button type="button" data-t="orgs">Organizations</button><button type="button" data-t="gdp">GDP and currency</button><button type="button" data-t="tune">Numbers</button></div><div class="seg"><button type="button" id="ecoUndo" disabled>↶ Undo</button><button type="button" id="ecoRedo" disabled>↷ Redo</button></div></div>
+          <div class="optrow" id="ecoPaintRow" hidden><span class="lbl">Paint the area of</span><div class="seg" id="ecoPaintSeg"></div><div class="seg" id="ecoBrush"><button type="button" data-n="1">1 hex</button><button type="button" data-n="2">7 hexes</button><button type="button" data-n="3">19 hexes</button></div></div>
+          <p class="hint" id="ecoHint"></p>
+        </div>
+        <div data-for="info" hidden>
+          <div class="sidehint"><span>The fields for what is selected are in the side panel on the right, which is hidden now</span><button type="button" class="btn" data-reveal="infocard">Open side panel</button></div>
+          <div class="optrow" style="margin-top:0">
+            <div class="seg" id="ifTool"><button type="button" data-t="pick">Choose data</button><button type="button" data-t="zone">Paint special zones</button></div>
+            <div class="seg" id="ifKind" hidden></div>
+          </div>
+          <p class="hint" id="ifHint"></p>
+        </div>
+      </div>
+    </div>
+    <div class="mapbox" id="mapbox" data-mode="view">
+      <canvas id="map" aria-label="Terrain map of the Gresland continent"></canvas>
+      <canvas id="fx" aria-hidden="true"></canvas>
+      <div class="ctl"><button id="names" type="button" aria-pressed="true">Place names</button><button id="cnames" type="button" aria-pressed="true">City names</button><button id="seasonBtn" type="button" aria-pressed="false">Season: whole year</button><button id="landBtn" type="button" aria-pressed="true" title="Farms, cleared forest, logged forest and mines that the cities' people need">City land</button><label class="tierpick" title="People on the whole map; city sizes, GDP and the land cities use follow it"><span>Total population of the map</span><select id="tierSel" aria-label="Total population of the map"></select><input id="tierNum" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" hidden aria-label="Your own population for the whole map" title="Type the number of people on the whole map, e.g. 250,000,000 or 250 million or 2.5 billion"><span id="tierUnit" class="tu">people</span></label><div class="setpick" role="group" aria-label="World settings" title="Set the map's states, goods, goods classes, currency and organizations; opens in the side panel on the right"><span>Settings</span><button type="button" data-eco="states" aria-pressed="false">States</button><button type="button" data-eco="goods" aria-pressed="false">Goods</button><button type="button" data-eco="cats" aria-pressed="false">Goods classes</button><button type="button" data-eco="gdp" aria-pressed="false">Currency</button><button type="button" data-eco="orgs" aria-pressed="false">Organizations</button></div><button id="layersBtn" type="button" aria-expanded="false" aria-controls="layers">Routes</button><button id="nsizeBtn" type="button" aria-expanded="false" aria-controls="nsize">Name size</button></div>
+      <div class="layers" id="layers" hidden></div>
+      <div class="layers nsize" id="nsize" hidden></div>
+      <div class="zoom"><button id="zin" title="Zoom in" aria-label="Zoom in">+</button><button id="zout" title="Zoom out" aria-label="Zoom out">−</button><button id="zfit" title="Show the whole continent" aria-label="Show the whole continent">⤢</button></div>
+      <div id="scalebar"><span></span><i></i></div>
+      <div class="tip" id="tip"></div>
+      <div class="toast" id="toast" aria-live="polite"></div>
+    </div>
+  </div>
+  <aside>
+    <div class="card" id="setcard"><h2>This map</h2>
+      <label class="field" for="setTitle">Map name<input type="text" class="inp" id="setTitle" maxlength="80" autocomplete="off"></label>
+      <label class="field" for="setKm">Distance per hex (km)<input type="number" class="inp" id="setKm" min="0.1" max="1000" step="0.5"></label>
+      <div class="uisize" style="margin:0 0 8px"><span>Page text size</span><div class="seg"><button type="button" data-ui="a">Automatic</button><button type="button" data-ui="s">Small</button><button type="button" data-ui="m">Medium</button><button type="button" data-ui="l">Large</button></div></div>
+      <div class="btns" style="margin-top:0"><button type="button" class="btn" id="setExport">Export map file</button><button type="button" class="btn warn" id="setRestore" hidden>Restore the map to before the last room was opened</button></div>
+      <p class="note" id="setNote" style="margin-bottom:0"></p>
+      <div class="bans" id="setBans" hidden></div>
+    </div>
+    <div class="card" id="fixcard" hidden><h2>Cities that should move</h2><div id="fixbody"></div></div>
+    <div class="card" id="tradecard" hidden><h2>Trade</h2><div id="tradebody"></div></div>
+    <div class="card" id="featcard" hidden><h2>Special features</h2><div id="featbody"></div></div>
+    <div class="card" id="ecocard" hidden><h2 id="ecoHead">Economy</h2><div id="ecobody"></div></div>
+    <div class="card" id="climcard" hidden><h2>Climate</h2><div id="climbody"></div></div>
+    <div class="card cf" id="infocard" hidden><h2>Selected data</h2><div id="infobody"></div></div>
+    <div class="card" id="editcard"><h2>Edits on the map</h2>
+      <div class="stats" id="stats"></div>
+      <div class="btns"><button type="button" class="btn" id="expPng" hidden>Save map image</button><button type="button" class="btn" id="expJson" hidden>Export edits</button><button type="button" class="btn warn" id="clearAll">Clear all edits</button></div>
+      <p class="note" id="editnote">Edits are saved automatically and are still here the next time you open this page. A saved map image has place and city names when the place names button is on; when it is off the image has terrain only. Roads and trade appear as set in the routes button. Repainted hexes are drawn in the same style as the map</p></div>
+    <div class="card" id="legcard"><h2>Terrain</h2><div class="legend" id="legend"></div></div>
+    <div class="card" id="ptscard"><h2>Points of interest</h2><div class="legend" id="points"></div></div>
+    <div class="vfoot" id="vfoot"></div>
+  </aside>
+</div>
+<section class="method"><div class="card" id="method"></div></section>
+</template>
+<script>window.MME_BUILD = "web"; window.MME_NO_GRESLAND = true;</script>
+<script src="firebase-config.js?v=0.22.0"></script>
+<script src="engine-en/gen.js?v=0.22.0"></script>
+<script src="engine-en/store.js?v=0.22.0"></script>
+<script src="engine-en/backup.js?v=0.22.0"></script>
+<script src="engine-en/net.js?v=0.22.0"></script>
+<script src="engine-en/fire.js?v=0.22.0"></script>
+<script src="engine-en/defaults.js?v=0.22.0"></script>
+<script src="engine-en/runtime.js?v=0.22.0"></script>
+<script src="engine-en/shell.js?v=0.22.0"></script>
+<script src="engine-en/hub.js?v=0.22.0"></script>
+<script src="engine-en/policy.js?v=0.22.0"></script>
+<script src="engine-en/tutor-lines.js?v=0.22.0"></script>
+<script src="engine-en/tutor.js?v=0.22.0"></script>
+</body>
+</html>

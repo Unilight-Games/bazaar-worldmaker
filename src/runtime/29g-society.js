@@ -327,7 +327,7 @@ function socStateForm(s) {                           // a state's choices: how i
 function socBalanceLine(b) {
   const p = b.plan, pc = x => ecoPc(x) + '%';
   let t = (b.net >= 0 ? `ปีนี้เกินดุล ${socN(b.net)} ${esc(ECO.central.name)}` : `ปีนี้ขาดดุล ${socN(-b.net)} ${esc(ECO.central.name)} คิดเป็น ${pc(b.def)} ของ GDP`) + ' (สินค้ารวมเงินนักท่องเที่ยว)';
-  if (p) t += ` หลังใช้${[...p.tools].map(k => EPOL[k][0]).join(' ')}ที่กำลัง ${pc(p.k)} (ก่อนใช้ขาดดุล ${pc(p.def1)})`;
+  if (p) t += ` หลังใช้${[...p.tools].map(k => EPOL[k][0]).join(' · ')} ที่กำลัง ${pc(p.k)} (ก่อนใช้ขาดดุล ${pc(p.def1)})`;
   if (b.pen >= 0.5) t += ` ความเป็นอยู่ของทุกเมืองในรัฐลด ${Math.round(b.pen)} แต้ม`;
   return t;
 }
@@ -355,7 +355,7 @@ function socGdpHTML() {
   const list = rows.slice().sort((a, b) => sk === 'name' ? dir * a.c.name.localeCompare(b.c.name, 'th') : dir * (SK[sk][1](a) - SK[sk][1](b)) || a.c.name.localeCompare(b.c.name, 'th'));
   const wellAvg = rows.reduce((a, r) => a + r.well * r.people, 0) / Math.max(1, rows.reduce((a, r) => a + r.people, 0));
   let h = fold('gpp', `ประชากร การย้ายถิ่น และนักท่องเที่ยว <small>${rows.length} แถว</small>`,
-    `<div class="tr">ผู้อยู่อาศัยดั้งเดิม <b>${socN(T.native)}</b> คน ย้ายถิ่นในปีนี้ <b>${socN(T.moved)}</b> คน${T.season >= 0.5 ? ` ย้ายตามฤดู <b>${socN(T.season)}</b> คน` : ''} นักท่องเที่ยว <b>${socN(T.tour)}</b> คนต่อปี ความเป็นอยู่เฉลี่ย <b>${Math.round(wellAvg)}</b> จาก 100</div>`
+    `<div class="tr">ผู้อยู่อาศัยดั้งเดิม <b>${socN(T.native)}</b> คน ย้ายถิ่นในปีนี้ <b>${socN(T.moved)}</b> คน${T.season >= 0.5 ? ` ย้ายตามฤดู <b>${socN(T.season)}</b> คน` : ''} · นักท่องเที่ยว <b>${socN(T.tour)}</b> คนต่อปี · ความเป็นอยู่เฉลี่ย <b>${Math.round(wellAvg)}</b> จาก 100</div>`
     + `<div class="etable g5 g7"><div class="eth sortable">${Object.entries(SK).map(([k, v]) => `<span data-a="psort" data-k="${k}" title="กดเพื่อเรียงตามช่องนี้">${v[0]}${arrow(k)}</span>`).join('')}</div><div class="eth"><span></span><span>อยู่ดี</span><span>ดั้งเดิม</span><span>ย้ายเข้า</span><span>ย้ายออก</span><span>นักท่องเที่ยว</span><span>ค่าแรง</span></div>`
     + list.map(r => `<div class="etr"><span>${r.s ? `<i class="sdot" style="background:${r.s.color}"></i>` : ''}${esc(r.c.name)}${r.c.reg !== 'shift' ? ` <em>${EREG[r.c.reg][0]}</em>` : ''}${r.c.land && r.c.land.lack >= 0.05 ? ` <em>ที่ดินขาด ${ecoPc(r.c.land.lack)}%</em>` : ''}</span><span>${Math.round(r.well)}</span><span>${socN(r.demo.native)}</span><span>${socN(r.demo.in + r.demo.seasIn)}</span><span>${socN(r.demo.out + r.demo.seasOut)}</span><span>${socN(r.demo.tour)}</span><span>${r.c.lab >= 0.005 ? 'ถูก ' + ecoPc(r.c.lab) + '%' : r.c.lab <= -0.005 ? 'แพง ' + ecoPc(-r.c.lab) + '%' : 'กลาง'}</span></div>`).join('') + `</div>`
     + `<p class="note">ผู้อยู่อาศัยดั้งเดิมคือคนของเมืองที่ยังอยู่ คนย้ายออกจากเมืองที่ความเป็นอยู่และรายได้ต่ำกว่าค่าเฉลี่ยของรัฐไปเมืองที่ดีกว่า ร้อยละ ${ecoPc(TU('migWorld'))} ไปนอกรัฐ นักท่องเที่ยวไม่นับเป็นประชากร แต่ละคนใช้เงินราว ${ecoNumF(SOC.spend)} ${coin} ในเมืองที่ไป แรงดึงดูดนักท่องเที่ยวมาจากสี่อย่าง: สิ่งดึงดูดรอบเมืองในสามช่อง ความเป็นชุมทางการค้า ความมั่งคั่งกับความเป็นอยู่ และองค์กรในเมือง คูณด้วยเสน่ห์ของเมืองที่สุ่มไว้ ค่าแรงถูกหมายถึงโรงงานผลิตได้มากขึ้นและคาราวานรอบเมืองถูกลง ระเบียบงาน สัดส่วนคนดั้งเดิม และเสน่ห์ของเมือง ตั้งได้ในการ์ดของเมืองในโหมดการค้า</p>`);
@@ -508,7 +508,7 @@ function clsVerdictHTML(G, rows, b) {
   const ppl = rows.reduce((a, r) => a + r.people, 0) || 1, rich = rows.reduce((a, r) => a + (r.c.rich0 == null ? TU('richRef') : r.c.rich0) * r.people, 0) / ppl;
   L.push(`ชนชั้นสูงและกลางมีรายได้รวมร้อยละ ${ecoPc(rich)} ความต้องการของฟุ่มเฟือย (ของหายาก โลหะมีค่า ตำรา เครื่องกล สมุนไพร) จึงเป็น <b>×${clamp(rich / TU('richRef'), 0.2, 2.5).toFixed(2)}</b> ของค่ากลาง`);
   const c0 = rows[0] && rows[0].c, miss = b && c0 && c0.dom ? ERAW.filter(cat => ECAT[cat] && !SOC_BASIC.has(cat) && !SOC_LUX.has(cat) && rows.some(r => ENEED[cat] && ENEED[cat][r.c.ki] > 0) && !c0.dom.has(cat)) : [];
-  if (miss.length) L.push(`${b ? 'รัฐนี้' : 'เมืองเหล่านี้'}ไม่มี${miss.map(c => esc(ECAT[c].name)).join(' ')}เอง คนที่ไม่มั่งคั่งจึงไม่ซื้อ ความต้องการเหลือราวร้อยละ ${ecoPc(rich)}`);
+  if (miss.length) L.push(`${b ? 'รัฐนี้ไม่มี' : 'เมืองเหล่านี้ไม่มี'}${miss.map(c => esc(ECAT[c].name)).join(' · ')}เอง คนที่ไม่มั่งคั่งจึงไม่ซื้อ ความต้องการเหลือราวร้อยละ ${ecoPc(rich)}`);
   if (b) L.push(`ของพื้นฐานจากนอกรัฐต้องถูกกว่าของในรัฐราวร้อยละ ${ecoPc(TU('homePref') * (1 - rich))} คนจึงยอมซื้อ`);
   if (o.slave && o.slave.n >= 1) L.push(`ทาส ${ecoNumF(Math.round(o.slave.n))} คน อยู่ดี <b>${Math.round(o.slave.well)}</b> ${o.mid && o.slave.well > o.mid.well ? '<b>ดีกว่าชนชั้นกลาง</b> (' + Math.round(o.mid.well) + ') เพราะเงินกระจุกอยู่กับชนชั้นสูงที่ถือทาส' : 'ต่ำกว่าชนชั้นกลาง (' + (o.mid ? Math.round(o.mid.well) : 0) + ') ยิ่งเงินไปกระจุกกับชนชั้นสูง ทาสยิ่งอยู่ดี'}`);
   if (o.poor) L.push(`ล่างสุด ร้อยละ ${ecoPc(o.poor.p)} ของคน อยู่ดี ${Math.round(o.poor.well)} อยู่ได้ด้วยทาน${o.low ? ` ชนชั้นล่างอยู่ดี ${Math.round(o.low.well)}` : ''}`);
@@ -558,7 +558,7 @@ function reachDraw() {
 }
 { const under = drawUnderNames; drawUnderNames = function () { if (under) under(); reachDraw(); }; }
 { const t = tradeCityHTML; tradeCityHTML = function (k) { const h = t(k); if (!ECON || !ECON.hin) return h; const P = reachOf(k), c = ECON.cities[k], line = `<div class="tr">เก็บเกี่ยวรอบเมือง <b>${P.ni}</b> ช่อง${P.nw ? ` และจับปลาในน้ำ <b>${P.nw}</b> ช่อง` : ''} ไกลสุด ${c.reach} ช่อง <span class="w">และอีก ${P.no} ช่องที่ส่งคนไปหาของบางอย่าง เช่น ไม้ แร่ และของป่า (กรอบทองทึบกับกรอบประบนแผนที่)</span></div>`, at = h.indexOf('<h3>ประชากรและความเป็นอยู่</h3>'); return at >= 0 ? h.slice(0, at) + line + h.slice(at) : h + line; }; }
-{ const cf = ecoCityForm; ecoCityForm = function () { cf(); if (!sel || !ECON || !ECON.hin || !$('cfHint')) return; const k = ECON.cities.findIndex(c => c.id === sel); if (k < 0) return; const P = reachOf(k), tx = `เก็บเกี่ยวรอบเมือง ${P.ni} ช่อง${P.nw ? ' จับปลา ' + P.nw + ' ช่อง' : ''} ไกลสุด ${ECON.cities[k].reach} ช่อง (กรอบทองบนแผนที่)`, cur = $('cfHint').textContent.split(' · ').filter(x => !x.startsWith('เก็บเกี่ยวรอบเมือง')); $('cfHint').textContent = [...cur, tx].join(' · '); requestDraw(); }; }
+{ const cf = ecoCityForm; ecoCityForm = function () { cf(); if (!sel || !ECON || !ECON.hin || !$('cfHint')) return; const k = ECON.cities.findIndex(c => c.id === sel); if (k < 0) return; const P = reachOf(k), tx = `เก็บเกี่ยวรอบเมือง ${P.ni} ช่อง${P.nw ? ' จับปลา ' + P.nw + ' ช่อง' : ''} ไกลสุด ${ECON.cities[k].reach} ช่อง (กรอบทองบนแผนที่)`, cur = $('cfHint').textContent.split(' · ').filter(x => !/^(เก็บเกี่ยวรอบเมือง|Harvests around the city)/.test(x)); $('cfHint').textContent = [...cur, tx].join(' · '); requestDraw(); }; }
 
 // ---------- one card for each state, one card for each city (v0.14.0, the owner: easy, friendly, not scattered) ----------
 // Everything about a state is set in one card in the states tab, in sections in the order a person thinks of them: what it is
@@ -632,7 +632,7 @@ function socFold(html, tag, keys, first) {
     const n = kids[i];
     if (n.nodeType === 1 && (n.tagName === tag || (tag === 'H3' && n.tagName === 'H4')) && keys[n.textContent.trim()]) { if (cur) groups.push(cur); cur = { key: keys[n.textContent.trim()][0], def: keys[n.textContent.trim()][1], title: n.innerHTML, nodes: [] }; continue; }
     if (n.nodeType === 1 && n.tagName === 'DETAILS' && n.classList.contains('tfold')) { if (cur) groups.push(cur); groups.push({ raw: n }); cur = null; continue; }
-    if (n.nodeType === 1 && n.matches('.tr') && /^เก็บเกี่ยวรอบเมือง/.test(n.textContent.trim())) { head.appendChild(n); continue; }
+    if (n.nodeType === 1 && n.matches('.tr') && /^(เก็บเกี่ยวรอบเมือง|Harvests around the city)/.test(n.textContent.trim())) { head.appendChild(n); continue; }
     if (!cur) { if (!groups.length) { head.appendChild(n); continue; } cur = { key: 'more', title: 'อื่น ๆ', nodes: [] }; }
     cur.nodes.push(n);
   }

@@ -21,7 +21,7 @@ function updateStats() {
       ['ถนนที่วาง', rc.add], ['ถนนเดิมที่แก้', rc.edit], ['ถนนเดิมที่ลบ', ED.rthid.size],
       ['สถานที่น่าสนใจที่วางหรือแก้', ED.points.size], ['สถานที่น่าสนใจเดิมที่ลบ', ED.phid.size], ['ข้อความเขตและภูมิประเทศที่แก้', ED.zinfo.size + ED.binfo.size + ED.kinfo.size],
       ['เส้นการค้าที่วางหรือแก้', ED.tlinks.size], ['เส้นการค้าเดิมที่ลบ', ED.tlhid.size], ['ระดับศูนย์ที่ตั้งเอง', ED.hubs.size], ['ศูนย์ที่ส่งของให้ที่เลือกเอง', ED.tparent.size]];
-    $('stats').innerHTML = (BLANK ? rows.filter(([k]) => !k.includes('เดิม') && !k.includes('สแตนเทอร์')) : rows).map(([k, v]) => `<span>${esc(k)}</span><span>${v}</span>`).join('');
+    $('stats').innerHTML = (BLANK ? rows.filter(([k]) => !/เดิม|สแตนเทอร์|[Oo]riginal|Stanther/.test(k)) : rows).map(([k, v]) => `<span>${esc(k)}</span><span>${v}</span>`).join('');   // i18n:keep
     $('clearAll').disabled = !editable || !(pc + hc + ED.rivers.length + ED.cities.length + ED.bhid.size + ED.labels.size + ED.lhid.size + (ED.stan != null ? 1 : 0) + ED.routes.size + ED.rthid.size + ED.points.size + ED.phid.size + ED.zinfo.size + ED.binfo.size + ED.kinfo.size + ED.tlinks.size + ED.tlhid.size + ED.hubs.size + ED.tparent.size);
     updateLegend(); updateHistory();
   }, 120);

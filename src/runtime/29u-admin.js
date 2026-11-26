@@ -240,7 +240,7 @@ function admTitlesHTML(s, X) {
 function admHTML() {
   const X = admIndex(), dis = editable ? '' : ' disabled', lv = ADM.lv, NC = admNames(admCtx());
   let h = `<div class="erow"><span class="lbl">คลิกเลือกระดับ</span><div class="seg" id="admLv">${[0, 1, 2, 3].map(t => `<button type="button" data-lv="${t}" aria-pressed="${t === lv}">${esc(NC[t])}</button>`).join('')}</div></div>`
-    + (editable && ECO.states.length ? `<div class="btns" style="margin:4px 0 8px">${[0, 1, 2].map(t => `<button type="button" class="btn" data-aa="new" data-t="${t}">ตั้ง${esc(NC[t])}ใหม่</button>`).join('')}</div>` : '');
+    + (editable && ECO.states.length ? `<div class="btns" style="margin:4px 0 8px">${[0, 1, 2].map(t => `<button type="button" class="btn" data-aa="new" data-t="${t}">${window.MME_LANG === 'en' ? 'New ' + esc(NC[t]).toLowerCase() : 'ตั้ง' + esc(NC[t]) + 'ใหม่'}</button>`).join('')}</div>` : '');
   // the chosen unit
   if (ADM.sel && ADM.sel.startsWith('S:')) { const s = ECO.states.find(x => x.id === ADM.sel.slice(2)); if (s) h += `<div class="scard" style="padding:8px"><b>${esc(admNames(s)[3])} ${esc(s.name)}</b><div class="tr w">กด Shift ค้างแล้วคลิกบนแผนที่เพื่อผนวกหน่วยที่ใหญ่ที่สุดใต้ช่องนั้นพร้อมดินแดน</div><button type="button" class="btn" data-sopen="${s.id}">การ์ดของรัฐ</button>${admTitlesHTML(s, X)}</div>`; }
   const u = ADM.sel && !ADM.sel.startsWith('S:') ? admById(ADM.sel) : null;

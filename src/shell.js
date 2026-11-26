@@ -2,7 +2,8 @@
 // the sheet for a new map, and the room around an open map.
 (function () {
   const MME = window.MME;
-  MME.VERSION = '0.21.0';
+  MME.VERSION = '0.22.0';
+  MME.LANG = window.MME_LANG || 'th';   // v0.22.0: which twin of the page this is (build.py)
   MME.NAME = 'Bazaar Worldmaker';
   MME.GRESLAND_KM = 34;   // canon: the continent is about 12 million square kilometres, and the map draws it on 12,208 hexes
   const $ = id => document.getElementById(id);
@@ -69,7 +70,7 @@
   const backup = MME.Backup({ db: platform.db, user: platform.user, store, say: t => toast(t, 7000), busy: id => !!(cur && cur.meta.id === id), onChange: () => { if (!cur) renderLibrary(); } });
   MME.backup = backup;
   const slug = s => (String(s || 'map').toLowerCase().replace(/[^a-z0-9ก-๙]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40)) || 'map';
-  const fmtDate = t => { try { return new Date(t).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }); } catch (err) { return ''; } };
+  const fmtDate = t => { try { return new Date(t).toLocaleDateString(MME.LANG === 'en' ? 'en-GB' : 'th-TH', { day: 'numeric', month: 'short', year: 'numeric' }); } catch (err) { return ''; } };
   const fmtKm = v => Math.round(v).toLocaleString('en-US');
 
   // ---------- bases: the ground under a map before anyone paints it ----------
@@ -236,10 +237,10 @@
     const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return;
     try {
       const data = JSON.parse(await f.text());
-      if (data && data.format === 'map-maker-engine-library' && Array.isArray(data.maps)) { let n = 0, bare = 0; for (const one of data.maps.slice(0, 200)) { try { if (one.meta) delete one.meta.builtin; await store.importMap(one, false); n++; } catch (err) { if (err && err.code === 'nobase') bare++; /* a broken one is skipped */ } } await renderLibrary(); backup.soon(); toast('นำเข้า ' + n + ' ผืนจากไฟล์สำรองคลัง' + (bare ? ' ข้าม ' + bare + ' ผืนที่วาดบนพื้นเกรสแลนด์ เพราะไฟล์ไม่มีพื้นแผนที่มาด้วย ให้ส่งออกใหม่ด้วยเวอร์ชัน 0.8.2 ขึ้นไป' : ''), bare ? 9000 : undefined); return; }
-      const meta = await store.importMap(data, false); await renderLibrary(); backup.soon(); toast('นำเข้า ' + meta.title + ' แล้ว');
+      if (data && data.format === 'map-maker-engine-library' && Array.isArray(data.maps)) { let n = 0, bare = 0; for (const one of data.maps.slice(0, 200)) { try { if (one.meta) delete one.meta.builtin; await store.importMap(one, false); n++; } catch (err) { if (err && err.code === 'nobase') bare++; /* a broken one is skipped */ } } await renderLibrary(); backup.soon(); toast('นำเข้าแล้ว: ' + n + ' ผืนจากไฟล์สำรองคลัง' + (bare ? ' ข้าม ' + bare + ' ผืนที่วาดบนพื้นเกรสแลนด์ เพราะไฟล์ไม่มีพื้นแผนที่มาด้วย ให้ส่งออกใหม่ด้วยเวอร์ชัน 0.8.2 ขึ้นไป' : ''), bare ? 9000 : undefined); return; }
+      const meta = await store.importMap(data, false); await renderLibrary(); backup.soon(); toast('นำเข้าแล้ว: ' + meta.title);
     }
-    catch (err) { const own = err && (err.code === 'nobase' || /Bazaar|Map Maker|ขนาด/.test(err.message)); toast(own ? err.message : 'อ่านไฟล์นี้ไม่ได้ ต้องเป็นไฟล์ .mapmaker.json ที่ส่งออกจากหน้านี้', err && err.code === 'nobase' ? 12000 : undefined); }
+    catch (err) { const own = err && (err.code === 'nobase' || /Bazaar|Map Maker|ขนาด|size/i.test(err.message)); toast(own ? err.message : 'อ่านไฟล์นี้ไม่ได้ ต้องเป็นไฟล์ .mapmaker.json ที่ส่งออกจากหน้านี้', err && err.code === 'nobase' ? 12000 : undefined); }
   };
 
   // ---------- a new map ----------
@@ -414,7 +415,7 @@
     applyFit(true);
     if (base.blank) {                               // words that belong to Gresland alone
       const w = document.createTreeWalker($('opts'), NodeFilter.SHOW_TEXT); let n;
-      while ((n = w.nextNode())) n.nodeValue = n.nodeValue.replace(' หรือยอดภูเขาสแตนเทอร์', '').replace('ชื่อสถานที่กับภูเขาสแตนเทอร์ก็ลากย้ายได้', 'ชื่อสถานที่ก็ลากย้ายได้');
+      while ((n = w.nextNode())) n.nodeValue = n.nodeValue.replace(' หรือยอดภูเขาสแตนเทอร์', '').replace('ชื่อสถานที่กับภูเขาสแตนเทอร์ก็ลากย้ายได้', 'ชื่อสถานที่ก็ลากย้ายได้').replace(', a place name or the peak of Mount Stanther', ' or a place name').replace('place names and Mount Stanther can be dragged too', 'place names can be dragged too');   // i18n:keep
     }
     const dl = await Promise.race([platform.downloads, new Promise(res => setTimeout(() => res(null), 1500))]);
     const env = { db, meta, room: guestRoom || null, canEdit: true, maxDoc: 4000000, saveDelay: guestRoom ? 260 : 500, saveFile, peers: [],
@@ -716,6 +717,22 @@
 
   // ---------- start ----------
   $('vtag').textContent = MME.NAME + ' v' + MME.VERSION;
+  // v0.22.0: the page in the other language, its twin; the choice is kept in the browser so the next visit opens in it too
+  { const b = $('langBtn'), pages = window.MME_PAGES || {}, other = MME.LANG === 'en' ? 'th' : 'en'; if (b && pages[other]) { b.hidden = false; b.textContent = other === 'th' ? 'ภาษาไทย' : 'English'; b.lang = other; b.onclick = () => { try { localStorage.setItem('mme.lang', other); } catch (e) {} location.href = pages[other] + location.search + location.hash; }; } }   // i18n:keep
+  // v0.22.0: Thai counts without a plural, so the English twin writes "1 maps"; this puts the noun back to one, in the page as drawn
+  if (MME.LANG === 'en') {
+    const ONE = { maps: 'map', cities: 'city', communities: 'community', regiments: 'regiment', places: 'place', hexes: 'hex', lines: 'line', states: 'state', seasons: 'season', classes: 'class', rows: 'row', people: 'person', men: 'man', lessons: 'lesson', pairs: 'pair', days: 'day', groups: 'group', units: 'unit', months: 'month', years: 'year', loads: 'load', branches: 'branch', regions: 'region', markets: 'market', layers: 'layer', kinds: 'kind', points: 'point', words: 'word', times: 'time', heads: 'head' };
+    const RX = new RegExp('(^|[^\\d.,])1 (' + Object.keys(ONE).join('|') + ')\\b', 'g'), HEAD = new RegExp('^(\\s)(' + Object.keys(ONE).join('|') + ')\\b');
+    const one = n => {
+      const v = n.nodeValue; if (!v || v.length > 4000) return;
+      let w = v.indexOf('1 ') >= 0 ? v.replace(RX, (m, a, x) => a + '1 ' + ONE[x]) : v;
+      const p = n.previousSibling; if (p && HEAD.test(w) && /(^|[^\d.,])1$/.test((p.textContent || '').trim())) w = w.replace(HEAD, (m, a, x) => a + ONE[x]);
+      if (w !== v) n.nodeValue = w;
+    };
+    const walk = r => { if (r.nodeType === 3) { one(r); return; } if (r.nodeType !== 1 || /^(SCRIPT|STYLE|CANVAS|SVG)$/i.test(r.tagName)) return; const t = document.createTreeWalker(r, NodeFilter.SHOW_TEXT); let n; while ((n = t.nextNode())) one(n); };
+    walk(document.body);
+    new MutationObserver(ms => { for (const m of ms) { if (m.type === 'characterData') one(m.target); else for (const a of m.addedNodes) walk(a); } }).observe(document.body, { childList: true, subtree: true, characterData: true });
+  }
   // the first sight of the library waits a moment for the page to say who is looking; if the answer comes later it is drawn again
   (async () => {
     let late = false; whoP.then(async () => { if (!late) return; try { await seedGresland(); } catch (err) { console.error(err); } if (!cur) renderLibrary(); if (backup.ready) backup.ready.then(ok => { if (ok) backup.soon(); }); });

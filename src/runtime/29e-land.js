@@ -266,9 +266,9 @@ function landTipHTML(id) {                           // the hover card's line fo
 // Three levels and a number of one's own (v0.11.1); the number is written in the box beside the list, as a person writes it.
 const tierSel = $('tierSel'), tierNum = $('tierNum');
 function ecoPeople(s) {                               // 250,000,000 · 250 ล้าน · 2.5 พันล้าน · 3 แสน · 2.5e8
-  s = String(s == null ? '' : s).replace(/[,\s_]/g, '').replace(/คน$/, '').toLowerCase();
-  const m = /^(\d+(?:\.\d+)?(?:e\d{1,2})?)(ล้านล้าน|หมื่นล้าน|พันล้าน|ร้อยล้าน|สิบล้าน|ล้าน|แสน|หมื่น|พัน|ร้อย|k|m|b)?$/.exec(s); if (!m) return NaN;
-  const u = { 'ล้านล้าน': 1e12, 'หมื่นล้าน': 1e10, 'พันล้าน': 1e9, 'ร้อยล้าน': 1e8, 'สิบล้าน': 1e7, 'ล้าน': 1e6, 'แสน': 1e5, 'หมื่น': 1e4, 'พัน': 1e3, 'ร้อย': 100, k: 1e3, m: 1e6, b: 1e9 };
+  s = String(s == null ? '' : s).replace(/[,\s_]/g, '').toLowerCase().replace(/(คน|people|persons?)$/, '');   // i18n:keep
+  const m = /^(\d+(?:\.\d+)?(?:e\d{1,2})?)(ล้านล้าน|หมื่นล้าน|พันล้าน|ร้อยล้าน|สิบล้าน|ล้าน|แสน|หมื่น|พัน|ร้อย|trillion|billion|million|thousand|hundred|bn|k|m|b)?$/.exec(s); if (!m) return NaN;   // i18n:keep
+  const u = { 'ล้านล้าน': 1e12, 'หมื่นล้าน': 1e10, 'พันล้าน': 1e9, 'ร้อยล้าน': 1e8, 'สิบล้าน': 1e7, 'ล้าน': 1e6, 'แสน': 1e5, 'หมื่น': 1e4, 'พัน': 1e3, 'ร้อย': 100, trillion: 1e12, billion: 1e9, million: 1e6, thousand: 1e3, hundred: 100, bn: 1e9, k: 1e3, m: 1e6, b: 1e9 };   // i18n:keep
   return Math.round(+m[1] * (m[2] ? u[m[2]] : 1));
 }
 const tierNow = () => ECO.tier === 'own' ? ECO.total : ECON ? ECON.cities.reduce((a, c) => a + c.pop, 0) * ECO.unit : 0;   // with no level named, what the heads come to
