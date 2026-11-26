@@ -56,6 +56,7 @@ noteBox.innerHTML = `<div class="mmcard" role="dialog" aria-modal="true" aria-la
     <label>ชื่อโลก <input type="text" id="ntWName" maxlength="80" autocomplete="off"></label>
     <label>ปี <input type="text" id="ntWYear" maxlength="40" autocomplete="off" placeholder="เช่น 1203"></label>
     <label>ยุค <input type="text" id="ntWEra" maxlength="80" autocomplete="off" placeholder="เช่น ยุคหลังมหาสงคราม"></label>
+    <div id="ntGen" class="ntgen"></div>
   </div>
   <div class="nttools" id="ntTools" role="toolbar" aria-label="รูปแบบตัวอักษร">
     <button type="button" data-c="bold" title="ตัวหนา"><b>ห</b></button><button type="button" data-c="italic" title="ตัวเอียง"><i>อ</i></button><button type="button" data-c="underline" title="ขีดเส้นใต้"><u>ข</u></button>
@@ -71,12 +72,38 @@ let noteKey = null;
 function noteOpen(key, title) {
   noteKey = key; $('ntTitle').textContent = title || 'บันทึก';
   const world = key === 'w'; $('ntWorld').hidden = !world;
-  if (world) { $('ntWName').value = ECO.world.name; $('ntWYear').value = ECO.world.year; $('ntWEra').value = ECO.world.era; }
+  if (world) { $('ntWName').value = ECO.world.name; $('ntWYear').value = ECO.world.year; $('ntWEra').value = ECO.world.era; genInfoFill(); }
   for (const id of ['ntWName', 'ntWYear', 'ntWEra']) $(id).disabled = !editable;
   $('ntEdit').innerHTML = noteOf(key); $('ntEdit').contentEditable = editable ? 'true' : 'false';
   $('ntTools').hidden = !editable;
   $('ntHint').textContent = editable ? 'บันทึกเก็บเองทุกครั้งที่พิมพ์ จัดรูปแบบได้จากแถบด้านบน วางข้อความจากที่อื่นได้ รูปแบบที่ไม่อยู่ในแถบจะถูกตัดออก' : 'แผนที่นี้ให้อ่านได้อย่างเดียว';
   noteBox.hidden = false; if (editable) $('ntEdit').focus();
+}
+// v0.22.1: where the map came from (the owner's ask, 26 Nov 2026): the seed and every setting the generator was given, kept in the
+// map's own record since it was made, so the same land can be rolled again from the new-map window
+const GENSTYLE = { continent: 'ทวีปเดียว', continents: 'หลายทวีป', isles: 'หมู่เกาะ' };
+const GENCLIM = { mixed: 'เหนือหนาว ใต้ร้อน', cold: 'หนาว', temperate: 'อบอุ่น', hot: 'ร้อน' };
+const GENWINDN = { W: 'ตะวันตก', E: 'ตะวันออก' };
+const GENRIV = { '-1': 'ไม่วาง', 0: 'น้อย', 1: 'ปานกลาง', 2: 'มาก' };
+function genInfoHTML() {
+  const m = ENV.meta || {}, g = m.gen;
+  if (m.base && m.base !== 'blank') return `<div class="tr w">แผนที่นี้วาดจากแผนที่ตั้งต้นของหน้า ไม่ได้สร้างจากตัวสุ่ม จึงไม่มีเลขสุ่ม</div>`;
+  if (!g) return `<div class="tr w">ไม่มีเลขสุ่ม แผนที่นี้เริ่มจากทะเลเปล่า หรือข้อมูลการสร้างไม่ได้มากับแผนที่</div>`;
+  if (g.image) return `<div class="tr w">แผนที่นี้สร้างจากรูปภาพ จึงไม่มีเลขสุ่ม</div>`;
+  const pc = v => Math.round(v * 100) + '%', parts = [
+    `${m.cols} × ${m.rows} ช่อง`, g.km ? `${g.km} กม. ต่อช่อง` : '',
+    GENSTYLE[g.style] || '', g.land != null ? `แผ่นดิน ${pc(g.land)}` : '', g.relief != null ? `ภูเขา ${pc(g.relief)}` : '',
+    GENCLIM[g.climate] ? `ภูมิอากาศ: ${GENCLIM[g.climate]}` : '', GENWINDN[g.wind] ? `ลมประจำจากทิศ${GENWINDN[g.wind]}` : '', GENRIV[g.rivers] ? `แม่น้ำ: ${GENRIV[g.rivers]}` : '',
+    g.ver ? `สร้างด้วยรุ่น ${esc(g.ver)}` : ''].filter(Boolean);
+  return `<div class="tr">เลขสุ่มของแผนที่ <code class="gseed">${g.seed | 0}</code> <button type="button" class="btn" id="ntSeedCopy">คัดลอกเลขสุ่ม</button></div>`
+    + `<div class="tr w">ค่าตอนสร้าง: ${parts.map(esc).join(' · ')}</div>`
+    + `<div class="tr w">ใส่เลขนี้กับค่าชุดเดียวกันในหน้าต่างแผนที่ใหม่ จะได้แผ่นดินกับแม่น้ำตั้งต้นแบบเดิม งานที่แก้ทีหลังไม่อยู่ในเลขนี้ และแผนที่ที่สร้างด้วยรุ่นอื่นอาจออกมาไม่ตรงกันทุกช่อง</div>`;
+}
+function genInfoFill() {
+  const el = $('ntGen'); if (!el) return; el.innerHTML = genInfoHTML();
+  const b = $('ntSeedCopy'); if (b) b.onclick = async () => { const v = String((ENV.meta.gen || {}).seed | 0);
+    try { await navigator.clipboard.writeText(v); flash('คัดลอกเลขสุ่มแล้ว'); }
+    catch (err) { const r = document.createRange(); r.selectNodeContents(el.querySelector('.gseed')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); flash('คัดลอกเองไม่ได้ เลือกเลขไว้ให้แล้ว กด Ctrl+C'); } };
 }
 function noteClose() { if (noteKey && editable) noteSave(); noteKey = null; noteBox.hidden = true; }
 let noteT = 0;

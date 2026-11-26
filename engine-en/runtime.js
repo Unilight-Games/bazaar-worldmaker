@@ -8322,6 +8322,7 @@ noteBox.innerHTML = `<div class="mmcard" role="dialog" aria-modal="true" aria-la
     <label>World name <input type="text" id="ntWName" maxlength="80" autocomplete="off"></label>
     <label>Year <input type="text" id="ntWYear" maxlength="40" autocomplete="off" placeholder="e.g. 1203"></label>
     <label>Era <input type="text" id="ntWEra" maxlength="80" autocomplete="off" placeholder="e.g. the age after the great war"></label>
+    <div id="ntGen" class="ntgen"></div>
   </div>
   <div class="nttools" id="ntTools" role="toolbar" aria-label="Text formatting">
     <button type="button" data-c="bold" title="Bold"><b>B</b></button><button type="button" data-c="italic" title="Italic"><i>I</i></button><button type="button" data-c="underline" title="Underline"><u>U</u></button>
@@ -8337,12 +8338,38 @@ let noteKey = null;
 function noteOpen(key, title) {
   noteKey = key; $('ntTitle').textContent = title || "Save";
   const world = key === 'w'; $('ntWorld').hidden = !world;
-  if (world) { $('ntWName').value = ECO.world.name; $('ntWYear').value = ECO.world.year; $('ntWEra').value = ECO.world.era; }
+  if (world) { $('ntWName').value = ECO.world.name; $('ntWYear').value = ECO.world.year; $('ntWEra').value = ECO.world.era; genInfoFill(); }
   for (const id of ['ntWName', 'ntWYear', 'ntWEra']) $(id).disabled = !editable;
   $('ntEdit').innerHTML = noteOf(key); $('ntEdit').contentEditable = editable ? 'true' : 'false';
   $('ntTools').hidden = !editable;
   $('ntHint').textContent = editable ? "Notes save themselves as you type. Format them from the bar above; text pasted from elsewhere is fine, and formatting not on the bar is removed" : "This map is read only";
   noteBox.hidden = false; if (editable) $('ntEdit').focus();
+}
+// v0.22.1: where the map came from (the owner's ask, 26 Nov 2026): the seed and every setting the generator was given, kept in the
+// map's own record since it was made, so the same land can be rolled again from the new-map window
+const GENSTYLE = { continent: "One continent", continents: "Several continents", isles: "Archipelago" };
+const GENCLIM = { mixed: "Cold north, hot south", cold: "Cold", temperate: "Temperate", hot: "Hot" };
+const GENWINDN = { W: "West", E: "East" };
+const GENRIV = { '-1': "None", 0: "Few", 1: "Some", 2: "Many" };
+function genInfoHTML() {
+  const m = ENV.meta || {}, g = m.gen;
+  if (m.base && m.base !== 'blank') return `<div class="tr w">This map is drawn on one of the page's built-in maps, not by the generator, so it has no seed</div>`;
+  if (!g) return `<div class="tr w">No seed: this map started from empty sea, or its making settings didn't come with it</div>`;
+  if (g.image) return `<div class="tr w">This map was made from an image, so it has no seed</div>`;
+  const pc = v => Math.round(v * 100) + '%', parts = [
+    `${m.cols} × ${m.rows} hexes`, g.km ? `${g.km} km per hex` : '',
+    GENSTYLE[g.style] || '', g.land != null ? `Land ${pc(g.land)}` : '', g.relief != null ? `Mountains ${pc(g.relief)}` : '',
+    GENCLIM[g.climate] ? `climate: ${GENCLIM[g.climate]}` : '', GENWINDN[g.wind] ? `prevailing wind from the ${GENWINDN[g.wind]}` : '', GENRIV[g.rivers] ? `rivers: ${GENRIV[g.rivers]}` : '',
+    g.ver ? `made with version ${esc(g.ver)}` : ''].filter(Boolean);
+  return `<div class="tr">Map seed <code class="gseed">${g.seed | 0}</code> <button type="button" class="btn" id="ntSeedCopy">Copy seed</button></div>`
+    + `<div class="tr w">Settings when made: ${parts.map(esc).join(' · ')}</div>`
+    + `<div class="tr w">Enter this seed with the same settings in the new-map window to get the same starting land and rivers. Edits made afterwards are not part of the seed, and a different version of the engine may not match hex for hex</div>`;
+}
+function genInfoFill() {
+  const el = $('ntGen'); if (!el) return; el.innerHTML = genInfoHTML();
+  const b = $('ntSeedCopy'); if (b) b.onclick = async () => { const v = String((ENV.meta.gen || {}).seed | 0);
+    try { await navigator.clipboard.writeText(v); flash("Seed copied"); }
+    catch (err) { const r = document.createRange(); r.selectNodeContents(el.querySelector('.gseed')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); flash("Couldn't copy by itself; the number is selected, press Ctrl+C"); } };
 }
 function noteClose() { if (noteKey && editable) noteSave(); noteKey = null; noteBox.hidden = true; }
 let noteT = 0;

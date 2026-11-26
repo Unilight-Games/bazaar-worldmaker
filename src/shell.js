@@ -2,7 +2,7 @@
 // the sheet for a new map, and the room around an open map.
 (function () {
   const MME = window.MME;
-  MME.VERSION = '0.22.0';
+  MME.VERSION = '0.22.1';
   MME.LANG = window.MME_LANG || 'th';   // v0.22.0: which twin of the page this is (build.py)
   MME.NAME = 'Bazaar Worldmaker';
   MME.GRESLAND_KM = 34;   // canon: the continent is about 12 million square kilometres, and the map draws it on 12,208 hexes
@@ -332,7 +332,7 @@
     const meta = { id, title: ($('nmTitle').value.trim() || 'แผนที่ใหม่').slice(0, 80), base: 'blank', cols: s.cols, rows: s.rows, kmPerHex: Math.max(0.1, Math.min(1000, +$('nmKm').value || 30)), created: Date.now(), updated: Date.now(), thumb: '' };
     let cells = '.'.repeat(N), rivers = [];
     if (NM.start === 'image') { if (!nmImg) { toast('เลือกรูปก่อนสร้างแผนที่'); return; } cells = nmImg.cells; meta.gen = { image: 1, read: nmImg.mode }; }
-    if (NM.start === 'random') { const g = nmGen || MME.generate(MME.gridFor(s.cols, s.rows), nmOpts()); cells = g.cells; rivers = g.rivers.map((r, i) => ({ id: 'g' + i.toString(36) + Math.random().toString(36).slice(2, 6), kind: r.kind, pts: r.pts })); meta.gen = nmOpts(); }
+    if (NM.start === 'random') { const g = nmGen || MME.generate(MME.gridFor(s.cols, s.rows), nmOpts()); cells = g.cells; rivers = g.rivers.map((r, i) => ({ id: 'g' + i.toString(36) + Math.random().toString(36).slice(2, 6), kind: r.kind, pts: r.pts })); meta.gen = { ...nmOpts(), ver: MME.VERSION }; }
     try { meta.thumb = $('nmPrev').toDataURL('image/webp', 0.8); } catch (err) { meta.thumb = ''; }
     await store.putDoc(id, 'terrain', { v: 2, cols: s.cols, rows: s.rows, cells, rivOff: [], rivSig: '0:0' });
     await store.putDoc(id, 'rivers', { v: 1, rivers });
