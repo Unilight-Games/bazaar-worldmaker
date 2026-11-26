@@ -139,7 +139,7 @@ function draw() {
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#0f1114'; ctx.fillRect(0, 0, cv.width, cv.height);
   ctx.setTransform(dpr * view.s, 0, 0, dpr * view.s, dpr * view.x, dpr * view.y);
   if (img.complete && img.naturalWidth) ctx.drawImage(img, 0, 0, G.w, G.h);
-  if (layerUsed) ctx.drawImage(layer, 0, 0, G.w, G.h);
+  if (layerUsed) { ctx.drawImage(layer, 0, 0, G.w, G.h); if (typeof detailDraw === 'function') detailDraw(ctx); }
   if (drawOverGround) drawOverGround(ctx, G.w, G.h, true);
   const px = 1 / view.s, panning = act && act.k === 'pan';
   if (mode === 'climate') drawClimate(ctx, px);
@@ -175,7 +175,7 @@ function draw() {
   }
   if (riv && riv.pts.length) {
     const pts = riv.pts.slice(); if (cursor && !(act && act.k === 'rdraw' && act.free)) pts.push(cursor);
-    const k = RK[riv.kind]; ctx.globalAlpha = 0.9; strokeRiver(ctx, smoothLine(pts), k.w, k.s); ctx.globalAlpha = 1;
+    const k = RK[riv.kind]; ctx.globalAlpha = 0.9; strokeRiver(ctx, k.c ? canalLine(pts) : smoothLine(pts), k.w, k.c ? 'c' : k.s); ctx.globalAlpha = 1;
     for (const p of riv.pts) { ctx.beginPath(); ctx.arc(p[0], p[1], 2.6 * px, 0, 2 * Math.PI); ctx.fillStyle = '#fff4d6'; ctx.fill(); ctx.lineWidth = 1 * px; ctx.strokeStyle = '#2a2116'; ctx.stroke(); }
   }
   if (act && act.k === 'sdrag' && act.target >= 0) {        // the great peak being carried: a ghost on the hex it would land on

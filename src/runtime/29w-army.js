@@ -20,11 +20,11 @@ const AEQ0 = {
   bow: { name: 'ธนูและหน้าไม้', part: 'weapon', cat: 'arms', q: 0.28, atk: 3, def: 0, spd: 0, also: { timber: 0.16 } },
   leather: { name: 'เกราะหนัง', part: 'armour', cat: 'cloth', q: 0.32, atk: 0, def: 2, spd: 0 },
   plate: { name: 'เกราะโลหะ', part: 'armour', cat: 'arms', q: 0.6, atk: 0, def: 4, spd: -1 },
-  horse: { name: 'ม้าศึกและอาหารม้า', part: 'materiel', cat: 'protein', q: 0.6, atk: 2, def: 0, spd: 3, also: { grain: 0.8 } },
+  horse: { name: 'ม้าศึกและอาหารม้า', part: 'materiel', cat: 'livestock', q: 0.6, atk: 2, def: 0, spd: 3, also: { feed: 0.5, grain: 0.3 } },   // v0.21.0: the mounts are beasts of work now, fed on feed
   siege: { name: 'เครื่องยิงและปืนใหญ่', part: 'materiel', cat: 'tech', q: 0.24, atk: 6, def: 0, spd: -1, also: { stone: 0.4 } },
   warship: { name: 'เรือรบ', part: 'materiel', cat: 'ships', q: 0.6, atk: 3, def: 2, spd: 2, also: { timber: 0.4 } },
   arcane: { name: 'อุปกรณ์เวท', part: 'support', cat: 'mana', q: 0.2, atk: 3, def: 1, spd: 0, also: { tech: 0.08 } },
-  ration: { name: 'เสบียงและยา', part: 'support', cat: 'grain', q: 0.6, atk: 0, def: 1, spd: 1, also: { herbs: 0.12, protein: 0.16 } },
+  ration: { name: 'เสบียงและยา', part: 'support', cat: 'grain', q: 0.5, atk: 0, def: 1, spd: 1, also: { food: 0.12, medicine: 0.03, protein: 0.1 } },   // v0.21.0: preserved food and medicine
   tools: { name: 'เครื่องมือช่างสนาม', part: 'support', cat: 'tools', q: 0.16, atk: 0, def: 1, spd: 0 },
 };
 const APART = { weapon: 'อาวุธ', armour: 'ชุดเกราะ', materiel: 'ยุทโธปกรณ์', support: 'อุปกรณ์สนับสนุน' };
@@ -59,7 +59,7 @@ function armyReckon() {
     const priceOf = cat => (E.P1[cap] && E.P1[cap][cat] || 1) * ECAT[cat].v * per;
     const kitCost = k => UT[k].kit.reduce((a, e) => { const q = EQ[e]; if (!q) return a; let c = q.q * priceOf(q.cat); for (const [cat, x] of Object.entries(q.also || {})) if (ECAT[cat]) c += x * priceOf(cat); return a + c / 1000; }, 0);
     const perMan = mix.reduce((a, [k, v]) => a + (v / ms) * (TU('armyPay') * mean + kitCost(k)), 0);
-    const want = ppl * A.mob, F = typeof FISC !== 'undefined' ? FISC.st.get(s.id) : null, can = F && perMan > 0 ? F.bud.mil / perMan : Infinity;
+    const want = ppl * A.mob, F = typeof FISC !== 'undefined' ? FISC.st.get(s.id) : null, locMil = typeof FISC !== 'undefined' ? [...FISC.unit.values()].reduce((a, U) => a + (U.st === s.id ? U.bud.mil : 0), 0) : 0, can = F && perMan > 0 ? (F.bud.mil + locMil) / perMan : Infinity;   // v0.21.0: what the units spend on their own guard raises men too
     const men = Math.max(0, Math.min(want, can)), units = {};
     for (const [k, v] of mix) { const m = men * v / ms; units[k] = { men: m, regs: Math.ceil(m / A.reg - 1e-9), kit: UT[k].kit.slice() }; }
     // where they stand: the capital, the march seats, the duchy seats
@@ -75,7 +75,7 @@ function armyReckon() {
   const changed = (() => { if (need.size !== ARMY.need.size) return true; for (const [id, m] of need) { const o = ARMY.need.get(id) || {}; for (const [c, x] of Object.entries(m)) if (Math.abs(x - (o[c] || 0)) > 0.05 * Math.max(0.2, x)) return true; } return false; })();
   ARMY = { st, need, ver: ARMY.ver + 1 }; return changed;
 }
-armyNeed = (c, cat) => { const m = ARMY.need.get(c.id); return m && m[cat] || 0; };
+{ const an0 = armyNeed; armyNeed = (c, cat) => { const m = ARMY.need.get(c.id); return an0(c, cat) + (m && m[cat] || 0); }; }   // v0.21.0: on top of what came before (the mint, 29ub)
 pressPow = (s, b) => { const a = ARMY.st.get(s.id), any = ARMY.st.size > 1; return any && a ? a.pow + 1e-6 : b.gdp; };
 // the garrisons' demand and the army it feeds settle in a couple of rounds
 {

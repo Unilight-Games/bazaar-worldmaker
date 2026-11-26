@@ -7,10 +7,12 @@
 //              (the community's product less its workshops); on companies: the workshops' output; on value added: what people
 //              spend; market licence: what the community's market sells abroad; on imports: each load that crosses into the
 //              state, at the duty the state set for that partner and that good
-//   up the     the tax of a community goes to its manor, which keeps a share for its own running and passes the rest to the
-//   tiers      county, which does the same, then the duchy (a march keeps more for its soldiers, a principality much more), then
-//              the state. At every step some of it sticks to fingers: the state's corruption, more where the unit is unsettled,
-//              less the more the state spends on its own administration. What a unit keeps and what sticks go to its seat.
+//   local      (v0.21.0) each unit of government levies a tax of its own on the people in its lands, at its tier's rate on one
+//              base (land and houses, by head, or market dues), and spends it there: its seat's court and guard, roads and alms
+//              by head; what it does not spend stays in its own treasury. A unit may set its own rate, base, budget and a toll on
+//              goods that come in from outside it. A principality's lands pay half the central taxes, a march's nine tenths.
+//   leaks      some of every tax sticks to fingers: the state's corruption, more where people are unsettled, less the more is
+//              spent on administration; the centre's leak goes to the capital, a unit's to its seat.
 //   budget     the state spends what reaches it on four heads: defence (pay to the march seats and the capital; the army of the
 //              next batch draws on it), administration and court (to the seats; it cuts corruption), public works (wages to every
 //              community by head, and next year cheaper roads inside the state), and welfare (back to every community by head,
@@ -35,10 +37,20 @@ const FSYS = {   // poll land corp vat lic imp | defence admin works welfare | c
   soc: [0.02, 0.05, 0.25, 0.08, 0, 0.10, 0.25, 0.15, 0.25, 0.35, 0.08],
   anar: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 };
-const FKEEP = { 0: 0.10, 1: 0.10, 2: 0.15, march: 0.20, princ: 0.50 };
-function fiscDef(s) { const a = FSYS[s.sys] || FSYS.merc; return { poll: a[0], land: a[1], corp: a[2], vat: a[3], lic: a[4], imp: a[5], bud: { mil: a[6], adm: a[7], pub: a[8], wel: a[9] }, corr: a[10], keep: { ...FKEEP } }; }
+const FKEEP = { 0: 0.10, 1: 0.10, 2: 0.15, march: 0.20, princ: 0.50 };   // v0.19.0's shares kept on the way up, read and set aside
+// v0.21.0: the owner found the money handed up the tiers hard to follow, and asked that central and local taxes be told apart
+// (26 Nov 2026). Now the centre levies its taxes straight from the communities, and each unit of government levies a tax of its
+// own on the people inside it, at its tier's rate, and keeps and spends it in its own lands. The local tax falls on one base:
+const LBASE = { land: 'ที่ดินและโรงเรือน', poll: 'รายหัว (ค่าราชการ)', vat: 'ค่าธรรมเนียมตลาด', inc: 'รายได้' };
+const LBUD0 = { adm: 0.35, pub: 0.30, wel: 0.25, mil: 0.10 };
+const AUTON = { march: 0.9, princ: 0.5 };            // what share of the central taxes reaches the centre from such a unit
+function fiscDef(s) { const a = FSYS[s.sys] || FSYS.merc, g = typeof govOf === 'function' ? govOf(s) : { loc: [0.01, 0.005, 0.005], cMul: 1 }, m = g.cMul; return { poll: a[0] * m, land: a[1] * m, corp: a[2] * m, vat: a[3] * m, lic: a[4] * m, imp: a[5] * m, bud: { mil: a[6], adm: a[7], pub: a[8], wel: a[9] }, corr: a[10], loc: { 0: g.loc[0], 1: g.loc[1], 2: g.loc[2] }, lbase: { 0: 'land', 1: 'land', 2: 'land' }, lbud: { ...LBUD0 } }; }
 // what a state has set, over its kind's defaults
-function fiscOf(s) { const d = fiscDef(s), o = s.fisc || {}; const f = { ...d, ...Object.fromEntries(Object.keys(FTAX).filter(k => o[k] != null).map(k => [k, o[k]])), bud: { ...d.bud, ...(o.bud || {}) }, keep: { ...d.keep, ...(o.keep || {}) } }; if (o.corr != null) f.corr = o.corr; return f; }
+function fiscOf(s) { const d = fiscDef(s), o = s.fisc || {}; const f = { ...d, ...Object.fromEntries(Object.keys(FTAX).filter(k => o[k] != null).map(k => [k, o[k]])), bud: { ...d.bud, ...(o.bud || {}) }, loc: { ...d.loc, ...(o.loc || {}) }, lbase: { ...d.lbase, ...(o.lbase || {}) }, lbud: { ...d.lbud, ...(o.lbud || {}) } }; if (o.corr != null) f.corr = o.corr; return f; }
+// a unit's own: its rate, its base, its budget and its toll, else its tier's
+const unitRate = (u, F) => u.rate != null ? u.rate : (F.loc[u.t] || 0) * (u.type === 'princ' ? 1.5 : 1);
+const unitBase = (u, F) => LBASE[u.base] ? u.base : F.lbase[u.t] || 'land';
+const unitBud = (u, F) => ({ ...F.lbud, ...(u.type === 'march' && !u.bud ? { mil: 0.4, adm: 0.25, pub: 0.2, wel: 0.15 } : {}), ...(u.bud || {}) });
 ECO.cmul = {};
 let FISC = { st: new Map(), unit: new Map(), pub: new Map() };
 const taxUse = () => '';                              // kept for older callers
@@ -56,10 +68,21 @@ function tradeRule(s, other, cat) {
       const out = tradeRule(si, sj, cat), inn = tradeRule(sj, si, cat);
       if ((out && out.e) || (inn && inn.e)) return 0;                     // under embargo, either way
       const m = ee(i, j, cat, pi, pj, v, t, bulk, phase, w); if (!(m > 0)) return m;
-      const duty = inn ? inn.t : fiscOf(sj).imp; return m - duty * pj * v;
+      const duty = inn ? inn.t : fiscOf(sj).imp * (typeof govFx === 'function' ? govFx(sj).imp : 1); return m - duty * pj * v - tollRate(ci, cj) * pj * v;
     }
-    return ee(i, j, cat, pi, pj, v, t, bulk, phase, w);
+    const m = ee(i, j, cat, pi, pj, v, t, bulk, phase, w); if (!(m > 0) || phase < 0 || (w && w.org) || !ci || !cj) return m;
+    const tl = tollRate(ci, cj); return tl > 0 ? m - tl * pj * v : m;
   };
+}
+// v0.21.0: a unit's own toll on goods that come into it from outside its lands (the octroi of French towns, the khanon posts of
+// old Siam): the sum of the tolls of the units over the buyer that the seller is not inside
+let TOLLK = -1, TOLLON = false;
+function tollRate(ci, cj) {
+  if (!ECO.adm || !ECO.adm.length || typeof admCity !== 'function') return 0;
+  if (TOLLK !== ADM.stamp) { TOLLK = ADM.stamp; TOLLON = ECO.adm.some(u => u.toll > 0); } if (!TOLLON) return 0;
+  const B = admCity(cj.id), A = admCity(ci.id); let t = 0;
+  for (const k of [0, 1, 2]) { const u = B[k]; if (u && u.toll > 0 && A[0] !== u && A[1] !== u && A[2] !== u) t += u.toll; }
+  return t;
 }
 // public works make the roads inside the state cheaper next year
 { const lc = ecoLinkCost; ecoLinkCost = function (L, cities) { const c = lc(L, cities), a = cities[L.ia].sto, b = cities[L.ib].sto; if (!a || a !== b) return c; const p = FISC.pub.get(a.id) || 0; return c * (1 - Math.min(0.2, TU('pubRoad') * p)); }; }
@@ -67,53 +90,73 @@ function tradeRule(s, other, cat) {
 // ---- the year (called from socApply, after the trade's books and before well-being) ----
 function taxApply(rows, book) {
   const E = ECON, per = ECO.central.per; FISC = { st: new Map(), unit: new Map(), pub: FISC.pub };
-  for (const r of rows) { r.tax = 0; r.taxBack = 0; r.taxWell = 0; r.taxWhy = []; r.taxParts = {}; r.stab = null; }
-  // imports at the border: each load into a state pays that state's duty
-  const imp = new Float64Array(rows.length);
-  for (const f of E.flows) { if (f.cat === 'labor') continue; const A = rows[f.from].s, B = rows[f.to].s; if (!B || A === B || B.sys === 'anar') continue; const r = tradeRule(B, A, f.cat), duty = r ? r.t : fiscOf(B).imp; if (!(duty > 0)) continue; imp[f.to] += duty * f.amt * ECAT[f.cat].v * (E.P1[f.to][f.cat] || 1) * per; }
+  for (const r of rows) { r.tax = 0; r.taxC = 0; r.taxL = 0; r.taxLoc = []; r.taxBack = 0; r.taxWell = 0; r.taxWhy = []; r.taxParts = {}; r.stab = null; }
+  const hasAdm = typeof admCity === 'function' && ECO.adm.length > 0, chainOf = r => hasAdm ? admCity(r.c.id) : { 0: null, 1: null, 2: null };
+  // imports at the border: each load into a state pays that state's duty; and each load into a unit with a toll pays the toll
+  const imp = new Float64Array(rows.length), toll = new Map();
+  for (const f of E.flows) {
+    if (f.cat === 'labor') continue; const A = rows[f.from].s, B = rows[f.to].s; if (!B || B.sys === 'anar') continue; const val = f.amt * ECAT[f.cat].v * (E.P1[f.to][f.cat] || 1) * per;
+    if (A !== B) { const r = tradeRule(B, A, f.cat), duty = r ? r.t : fiscOf(B).imp * (typeof govFx === 'function' ? govFx(B).imp : 1); if (duty > 0) imp[f.to] += duty * val; }
+    if (hasAdm && !f.org) { const ca = E.cities[f.from], cb = E.cities[f.to], Bc = admCity(cb.id), Ac = admCity(ca.id); for (const k of [0, 1, 2]) { const u = Bc[k]; if (u && u.toll > 0 && Ac[0] !== u && Ac[1] !== u && Ac[2] !== u) { const m = toll.get(f.to) || new Map(); m.set(u, (m.get(u) || 0) + u.toll * val); toll.set(f.to, m); } } }
+  }
   const byS = new Map(); rows.forEach((r, k) => { if (r.s && r.s.sys !== 'anar') { let g = byS.get(r.s.id); if (!g) byS.set(r.s.id, g = { s: r.s, rows: [], ks: [] }); g.rows.push(r); g.ks.push(k); } });
   for (const g of byS.values()) {
-    const s = g.s, F = fiscOf(s), b = book(s); let inc = 0, ppl = 0; for (const r of g.rows) { inc += Math.max(0, r.inc); ppl += r.people; } const mean = ppl > 0 ? inc / ppl : 0;
-    const S = { s, F, rev: Object.fromEntries(Object.keys(FTAX).map(k => [k, 0])), total: 0, leak: 0, kept: 0, reach: 0, bud: { mil: 0, adm: 0, pub: 0, wel: 0 }, treasury: 0, ppl, gdp: 0 };
+    const s = g.s, F = fiscOf(s), GF = typeof govFx === 'function' ? govFx(s) : { stab: 0, corr: 1, well: 0, taxC: 1, taxL: 1, minC: 1, minR: 1, why: [] }, b = book(s); let inc = 0, ppl = 0; for (const r of g.rows) { inc += Math.max(0, r.inc); ppl += r.people; } const mean = ppl > 0 ? inc / ppl : 0;
+    const S = { s, F, rev: Object.fromEntries(Object.keys(FTAX).map(k => [k, 0])), total: 0, local: 0, leak: 0, kept: 0, reach: 0, bud: { mil: 0, adm: 0, pub: 0, wel: 0 }, treasury: 0, ppl, gdp: 0 };
     // the main culture and faith of the state's people, for stability
     const cnt = { cul: new Map(), rel: new Map() }; for (const r of g.rows) { const bb = typeof belCity === 'function' ? belCity(r.c.id) : {}; for (const k of ['cul', 'rel']) if (bb[k]) cnt[k].set(bb[k], (cnt[k].get(bb[k]) || 0) + r.people); }
     const main = k => { let best = null, n = 0; for (const [x, v] of cnt[k]) if (v > n) { n = v; best = x; } return best; }, mc = main('cul'), mr = main('rel');
-    // each community's tax, before it goes up
+    const UT = new Map(), uOf = u => { let U = UT.get(u.id); if (!U) UT.set(u.id, U = { u, st: s.id, got: 0, toll: 0, kept: 0, leak: 0, ppl: 0, stab: 0, inc: 0, gdp: 0, rows: [], bud: { mil: 0, adm: 0, pub: 0, wel: 0 }, tr: 0, rate: 0, base: '' }); return U; };
     g.rows.forEach((r, j) => {
-      const k = g.ks[j], m = ECO.cmul[r.c.id] != null ? ECO.cmul[r.c.id] : 1, made = Math.max(0, r.made || 0);
-      const parts = { poll: F.poll * mean * r.people, land: F.land * Math.max(0, r.gdp - made), corp: F.corp * made, vat: F.vat * Math.max(0, r.inc), lic: F.lic * Math.max(0, r.exX || 0), imp: imp[k] };
-      let T = 0; for (const x of Object.keys(parts)) { parts[x] *= m; T += parts[x]; }
-      { const ch0 = typeof admCity === 'function' && ECO.adm.length ? admCity(r.c.id)[0] : null, ic = ch0 && ch0.inc && typeof ADMINC !== 'undefined' ? ADMINC[ch0.inc] : null; if (ic) { T *= ic[1]; for (const x of Object.keys(parts)) parts[x] *= ic[1]; r.incKind = ch0.inc; } else r.incKind = ''; }   // v0.20.0: land not folded in pays less
-      const cap = 0.8 * Math.max(0, r.inc); if (T > cap && T > 0) { const q = cap / T; for (const x of Object.keys(parts)) parts[x] *= q; T = cap; }
-      r.inc -= T; r.tax = T; r.taxParts = parts; for (const x of Object.keys(parts)) S.rev[x] += parts[x]; S.total += T; S.gdp += r.gdp;
+      const k = g.ks[j], m = ECO.cmul[r.c.id] != null ? ECO.cmul[r.c.id] : 1, made = Math.max(0, r.made || 0), ch = chainOf(r), base0 = Math.max(0, r.inc);
+      // the centre's taxes, less where the land is not folded in, or a unit over it rules itself
+      const parts = { poll: F.poll * mean * r.people, land: F.land * Math.max(0, r.gdp - made), corp: F.corp * made, vat: F.vat * base0, lic: F.lic * Math.max(0, r.exX || 0), imp: imp[k] };
+      let auto = 1; for (const t of [1, 2]) { const u = ch[t]; if (u && AUTON[u.type]) auto *= AUTON[u.type]; }
+      const ic = ch[0] && ch[0].inc && typeof ADMINC !== 'undefined' ? ADMINC[ch[0].inc] : null; r.incKind = ic ? ch[0].inc : '';
+      let Tc = 0; for (const x of Object.keys(parts)) { parts[x] *= m * GF.taxC * auto * (ic ? ic[1] : 1); Tc += parts[x]; }
+      // each unit's own tax on its base, and its tolls
+      const locs = []; let Tl = 0;
+      for (const t of [0, 1, 2]) { const u = ch[t]; if (!u) continue; const base = unitBase(u, F), bv = base === 'land' ? Math.max(0, r.gdp - made) : base === 'poll' ? mean * r.people : base0; const x = unitRate(u, F) * GF.taxL * m * bv; if (x > 0) { locs.push([u, x]); Tl += x; } }
+      const tm = toll.get(k); if (tm) for (const [u, x] of tm) { locs.push([u, x, 1]); Tl += x; }
+      const T = Tc + Tl, cap = 0.8 * base0; let q = 1; if (T > cap && T > 0) q = cap / T;
+      if (q < 1) { for (const x of Object.keys(parts)) parts[x] *= q; for (const l of locs) l[1] *= q; Tc *= q; Tl *= q; }
+      r.inc -= Tc + Tl; r.tax = Tc + Tl; r.taxC = Tc; r.taxL = Tl; r.taxParts = parts; r.taxLoc = locs.map(([u, x, tl]) => [u.id, x, tl ? 1 : 0]);
+      for (const x of Object.keys(parts)) S.rev[x] += parts[x]; S.total += Tc; S.local += Tl; S.gdp += r.gdp;
       // stability of the community, which its units sum
       const bb = typeof belCity === 'function' ? belCity(r.c.id) : {}, why = [];
-      let st = 55; const add = (t, v) => { if (Math.abs(v) >= 0.5) { st += v; why.push([t, v]); } };
-      add('ความต้องการพื้นฐาน', 40 * ((r.metB == null ? 1 : r.metB) - 0.8)); add('ความมั่งคั่ง', 8 * clamp(Math.log2(Math.max(0.05, mean > 0 ? Math.max(0, r.inc + T) / r.people / mean : 1)), -1.5, 1.5));
-      if (mc && bb.cul && bb.cul !== mc) add('วัฒนธรรมต่างจากคนส่วนใหญ่ของรัฐ', -12); if (mr && bb.rel && bb.rel !== mr) add('ศาสนาต่างจากคนส่วนใหญ่ของรัฐ', -8);
-      const burden = r.inc + T > 0 ? T / (r.inc + T) : 0; add('ภาระภาษี', -60 * burden); add('งบสวัสดิการ', 20 * F.bud.wel); add('งบกลาโหม', 15 * F.bud.mil);
-      const ch = typeof admCity === 'function' && ECO.adm.length ? admCity(r.c.id) : null; if (r.incKind && typeof ADMINC !== 'undefined') add(ADMINC[r.incKind][0], ADMINC[r.incKind][2]); if (ch && ch[2] && ch[2].type === 'princ') add('ปกครองตนเอง', 5); if (ch && ch[2] && ch[2].type === 'march') add('เขตชายแดน', -3);
+      let st = 55; const add = (t2, v) => { if (Math.abs(v) >= 0.5) { st += v; why.push([t2, v]); } };
+      add('ความต้องการพื้นฐาน', 40 * ((r.metB == null ? 1 : r.metB) - 0.8)); add('ความมั่งคั่ง', 8 * clamp(Math.log2(Math.max(0.05, mean > 0 ? Math.max(0, r.inc + r.tax) / r.people / mean : 1)), -1.5, 1.5));
+      if (mc && bb.cul && bb.cul !== mc) add('วัฒนธรรมต่างจากคนส่วนใหญ่ของรัฐ', -12 * GF.minC); if (mr && bb.rel && bb.rel !== mr) add('ศาสนาต่างจากคนส่วนใหญ่ของรัฐ', -8 * GF.minR);
+      if (typeof belStab === 'function') for (const [t2, v] of belStab(bb)) add(t2, v);
+      const burden = base0 > 0 ? r.tax / base0 : 0; add('ภาระภาษี', -60 * burden); add('งบสวัสดิการ', 20 * F.bud.wel); add('งบกลาโหม', 15 * F.bud.mil);
+      for (const [kk, n, v] of GF.why || []) if (kk === 'stab') add(n, v);
+      if (r.incKind) add(ADMINC[r.incKind][0], ADMINC[r.incKind][2]); if (ch[2] && ch[2].type === 'princ') add('ปกครองตนเอง', 5); if (ch[2] && ch[2].type === 'march') add('เขตชายแดน', -3);
       const h = r.c.h != null ? r.c.h : hexAt(r.c.x, r.c.y), z = h >= 0 && typeof szAt === 'function' ? szAt(h) : null; if (z) add(z.name, { war: -25, unrest: -15, bandit: -8 }[z.kind] || -5);
+      if (typeof prodBuf === 'function') prodBuf(r, add);   // v0.21.0: what the town gains by making much of a thing (29zd)
       r.stab = clamp(st, 0, 100); r.stabWhy = why; r.taxWhy.push(['ภาษี', -TU('taxWell') * burden]);
+      for (const [kk, n, v] of GF.why || []) if (kk === 'well') r.taxWhy.push([n, v]);
       if (r.stab < TU('stabLow')) r.taxWhy.push(['เสถียรภาพต่ำ', -5]);
+      for (const t of [0, 1, 2]) { const u = ch[t]; if (!u) continue; const U = uOf(u); U.ppl += r.people; U.stab += r.stab * r.people; U.inc += Math.max(0, r.inc); U.gdp += r.gdp; U.rows.push(r); }
+      for (const [u, x, tl] of locs) { const U = uOf(u); U.got += x; if (tl) U.toll += x; }
     });
-    // up the tiers: keep, stick, pass on
     const seatRow = id => { if (!id) return null; return g.rows.find(r => r.c.id === id) || null; };
     const capRow = (() => { const k = ECOX.cap.get(s), id = k != null && ECOX.C[k] ? ECOX.C[k].id : s.cap; return seatRow(id) || g.rows.reduce((a, r) => !a || r.people > a.people ? r : a, null); })();
-    const UT = new Map(), uOf = id => { let u = UT.get(id); if (!u) UT.set(id, u = { got: 0, kept: 0, leak: 0, ppl: 0, stab: 0 }); return u; };
-    const corrAt = stab => F.corr * (1.5 - stab / 100) * (1 - 0.8 * F.bud.adm);
-    for (const r of g.rows) {
-      let money = r.tax; const ch = typeof admCity === 'function' && ECO.adm.length ? admCity(r.c.id) : { 0: null, 1: null, 2: null };
-      for (const t of [0, 1, 2]) {
-        const u = ch[t]; if (!u) continue; const U = uOf(u.id); U.got += money; U.ppl += r.people; U.stab += r.stab * r.people;
-        const keep = t === 2 && u.type ? F.keep[u.type] : F.keep[t], leak = clamp(corrAt(r.stab), 0, 0.6);
-        const kp = money * keep, lk = (money - kp) * leak; money -= kp + lk; U.kept += kp; U.leak += lk; S.kept += kp; S.leak += lk;
-        const seat = seatRow(u.seat) || r; seat.inc += kp + lk; seat.taxBack += kp + lk;
-      }
-      const lk = money * clamp(corrAt(r.stab), 0, 0.6) * (ch[0] ? 0.5 : 1); money -= lk; S.leak += lk; if (capRow) { capRow.inc += lk; capRow.taxBack += lk; }
-      S.reach += money;
+    const corrAt = stab => clamp(F.corr * GF.corr * (1.5 - stab / 100) * (1 - 0.8 * F.bud.adm), 0, 0.6);
+    // the centre: what sticks to fingers on the way goes to the capital's men
+    for (const r of g.rows) { const lk = r.taxC * corrAt(r.stab); S.leak += lk; S.reach += r.taxC - lk; if (capRow) { capRow.inc += lk; capRow.taxBack += lk; } }
+    // each unit spends its own: its seat's court and guard, its roads and alms to its own people by head; the rest is its treasury
+    for (const U of UT.values()) {
+      U.stab = U.ppl > 0 ? U.stab / U.ppl : 0; const u = U.u, F2 = unitBud(u, F), seat = seatRow(u.seat) || U.rows.reduce((a, r) => !a || r.people > a.people ? r : a, null);
+      U.rate = unitRate(u, F) * GF.taxL; U.base = unitBase(u, F);
+      const lc = clamp(F.corr * GF.corr * (1.5 - U.stab / 100) * (1 - 0.8 * F2.adm), 0, 0.6), lk = U.got * lc; U.leak = lk; S.leak += lk; let money = U.got - lk;
+      if (seat) { seat.inc += lk; seat.taxBack += lk; }
+      let given = 0; for (const k of Object.keys(FBUD)) { U.bud[k] = money * clamp(F2[k] || 0, 0, 1); given += U.bud[k]; } if (given > money) { const q = money / given; for (const k of Object.keys(FBUD)) U.bud[k] *= q; given = money; }
+      U.tr = money - given; U.kept = money; S.kept += money;
+      for (const k of ['wel', 'pub']) if (U.bud[k] > 0 && U.ppl > 0) for (const r of U.rows) { const y = U.bud[k] * r.people / U.ppl; r.inc += y; r.taxBack += y; }
+      if (seat) for (const k of ['adm', 'mil']) if (U.bud[k] > 0) { seat.inc += U.bud[k]; seat.taxBack += U.bud[k]; }
+      if (U.bud.wel > 0 && U.inc > 0) { const wr = U.bud.wel / U.inc; for (const r of U.rows) r.taxWhy.push(['งบสวัสดิการของ' + admTitle(u), TU('welWell') * wr]); }
+      const { rows: _r, u: _u, ...pub } = U; FISC.unit.set(u.id, pub);
     }
-    for (const [id, U] of UT) { U.stab = U.ppl > 0 ? U.stab / U.ppl : 0; FISC.unit.set(id, U); }
     // the budget
     let given = 0; for (const k of Object.keys(FBUD)) { S.bud[k] = S.reach * clamp(F.bud[k], 0, 1); given += S.bud[k]; } if (given > S.reach) { const q = S.reach / given; for (const k of Object.keys(FBUD)) S.bud[k] *= q; given = S.reach; }
     S.treasury = S.reach - given;
@@ -124,9 +167,12 @@ function taxApply(rows, book) {
     const aseats = [capRow, ...ECO.adm.filter(u => u.t >= 1).map(u => seatRow(u.seat))].filter(Boolean);
     if (aseats.length && S.bud.adm > 0) { const w = aseats.map((r, i) => i === 0 ? 3 : 1), sw = w.reduce((a, x) => a + x, 0); aseats.forEach((r, i) => { const y = S.bud.adm * w[i] / sw; r.inc += y; r.taxBack += y; }); }
     const welRate = inc > 0 ? S.bud.wel / inc : 0; for (const r of g.rows) if (welRate > 0) r.taxWhy.push(['งบสวัสดิการของรัฐ', TU('welWell') * welRate]);
-    FISC.pub.set(s.id, S.gdp > 0 ? S.bud.pub / S.gdp : 0);
-    b.tax = S.total; b.taxUse = ''; b.treasury = S.treasury; b.fisc = S; FISC.st.set(s.id, S);
+    { let have = 0, want = 0; for (const k of g.ks) { const mk = E.MK && E.MK[k] && E.MK[k].build; if (mk) { have += Math.max(0, mk[0] - mk[3] + mk[2]); want += mk[1]; } } S.build = want > 0 ? clamp(have / want, 0, 1) : 1; }   // v0.21.0: works are built of brick and lime
+    FISC.pub.set(s.id, S.gdp > 0 ? S.bud.pub / S.gdp * (0.5 + 0.5 * S.build) : 0);
+    b.tax = S.total + S.local; b.taxUse = ''; b.treasury = S.treasury; b.fisc = S; FISC.st.set(s.id, S);
   }
+  if (typeof prodBuf === 'function') for (const r of rows) if (!r.s || r.s.sys === 'anar') prodBuf(r, null);
+  if (typeof coinApply === 'function') coinApply(rows);
 }
 
 // ---- the document: a state's finances and trade rules ride on the state; v0.18.5's single tax is read into them ----
@@ -141,7 +187,8 @@ function taxApply(rows, book) {
       if (f) {
         for (const k of Object.keys(FTAX)) { const v = num(f[k], 0, 0.9); if (v != null) s.fisc[k] = v; }
         if (f.bud && typeof f.bud === 'object') { s.fisc.bud = {}; for (const k of Object.keys(FBUD)) { const v = num(f.bud[k], 0, 1); if (v != null) s.fisc.bud[k] = v; } }
-        if (f.keep && typeof f.keep === 'object') { s.fisc.keep = {}; for (const k of Object.keys(FKEEP)) { const v = num(f.keep[k], 0, 0.9); if (v != null) s.fisc.keep[k] = v; } }
+        for (const [kk, lim] of [['loc', 0.5], ['lbud', 1]]) if (f[kk] && typeof f[kk] === 'object') { s.fisc[kk] = {}; for (const k of Object.keys(kk === 'loc' ? { 0: 1, 1: 1, 2: 1 } : LBUD0)) { const v = num(f[kk][k], 0, lim); if (v != null) s.fisc[kk][k] = v; } }
+        if (f.lbase && typeof f.lbase === 'object') { s.fisc.lbase = {}; for (const k of ['0', '1', '2']) if (LBASE[f.lbase[k]]) s.fisc.lbase[k] = f.lbase[k]; }
         const c = num(f.corr, 0, 0.6); if (c != null) s.fisc.corr = c;
       } else if (o.tax != null && Number.isFinite(+o.tax)) {           // v0.18.5: one rate and one use become a land tax and a budget
         s.fisc.land = clamp(+o.tax, 0, 0.9); const u = o.tuse; if (u === 'svc') s.fisc.bud = { wel: 0.7 }; else if (u === 'court') s.fisc.bud = { adm: 0.7 }; else if (u === 'keep') s.fisc.bud = { mil: 0, adm: 0, pub: 0, wel: 0 };
@@ -160,13 +207,15 @@ function taxStateForm(s) {
   if (s.sys === 'anar') return `<div class="tr w">ดินแดนที่ไม่มีรัฐไม่เก็บภาษีและไม่มีงบประมาณ</div>`;
   const F = fiscOf(s), d = fiscDef(s), S = FISC.st.get(s.id), dis = editable ? '' : ' disabled', coin = esc(ECO.central.name);
   const inp = (f, v, dv, max) => `<input type="number" data-fz="${f}" min="0" max="${max || 90}" step="0.5" value="${pc1(v)}" style="width:4.6em"${dis}${Math.abs(v - dv) > 1e-9 ? ' class="chg"' : ''}>`;
-  let h = `<div class="ftax">${Object.entries(FTAX).map(([k, n]) => `<label>${n} ${inp(k, F[k], d[k])} %${S ? ` <small>${socN(S.rev[k])}</small>` : ''}</label>`).join('')}</div>`
+  let h = `<div class="tr"><b>ภาษีส่วนกลาง</b> <span class="w">รัฐเก็บตรงจากทุกชุมชน เข้าคลังกลาง</span></div><div class="ftax">${Object.entries(FTAX).map(([k, n]) => `<label>${n} ${inp(k, F[k], d[k])} %${S ? ` <small>${socN(S.rev[k])}</small>` : ''}</label>`).join('')}</div>`
     + `<div class="tr w">ภาษีรายหัวคิดจากรายได้เฉลี่ยต่อหัวของรัฐ เท่ากันทุกคน ภาษีที่ดินคิดจากผลผลิตของที่ดินและเหมือง ภาษีนิติบุคคลคิดจากผลผลิตของโรงงาน ภาษีมูลค่าเพิ่มคิดจากการใช้จ่าย ค่าใบอนุญาตตลาดคิดจากของที่ตลาดขายออกนอกรัฐ ภาษีนำเข้าเก็บที่ด่านตามกฎข้างล่าง</div>`
-    + `<div class="tr"><b>งบประมาณ</b> <span class="w">ส่วนของเงินที่ถึงคลังกลาง ที่เหลือเก็บเข้าคลัง</span></div><div class="ftax">${Object.entries(FBUD).map(([k, n]) => `<label>${n} ${inp('b.' + k, F.bud[k], d.bud[k], 100)} %${S ? ` <small>${socN(S.bud[k])}</small>` : ''}</label>`).join('')}</div>`
-    + `<div class="tr"><b>ส่งต่อตามลำดับการปกครอง</b> <span class="w">ส่วนที่แต่ละระดับเก็บไว้ใช้เอง</span></div><div class="ftax">${[['0', ECO.admn[0]], ['1', ECO.admn[1]], ['2', ECO.admn[2]], ['march', ECO.admn.march], ['princ', ECO.admn.princ]].map(([k, n]) => `<label>${esc(n)} ${inp('k.' + k, F.keep[k], d.keep[k])} %</label>`).join('')}<label>คอร์รัปชัน ${inp('corr', F.corr, d.corr, 60)} %</label></div>`;
+    + `<div class="tr"><b>งบประมาณส่วนกลาง</b> <span class="w">ส่วนของภาษีส่วนกลางที่ถึงคลังกลาง ที่เหลือเก็บเข้าคลัง</span></div><div class="ftax">${Object.entries(FBUD).map(([k, n]) => `<label>${n} ${inp('b.' + k, F.bud[k], d.bud[k], 100)} %${S ? ` <small>${socN(S.bud[k])}</small>` : ''}</label>`).join('')}</div>`
+    + `<div class="tr"><b>ภาษีท้องถิ่น</b> <span class="w">แต่ละระดับเก็บจากคนในเขตของตัวเอง แล้วใช้จ่ายในเขตเอง ไม่ส่งขึ้นส่วนกลาง ตั้งอัตราเฉพาะหน่วยได้ในแท็บการปกครอง</span></div><div class="ftax">${[0, 1, 2].map(t => `<label>${esc(admNames(s)[t])} ${inp('l.' + t, F.loc[t], d.loc[t], 50)} % ของ <select data-fz="lb.${t}"${dis}>${Object.entries(LBASE).map(([k, n]) => `<option value="${k}"${F.lbase[t] === k ? ' selected' : ''}>${n}</option>`).join('')}</select></label>`).join('')}</div>`
+    + `<div class="tr w">หน่วยแบบ${esc(admNames(s).princ)}เก็บภาษีท้องถิ่นสูงขึ้นครึ่งหนึ่งและส่วนกลางเก็บภาษีในเขตได้ครึ่งเดียว ${esc(admNames(s).march)}ส่วนกลางเก็บได้ 90%</div>`
+    + `<div class="tr"><b>งบของหน่วยการปกครอง</b> <span class="w">ส่วนของภาษีท้องถิ่นที่หน่วยใช้ ที่เหลือเข้าคลังของหน่วย</span></div><div class="ftax">${Object.entries(FBUD).map(([k, n]) => `<label>${n} ${inp('lb2.' + k, F.lbud[k], d.lbud[k], 100)} %</label>`).join('')}<label>คอร์รัปชัน ${inp('corr', F.corr, d.corr, 60)} %</label></div>`;
   if (S) {
-    const lk = S.total > 0 ? S.leak / S.total : 0, st = (() => { let a = 0, n = 0; for (const [id, U] of FISC.unit) { const u = admById(id); if (u && u.t === 0 && U.ppl) { a += U.stab * U.ppl; n += U.ppl; } } return n ? a / n : null; })();
-    h += `<div class="tr">ปีนี้เก็บได้ <b>${socN(S.total)}</b> ${coin} <span class="w">${pc1(S.total / Math.max(1e-9, S.gdp))}% ของ GDP · หน่วยการปกครองเก็บไว้ ${socN(S.kept)} · รั่วไหลจากคอร์รัปชัน ${socN(S.leak)} (${pc1(lk)}%) · ถึงคลังกลาง ${socN(S.reach)} · เข้าคลัง ${socN(S.treasury)}${st != null ? ` · เสถียรภาพเฉลี่ย ${Math.round(st)}` : ''}</span></div>`;
+    const lk = S.total + S.local > 0 ? S.leak / (S.total + S.local) : 0, st = (() => { let a = 0, n = 0; for (const [id, U] of FISC.unit) { const u = admById(id); if (u && u.t === 0 && U.ppl) { a += U.stab * U.ppl; n += U.ppl; } } return n ? a / n : null; })();
+    h += `<div class="tr">ปีนี้ส่วนกลางเก็บได้ <b>${socN(S.total)}</b> ${coin} ท้องถิ่นเก็บได้ <b>${socN(S.local)}</b> <span class="w">รวม ${pc1((S.total + S.local) / Math.max(1e-9, S.gdp))}% ของ GDP · รั่วไหลจากคอร์รัปชัน ${socN(S.leak)} (${pc1(lk)}%) · ถึงคลังกลาง ${socN(S.reach)} · เข้าคลังกลาง ${socN(S.treasury)}${st != null ? ` · เสถียรภาพเฉลี่ย ${Math.round(st)}` : ''}</span></div>`;
   }
   // customs and embargoes
   const others = ECO.states.filter(o => o !== s), rules = s.trade || [];
@@ -179,8 +228,11 @@ $('ecobody').addEventListener('change', e => {
   const el = e.target; if (!editable || !el.dataset || (!el.dataset.fz && !el.dataset.rf)) return;
   const box = el.closest('[data-s]'), s = box ? ECO.states.find(x => x.id === box.dataset.s) : null; if (!s) return; s.fisc = s.fisc || {};
   if (el.dataset.fz) {
-    const f = el.dataset.fz, v = clamp((+el.value || 0) / 100, 0, f.startsWith('b.') ? 1 : 0.9);
-    if (f.startsWith('b.')) (s.fisc.bud || (s.fisc.bud = {}))[f.slice(2)] = v; else if (f.startsWith('k.')) (s.fisc.keep || (s.fisc.keep = {}))[f.slice(2)] = v; else if (f === 'corr') s.fisc.corr = Math.min(0.6, v); else s.fisc[f] = v;
+    const f = el.dataset.fz, v = clamp((+el.value || 0) / 100, 0, f.startsWith('b.') || f.startsWith('lb2.') ? 1 : 0.9);
+    if (f.startsWith('lb.')) { if (LBASE[el.value]) (s.fisc.lbase || (s.fisc.lbase = {}))[f.slice(3)] = el.value; }
+    else if (f.startsWith('lb2.')) (s.fisc.lbud || (s.fisc.lbud = {}))[f.slice(4)] = v;
+    else if (f.startsWith('l.')) (s.fisc.loc || (s.fisc.loc = {}))[f.slice(2)] = Math.min(0.5, v);
+    else if (f.startsWith('b.')) (s.fisc.bud || (s.fisc.bud = {}))[f.slice(2)] = v; else if (f === 'corr') s.fisc.corr = Math.min(0.6, v); else s.fisc[f] = v;
   } else {
     const row = el.closest('[data-ri]'), r = row ? (s.trade || [])[+row.dataset.ri] : null; if (!r) return; const f = el.dataset.rf;
     if (f === 'p') r.p = el.value; else if (f === 'c') r.c = el.value; else if (f === 't') r.t = clamp((+el.value || 0) / 100, 0, 3); else if (f === 'e') r.e = el.checked ? 1 : 0;

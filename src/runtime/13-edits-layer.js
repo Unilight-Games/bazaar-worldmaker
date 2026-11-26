@@ -1,7 +1,9 @@
 // ---------- the edits layer: repainted hexes and the user's rivers, at the resolution of the map image ----------
-const LS = 1.5, layer = document.createElement('canvas');
+let LS = 1.5 / SHK; const LS0 = LS, layer = document.createElement('canvas');   // v0.21.0: coarser on the largest maps
 layer.width = Math.round(G.w * LS); layer.height = Math.round(G.h * LS);
-const LC = layer.getContext('2d');
+let LC = layer.getContext('2d');
+// v0.21.0: where rebuild draws. The layer by default; the sharp detail of the view on the largest maps (29yc) borrows it.
+let LOX = 0, LOY = 0, LW = layer.width, LH = layer.height;
 let layerUsed = false, layerVer = 0;           // layerVer: counts the repaints, so a copy of the layer (the minimap) knows it is stale
 let SDC = null;
 function seaDepths() {
@@ -31,10 +33,10 @@ function rebuild(x0, y0, x1, y1) {
   // v0.19.5: the patch's edges lie on whole pixels of the layer. An edge through the middle of a pixel cleared it only in part
   // and painted it back only in part, so the pixel was left half see-through and the dark sea under a blank map showed as thin
   // straight lines along the edges of every patch the brush had repainted (the owner's report, 25 Nov 2026)
-  x0 = Math.max(0, Math.floor(x0 * LS) / LS); y0 = Math.max(0, Math.floor(y0 * LS) / LS); x1 = Math.min(layer.width / LS, Math.ceil(x1 * LS) / LS); y1 = Math.min(layer.height / LS, Math.ceil(y1 * LS) / LS);
+  x0 = Math.max(LOX, LOX + Math.floor((x0 - LOX) * LS) / LS); y0 = Math.max(LOY, LOY + Math.floor((y0 - LOY) * LS) / LS); x1 = Math.min(LOX + LW / LS, LOX + Math.ceil((x1 - LOX) * LS) / LS); y1 = Math.min(LOY + LH / LS, LOY + Math.ceil((y1 - LOY) * LS) / LS);
   if (x1 <= x0 || y1 <= y0) return;
   const c = LC;
-  c.save(); c.setTransform(LS, 0, 0, LS, 0, 0);
+  c.save(); c.setTransform(LS, 0, 0, LS, -LOX * LS, -LOY * LS);
   c.beginPath(); c.rect(x0, y0, x1 - x0, y1 - y0); c.clip(); c.clearRect(x0, y0, x1 - x0, y1 - y0);
   const m = 2.2 * R, list = [], land = [], water = [], sea = [];
   for (const i of painted) if (CX[i] > x0 - m && CX[i] < x1 + m && CY[i] > y0 - m && CY[i] < y1 + m) list.push(i);
@@ -70,7 +72,7 @@ function rebuild(x0, y0, x1, y1) {
     for (const r of BRIV) if (hits(r.bb, x0, y0, x1, y1)) for (const u of riverRuns(r)) strokeRiver(c, u.q, r.w, r.s, u.a, u.b);
     c.restore();
   }
-  for (const r of userRiversSorted()) { const d = RDER.get(r.id); if (d && hits(d.bb, x0, y0, x1, y1)) strokeRiver(c, d.q, d.w, d.s); }
+  for (const r of userRiversSorted()) { const d = RDER.get(r.id); if (d && hits(d.bb, x0, y0, x1, y1)) strokeRiver(c, d.q, d.w, d.c ? 'c' : d.s); }
   // shores where water meets land: around repainted hexes in full, inside the scrubbed strips elsewhere
   const shore = (i, j, v) => {
     const wi = isW(eff(i)), wh = wi ? i : v, e = EDGE[wi ? j : [0, 1, 2, 3, 4, 5].find(q => NB[v * 6 + q] === i)], a = e, b = (e + 1) % 6, onSea = isSea(eff(wh));

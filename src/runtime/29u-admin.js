@@ -23,8 +23,8 @@ const ADMFX = { march: { arms: 1.25, well: -1 }, princ: { well: 2 } };
 ECO.adm = []; ECO.admc = new Array(N).fill(''); ECO.admn = { ...ADMN0 };
 const ADM = { stamp: 0, idx: null, lv: 2, sel: null, paint: false, cityKey: -1, city: new Map() };
 const admById = id => id ? ECO.adm.find(u => u.id === id) || null : null;
-const admTier = u => u.t === 2 && u.type ? ECO.admn[u.type] || ADMN0[u.type] : ECO.admn[u.t] || ADMN0[u.t];
-const admTitle = u => admTier(u) + (u.name ? ' ' + u.name : '');
+let admTier = u => u.t === 2 && u.type ? ECO.admn[u.type] || ADMN0[u.type] : ECO.admn[u.t] || ADMN0[u.t];
+let admTitle = u => admTier(u) + (u.name ? ' ' + u.name : '');
 function admChanged(tables) { ADM.stamp++; ADM.idx = null; ADM.city.clear(); admSheetKey = ''; ecoChanged(!!tables); requestDraw(); if (mode === 'econ' && ecoTab === 'adm') ecoRender(); }
 // everything about the units at once: their hexes, their holders, their state, their communities and people
 function admIndex() {
@@ -67,7 +67,11 @@ function admCity(id) {
     ld(b); b = b || {}; ECO.adm = [];
     for (const u of (Array.isArray(b.adm) ? b.adm : []).slice(0, 6000)) {
       if (!u || typeof u.id !== 'string' || !/^[a-z0-9]{1,16}$/.test(u.id) || ECO.adm.some(x => x.id === u.id) || ![0, 1, 2].includes(u.t)) continue;
-      ECO.adm.push({ id: u.id, t: u.t, name: ecoStr(u.name, 60), up: ecoStr(u.up, 16), type: u.t === 2 && ADMFX[u.type] ? u.type : '', seat: ecoStr(u.seat, 120), ...(u.t === 0 && ADMINC[u.inc] && u.inc ? { inc: u.inc } : {}) });
+      const o = { id: u.id, t: u.t, name: ecoStr(u.name, 60), up: ecoStr(u.up, 16), type: u.t === 2 && ADMFX[u.type] ? u.type : '', seat: ecoStr(u.seat, 120), ...(u.t === 0 && ADMINC[u.inc] && u.inc ? { inc: u.inc } : {}) };
+      // v0.21.0: a unit's own purse: its rate, its base, its budget and its toll
+      if (u.rate != null && Number.isFinite(+u.rate)) o.rate = clamp(+u.rate, 0, 0.5); if (typeof LBASE !== 'undefined' && LBASE[u.base]) o.base = u.base; if (u.toll != null && +u.toll > 0) o.toll = clamp(+u.toll, 0, 1);
+      if (u.bud && typeof u.bud === 'object') { const bb = {}; for (const k of ['mil', 'adm', 'pub', 'wel']) if (Number.isFinite(+u.bud[k])) bb[k] = clamp(+u.bud[k], 0, 1); if (Object.keys(bb).length) o.bud = bb; }
+      ECO.adm.push(o);
     }
     ECO.admc = new Array(N).fill(''); if (b.admc && typeof b.admc === 'object') for (const [id, list] of Object.entries(b.admc)) { const u = admById(id); if (!u || u.t !== 0 || !Array.isArray(list)) continue; for (const i of list.slice(0, N)) if (Number.isInteger(i) && i >= 0 && i < N) ECO.admc[i] = id; }
     ECO.admn = { ...ADMN0 }; if (b.admn && typeof b.admn === 'object') for (const k of Object.keys(ADMN0)) if (typeof b.admn[k] === 'string' && b.admn[k].trim()) ECO.admn[k] = b.admn[k].slice(0, 30);
@@ -151,8 +155,8 @@ let admCv = null, admSheetKey = '';
 const admShown = () => (mode === 'econ' && ecoTab === 'adm') || BEL.view === 'adm';
 function admSheet() {
   const key = ADM.stamp + '|' + ecoStampAdm(); if (key === admSheetKey && admCv) return admCv; admSheetKey = key;
-  if (!admCv) { admCv = document.createElement('canvas'); admCv.width = Math.max(1, Math.ceil(G.w / 2)); admCv.height = Math.max(1, Math.ceil(G.h / 2)); }
-  const c = admCv.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, admCv.width, admCv.height); c.setTransform(0.5, 0, 0, 0.5, 0, 0);
+  if (!admCv) { admCv = document.createElement('canvas'); admCv.width = Math.max(1, Math.ceil(G.w / (2 * SHK))); admCv.height = Math.max(1, Math.ceil(G.h / (2 * SHK))); }
+  const c = admCv.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, admCv.width, admCv.height); c.setTransform(0.5 / SHK, 0, 0, 0.5 / SHK, 0, 0);
   const X = admIndex(), top = new Array(N).fill(''), mid = new Array(N).fill('');
   for (let i = 0; i < N; i++) { const ch = ECO.admc[i] ? admChain(i) : null; if (!ch) continue; mid[i] = ch[1] ? ch[1].id : ch[0] ? ch[0].id : ''; top[i] = ch[2] ? ch[2].id : mid[i]; }
   const edge = (arr, w, col, dash) => {
@@ -165,7 +169,7 @@ function admSheet() {
   edge(ECO.admc, 0.8, 'rgba(30,28,26,.55)', [2, 2]); edge(mid, 1.6, 'rgba(30,28,26,.8)'); edge(top, 3, 'rgba(20,18,16,.9)');
   return admCv;
 }
-{ const dg = drawOverGround; drawOverGround = function (c, w, h, live) { if (dg) dg(c, w, h, live); if (!live || !admShown() || !ECO.adm.length) return; const s = admSheet(); c.drawImage(s, 0, 0, s.width * 2, s.height * 2); }; }
+{ const dg = drawOverGround; drawOverGround = function (c, w, h, live) { if (dg) dg(c, w, h, live); if (!live || !admShown() || !ECO.adm.length) return; const s = admSheet(); c.drawImage(s, 0, 0, s.width * 2 * SHK, s.height * 2 * SHK); }; }
 {
   const top = drawOnTop; drawOnTop = function (c, px) {
     if (top) top(c, px); if (!admShown() || !ECO.adm.length) return; const X = admIndex();
@@ -234,26 +238,26 @@ function admTitlesHTML(s, X) {
     + (part.length ? `<div class="tr"><b>อ้างสิทธิ์ได้ (ครองไม่ถึง 51%)</b> <span class="w">${part.join(' · ')}</span></div>` : '');
 }
 function admHTML() {
-  const X = admIndex(), dis = editable ? '' : ' disabled', lv = ADM.lv;
-  let h = `<div class="erow"><span class="lbl">คลิกเลือกระดับ</span><div class="seg" id="admLv">${[0, 1, 2, 3].map(t => `<button type="button" data-lv="${t}" aria-pressed="${t === lv}">${esc(ECO.admn[t])}</button>`).join('')}</div></div>`
-    + (editable && ECO.states.length ? `<div class="btns" style="margin:4px 0 8px">${[0, 1, 2].map(t => `<button type="button" class="btn" data-aa="new" data-t="${t}">ตั้ง${esc(ECO.admn[t])}ใหม่</button>`).join('')}</div>` : '');
+  const X = admIndex(), dis = editable ? '' : ' disabled', lv = ADM.lv, NC = admNames(admCtx());
+  let h = `<div class="erow"><span class="lbl">คลิกเลือกระดับ</span><div class="seg" id="admLv">${[0, 1, 2, 3].map(t => `<button type="button" data-lv="${t}" aria-pressed="${t === lv}">${esc(NC[t])}</button>`).join('')}</div></div>`
+    + (editable && ECO.states.length ? `<div class="btns" style="margin:4px 0 8px">${[0, 1, 2].map(t => `<button type="button" class="btn" data-aa="new" data-t="${t}">ตั้ง${esc(NC[t])}ใหม่</button>`).join('')}</div>` : '');
   // the chosen unit
-  if (ADM.sel && ADM.sel.startsWith('S:')) { const s = ECO.states.find(x => x.id === ADM.sel.slice(2)); if (s) h += `<div class="scard" style="padding:8px"><b>${esc(ECO.admn[3])} ${esc(s.name)}</b><div class="tr w">กด Shift ค้างแล้วคลิกบนแผนที่เพื่อผนวกหน่วยที่ใหญ่ที่สุดใต้ช่องนั้นพร้อมดินแดน</div><button type="button" class="btn" data-sopen="${s.id}">การ์ดของรัฐ</button>${admTitlesHTML(s, X)}</div>`; }
+  if (ADM.sel && ADM.sel.startsWith('S:')) { const s = ECO.states.find(x => x.id === ADM.sel.slice(2)); if (s) h += `<div class="scard" style="padding:8px"><b>${esc(admNames(s)[3])} ${esc(s.name)}</b><div class="tr w">กด Shift ค้างแล้วคลิกบนแผนที่เพื่อผนวกหน่วยที่ใหญ่ที่สุดใต้ช่องนั้นพร้อมดินแดน</div><button type="button" class="btn" data-sopen="${s.id}">การ์ดของรัฐ</button>${admTitlesHTML(s, X)}</div>`; }
   const u = ADM.sel && !ADM.sel.startsWith('S:') ? admById(ADM.sel) : null;
   if (u) {
     const up = X.upOf(u), st = ECO.states.find(s => s.id === X.st.get(u.id)), cs = X.cities.get(u.id) || [], kids = (X.kids.get(u.id) || []).map(id => X.by.get(id));
     const vc = new Map(visibleCities().map(c => [c.id, c]));
     h += `<div class="scard" style="padding:8px"><b>${esc(admTitle(u))}</b> <small>${X.hexes.get(u.id).length} ช่อง · ${cs.length} ชุมชน · ${socN(X.people.get(u.id) || 0)} คน</small>`
-      + `<div class="tr w">ขึ้นกับ ${up ? `<a href="#" data-adm="${up.id}">${esc(admTitle(up))}</a>` : st ? `<a href="#" data-sopen="${st.id}">${esc(ECO.admn[3])} ${esc(st.name)}</a>` : 'ไม่มีรัฐ'}</div>`
+      + `<div class="tr w">ขึ้นกับ ${up ? `<a href="#" data-adm="${up.id}">${esc(admTitle(up))}</a>` : st ? `<a href="#" data-sopen="${st.id}">${esc(admNames(st)[3])} ${esc(st.name)}</a>` : 'ไม่มีรัฐ'}</div>`
       + (u.t >= 1 ? (() => { const H = admHold(u, X), parts = [...H.n].filter(([z]) => z).map(([z, k]) => { const st2 = ECO.states.find(x => x.id === z); return `${esc(st2 ? st2.name : '?')} ${k}/${H.total}`; }).join(' · ');
-          return `<div class="tr w">ตามสิทธิ์ (de jure) มี ${H.total} ${esc(ECO.admn[0])} · ${H.holder ? `ครองโดย <b>${esc(H.holder.name)}</b>` : 'ยังไม่มีรัฐใดครองถึง 51%'}${parts ? ' · ' + parts : ''}</div>`; })() : '')
+          return `<div class="tr w">ตามสิทธิ์ (de jure) มี ${H.total} ${esc(admNames(st)[0])} · ${H.holder ? `ครองโดย <b>${esc(H.holder.name)}</b>` : 'ยังไม่มีรัฐใดครองถึง 51%'}${parts ? ' · ' + parts : ''}</div>`; })() : '')
       + `<div class="erow"><label>ชื่อ <input type="text" data-af="name" maxlength="60" value="${esc(u.name)}"${dis}></label>`
-      + (u.t === 2 ? `<label>ชนิด <select data-af="type"${dis}><option value="">${esc(ECO.admn[2])}</option><option value="march"${u.type === 'march' ? ' selected' : ''}>${esc(ECO.admn.march)}</option><option value="princ"${u.type === 'princ' ? ' selected' : ''}>${esc(ECO.admn.princ)}</option></select></label>` : '') + `</div>`
+      + (u.t === 2 ? `<label>ชนิด <select data-af="type"${dis}><option value="">${esc(admNames(st)[2])}</option><option value="march"${u.type === 'march' ? ' selected' : ''}>${esc(admNames(st).march)}</option><option value="princ"${u.type === 'princ' ? ' selected' : ''}>${esc(admNames(st).princ)}</option></select></label>` : '') + `</div>`
       + (u.t === 0 ? `<div class="erow"><label>การผนวก <select data-af="inc"${dis}>${Object.entries(ADMINC).map(([k, v]) => `<option value="${k}"${(u.inc || '') === k ? ' selected' : ''}>${v[0]}</option>`).join('')}</select></label><span class="lbl">${u.inc ? `เก็บภาษีได้ ${Math.round(ADMINC[u.inc][1] * 100)}% เสถียรภาพ ${ADMINC[u.inc][2]}` : 'เก็บภาษีเต็ม'}</span></div>` : '')
       + `<div class="erow"><label>ที่ตั้งศูนย์กลาง <select data-af="seat"${dis}><option value="">ไม่ระบุ</option>${cs.map(id => `<option value="${esc(id)}"${id === u.seat ? ' selected' : ''}>${esc((vc.get(id) || {}).name || 'ไม่มีชื่อ')}</option>`).join('')}</select></label></div>`
-      + (u.type === 'march' ? `<div class="tr w">${esc(ECO.admn.march)}: เขตทหาร ชุมชนในเขตทำอาวุธได้มากขึ้นหนึ่งในสี่ ความเป็นอยู่ −1</div>` : u.type === 'princ' ? `<div class="tr w">${esc(ECO.admn.princ)}: ปกครองตนเองเกือบเต็มที่ ความเป็นอยู่ +2 และในระบบการคลังจะเก็บภาษีไว้เองได้มากกว่า</div>` : '')
+      + (u.type === 'march' ? `<div class="tr w">${esc(admNames(st).march)}: เขตทหาร ชุมชนในเขตทำอาวุธได้มากขึ้นหนึ่งในสี่ ความเป็นอยู่ −1 ส่วนกลางเก็บภาษีได้ 90% งบของหน่วยตั้งต้นให้กลาโหมมาก</div>` : u.type === 'princ' ? `<div class="tr w">${esc(admNames(st).princ)}: ปกครองตนเองเกือบเต็มที่ ความเป็นอยู่ +2 ส่วนกลางเก็บภาษีได้ครึ่งเดียว ภาษีท้องถิ่นของหน่วยสูงขึ้นครึ่งหนึ่ง</div>` : '')
       + (kids.length ? `<div class="tr"><b>หน่วยในสังกัด</b> <span class="w">${kids.map(k => `<a href="#" data-adm="${k.id}">${esc(admTitle(k))}</a>`).join(' · ')}</span></div>` : '')
-      + (cs.length ? `<div class="tr"><b>${u.t === 0 ? 'บาโรนี (ชุมชนในเคาน์ตี)' : 'ชุมชน'}</b> <span class="w">${cs.slice(0, 30).map(id => `<a href="#" data-city="${esc(id)}">${esc((vc.get(id) || {}).name || 'ไม่มีชื่อ')}</a>`).join(' · ')}${cs.length > 30 ? ' …' : ''}</span></div>` : '')
+      + (cs.length ? `<div class="tr"><b>${u.t === 0 ? 'ชุมชนใน' + esc(admTier(u)) : 'ชุมชน'}</b> <span class="w">${cs.slice(0, 30).map(id => `<a href="#" data-city="${esc(id)}">${esc((vc.get(id) || {}).name || 'ไม่มีชื่อ')}</a>`).join(' · ')}${cs.length > 30 ? ' …' : ''}</span></div>` : '')
       + `<div class="btns"><button type="button" class="btn" data-note="s:${u.id}" data-nt="${esc(admTitle(u))}">${noteOf('s:' + u.id) ? 'ประวัติ' : 'เขียนประวัติ'}</button>${up ? `<button type="button" class="btn" data-aa="free"${dis}>แยกออกจากหน่วยเหนือ</button>` : ''}<button type="button" class="btn warn" data-aa="del"${dis}>ยุบหน่วยนี้</button></div></div>`;
   }
   // each state, its tree
@@ -261,16 +265,16 @@ function admHTML() {
     // v0.19.6: a state not yet divided shows its card open, with the button to divide it (the owner could not find it folded away)
     const tops = ECO.adm.filter(x => !X.upOf(x) && X.st.get(x.id) === s.id).sort((a, b) => b.t - a.t || (X.people.get(b.id) || 0) - (X.people.get(a.id) || 0));
     const tree = x => `<li><a href="#" data-adm="${x.id}"${ADM.sel === x.id ? ' class="on"' : ''}>${esc(admTitle(x))}</a>${x.t > 0 && (X.kids.get(x.id) || []).length ? `<ul>${X.kids.get(x.id).map(id => tree(X.by.get(id))).join('')}</ul>` : ''}</li>`;
-    h += `<details class="efold scard"${GDPV['ad' + s.id] || (GDPV['ad' + s.id] == null && !tops.length) ? ' open' : ''} data-afold="${s.id}"><summary><i class="sdot" style="background:${s.color}"></i>${esc(ECO.admn[3])} ${esc(s.name)} <small>${tops.length ? ECO.adm.filter(x => X.st.get(x.id) === s.id).length + ' หน่วย' : 'ยังไม่แบ่ง'}</small></summary><div class="eform">`
+    h += `<details class="efold scard"${GDPV['ad' + s.id] || (GDPV['ad' + s.id] == null && !tops.length) ? ' open' : ''} data-afold="${s.id}"><summary><i class="sdot" style="background:${s.color}"></i>${esc(admNames(s)[3])} ${esc(s.name)} <small>${s.gov && GOV[s.gov] ? esc(GOV[s.gov].name) + ' · ' : ''}${tops.length ? ECO.adm.filter(x => X.st.get(x.id) === s.id).length + ' หน่วย' : 'ยังไม่แบ่ง'}</small></summary><div class="eform">`
       + `<div class="btns"><button type="button" class="btn" data-aa="build" data-s="${s.id}"${dis}>${tops.length ? 'แบ่งใหม่อัตโนมัติ' : 'แบ่งหน่วยอัตโนมัติ'}</button><button type="button" class="btn" data-aa="sel" data-s="${s.id}">เลือกรัฐนี้</button></div>`
       + (tops.length ? `<ul class="admtree">${tops.map(tree).join('')}</ul>` : '')
       + admTitlesHTML(s, X)
-      + (ECO.states.length > 1 ? `<div class="erow"><label>รวมเข้ากับ <select data-aj="${s.id}"${dis}>${ECO.states.filter(o => o !== s).map(o => `<option value="${o.id}">${esc(o.name)}</option>`).join('')}</select></label><label><input type="checkbox" data-ak="${s.id}" checked${dis}> เก็บรัฐนี้ไว้เป็น${esc(ECO.admn.princ)}</label><button type="button" class="btn warn" data-aa="join" data-s="${s.id}"${dis}>รวมรัฐ</button></div>` : '')
+      + (ECO.states.length > 1 ? `<div class="erow"><label>รวมเข้ากับ <select data-aj="${s.id}"${dis}>${ECO.states.filter(o => o !== s).map(o => `<option value="${o.id}">${esc(o.name)}</option>`).join('')}</select></label><label><input type="checkbox" data-ak="${s.id}" checked${dis}> เก็บรัฐนี้ไว้เป็น${esc(admNames(s).princ)}</label><button type="button" class="btn warn" data-aa="join" data-s="${s.id}"${dis}>รวมรัฐ</button></div>` : '')
       + `</div></details>`;
   }
   if (!ECO.states.length) h += '<p class="note">ยังไม่มีรัฐ หน่วยการปกครองแบ่งได้ภายในรัฐเท่านั้น เพิ่มรัฐและระบายเขตแดนก่อน แล้วกลับมาแบ่งที่นี่</p><div class="btns"><button type="button" class="btn" data-aa="gost">ไปแท็บรัฐและเขตแดน</button></div>';
-  h += `<details class="efold"><summary>ชื่อของระดับการปกครอง</summary><div class="eform"><div class="erow">${['0', '1', '2', 'march', 'princ', '3'].map(k => `<label>${{ 0: 'ระดับเล็กสุด', 1: 'ระดับที่สอง', 2: 'ระดับที่สาม', march: 'ระดับที่สามแบบชายแดน', princ: 'ระดับที่สามแบบปกครองตนเอง', 3: 'ระดับสูงสุด' }[k]} <input type="text" data-an="${k}" maxlength="30" value="${esc(ECO.admn[k])}" style="width:9em"${dis}></label>`).join('')}</div>`
-    + `<div class="btns"><button type="button" class="btn" data-aa="names0"${dis}>ชื่อแบบยุโรป</button><button type="button" class="btn" data-aa="namesTh"${dis}>ชื่อแบบไทยโบราณ</button></div></div></details>`;
+  h += `<details class="efold" data-fold="admnames"><summary>ชื่อของระดับการปกครอง <small>ใช้กับรัฐที่ไม่ได้เลือกระบอบ</small></summary><div class="eform"><div class="erow">${['0', '1', '2', 'march', 'princ', '3'].map(k => `<label>${{ 0: 'ระดับเล็กสุด', 1: 'ระดับที่สอง', 2: 'ระดับที่สาม', march: 'ระดับที่สามแบบชายแดน', princ: 'ระดับที่สามแบบปกครองตนเอง', 3: 'ระดับสูงสุด' }[k]} <input type="text" data-an="${k}" maxlength="30" value="${esc(ECO.admn[k])}" style="width:9em"${dis}></label>`).join('')}</div>`
+    + `<div class="tr w">รัฐที่เลือกระบอบการปกครองไว้ในการ์ดของรัฐใช้ชื่อตามระบอบนั้น</div><div class="btns"><button type="button" class="btn" data-aa="names0"${dis}>ชื่อแบบยุโรป</button><button type="button" class="btn" data-aa="namesTh"${dis}>ชื่อแบบไทยโบราณ</button></div></div></details>`;
   return h;
 }
 $('ecobody').addEventListener('click', e => {
@@ -282,12 +286,12 @@ $('ecobody').addEventListener('click', e => {
   if (a === 'sel') { ADM.sel = 'S:' + b.dataset.s; ADM.lv = 3; ecoRender(); requestDraw(); return; }
   if (a === 'gost') { ecoTab = 'states'; ecoRender(); requestDraw(); return; }
   if (!editable) return; const u = admById(ADM.sel);
-  if (a === 'new') { const t = +b.dataset.t; if (![0, 1, 2].includes(t)) return; const nu = { id: admNewId(), t, name: ECO.admn[t] + 'ใหม่', up: '', type: '', seat: '' }; admDo(() => { ECO.adm.push(nu); }); ADM.sel = nu.id; ADM.lv = t; ecoRender(); requestDraw();
-    flash(t === 0 ? `ตั้ง${ECO.admn[0]}ใหม่แล้ว กด Shift ค้างแล้วลากบนแผนที่เพื่อระบายที่ดินให้` : `ตั้ง${ECO.admn[t]}ใหม่แล้ว กด Shift ค้างแล้วคลิก${ECO.admn[t - 1]}บนแผนที่เพื่อรวมเข้ามา`); return; }
-  if (a === 'build') { const s = ECO.states.find(x => x.id === b.dataset.s); if (s) { let n = 0; admDo(() => { n = admBuild(s); }); flash(n ? `แบ่ง${s.name} เป็น ${n} ${ECO.admn[0]}แล้ว` : 'รัฐนี้ยังไม่มีดินแดนบนแผ่นดิน'); } }
+  if (a === 'new') { const t = +b.dataset.t; if (![0, 1, 2].includes(t)) return; const NC = admNames(admCtx()), nu = { id: admNewId(), t, name: 'ใหม่', up: '', type: '', seat: '' }; admDo(() => { ECO.adm.push(nu); }); ADM.sel = nu.id; ADM.lv = t; ecoRender(); requestDraw();
+    flash(t === 0 ? `ตั้ง${NC[0]}ใหม่แล้ว กด Shift ค้างแล้วลากบนแผนที่เพื่อระบายที่ดินให้` : `ตั้ง${NC[t]}ใหม่แล้ว กด Shift ค้างแล้วคลิก${NC[t - 1]}บนแผนที่เพื่อรวมเข้ามา`); return; }
+  if (a === 'build') { const s = ECO.states.find(x => x.id === b.dataset.s); if (s) { let n = 0; admDo(() => { n = admBuild(s); }); flash(n ? `แบ่ง${s.name} เป็น ${n} ${admNames(s)[0]}แล้ว` : 'รัฐนี้ยังไม่มีดินแดนบนแผ่นดิน'); } }
   else if (a === 'free' && u) admDo(() => { u.up = ''; });
   else if (a === 'del' && u) { admDo(() => { const X = admIndex(), up = X.upOf(u); for (const k of X.kids.get(u.id) || []) X.by.get(k).up = up ? up.id : ''; if (u.t === 0) { for (let i = 0; i < N; i++) if (ECO.admc[i] === u.id) ECO.admc[i] = ''; } ECO.adm = ECO.adm.filter(x => x !== u); }); ADM.sel = null; ecoRender(); }
-  else if (a === 'join') { const from = ECO.states.find(x => x.id === b.dataset.s), to = ECO.states.find(x => x.id === $('ecobody').querySelector(`[data-aj="${b.dataset.s}"]`).value), keep = $('ecobody').querySelector(`[data-ak="${b.dataset.s}"]`).checked; if (from && to) { admDo(() => admJoin(from, to, keep)); ECOX.byKey.delete(from.id); flash(`รวม${from.name}เข้ากับ${to.name}แล้ว` + (keep ? ` ${from.name}เป็น${ECO.admn.princ}` : '')); ecoChanged(true); } }
+  else if (a === 'join') { const from = ECO.states.find(x => x.id === b.dataset.s), to = ECO.states.find(x => x.id === $('ecobody').querySelector(`[data-aj="${b.dataset.s}"]`).value), keep = $('ecobody').querySelector(`[data-ak="${b.dataset.s}"]`).checked; if (from && to) { admDo(() => admJoin(from, to, keep)); ECOX.byKey.delete(from.id); flash(`รวม${from.name}เข้ากับ${to.name}แล้ว` + (keep ? ` ${from.name}เป็น${admNames(to).princ}` : '')); ecoChanged(true); } }
   else if (a === 'names0' || a === 'namesTh') admDo(() => { ECO.admn = { ...(a === 'names0' ? ADMN0 : ADMN_TH) }; });
 });
 $('ecobody').addEventListener('change', e => {
@@ -301,14 +305,33 @@ function admFocusXY(x, y) { const r = cv.getBoundingClientRect(); view.x = r.wid
 function admFocus(u) { const hs = admIndex().hexes.get(u.id) || []; if (!hs.length) return; let sx = 0, sy = 0; for (const i of hs) { sx += CX[i]; sy += CY[i]; } admFocusXY(sx / hs.length, sy / hs.length); }
 // the peek and the community's card name the units over a community
 { const px = peekCityExtra; peekCityExtra = (c, E) => { const ch = ECO.adm.length ? admCity(c.id) : null, t = ch ? [ch[0], ch[1], ch[2]].filter(Boolean).map(admTitle) : []; return px(c, E) + (t.length ? `<div class="m">${t.map(esc).join(' · ')}</div>` : ''); }; }
-// the unit's purse this year (29m): what it gathered, kept, lost, and how settled it is
+// the unit's own economy this year (29m, v0.21.0): its people and product, what it taxed and how, what it spent, what it trades
+// across its own bounds; and the settings of its purse
 {
   const ah = admHTML; admHTML = function () {
-    const h = ah(), u = ADM.sel && !ADM.sel.startsWith('S:') ? admById(ADM.sel) : null, U = u && typeof FISC !== 'undefined' ? FISC.unit.get(u.id) : null; if (!U) return h;
-    const line = `<div class="tr">การคลังปีนี้: รับ ${socN(U.got)} · เก็บไว้ ${socN(U.kept)} · รั่วไหล ${socN(U.leak)} · เสถียรภาพ <b>${Math.round(U.stab)}</b> จาก 100</div>`;
-    const at = h.indexOf('<div class="erow"><label>ชื่อ'); return at >= 0 ? h.slice(0, at) + line + h.slice(at) : h;
+    const h = ah(), u = ADM.sel && !ADM.sel.startsWith('S:') ? admById(ADM.sel) : null; if (!u || typeof fiscOf !== 'function') return h;
+    const st = admStateOf(u); if (!st || st.sys === 'anar') return h; const F = fiscOf(st), U = typeof FISC !== 'undefined' ? FISC.unit.get(u.id) : null, dis = editable ? '' : ' disabled', coin = esc(ECO.central.name);
+    const B = unitBud(u, F), pcv = x => Math.round(x * 1000) / 10;
+    let x = `<div class="ssec"><h5>เศรษฐกิจของ${esc(admTitle(u))}</h5>`;
+    if (U && ECON) {
+      const X = admIndex(), ids = new Set(X.cities.get(u.id) || []), per = ECO.central.per; let ex = 0, im = 0;
+      for (const f of ECON.flows) { if (f.cat === 'labor') continue; const a = ids.has(ECON.cities[f.from].id), b2 = ids.has(ECON.cities[f.to].id); if (a === b2) continue; const v = f.amt * ECAT[f.cat].v * (ECON.P1[f.to][f.cat] || 1) * per; if (a) ex += v; else im += v; }
+      x += `<div class="schips tr"><span class="chip0">${socN(U.ppl)} คน</span><span class="chip0">GDP ${socN(U.gdp)} ${coin}</span><span class="chip0">ต่อหัว ${socN(U.ppl ? U.gdp / U.ppl : 0)}</span><span class="chip0 ${ex >= im ? 'pos' : 'neg'}">ขายออกนอกเขต ${socN(ex)} · ซื้อเข้า ${socN(im)}</span><span class="chip0">เสถียรภาพ ${Math.round(U.stab)}</span></div>`
+        + `<div class="tr">ภาษีท้องถิ่นปีนี้ <b>${socN(U.got)}</b> ${coin}${U.toll > 0 ? ` (รวมด่าน ${socN(U.toll)})` : ''} <span class="w">รั่วไหล ${socN(U.leak)} · ใช้ ${Object.entries(FBUD).map(([k, n]) => n + ' ' + socN(U.bud[k])).join(' · ')} · เข้าคลังของหน่วย ${socN(U.tr)}</span></div>`;
+    } else x += `<div class="tr w">ยังไม่มีชุมชนในเขตนี้ หรือการค้ายังคิดไม่เสร็จ</div>`;
+    x += `<div class="erow"><label>ภาษีท้องถิ่น <input type="number" data-uf="rate" min="0" max="50" step="0.5" value="${pcv(unitRate(u, F))}" style="width:4.6em"${u.rate != null ? ' class="chg"' : ''}${dis}> %</label><label>ของ <select data-uf="base"${dis}>${Object.entries(LBASE).map(([k, n]) => `<option value="${k}"${unitBase(u, F) === k ? ' selected' : ''}>${n}</option>`).join('')}</select></label><label>ด่านเก็บของที่เข้าเขต <input type="number" data-uf="toll" min="0" max="100" step="0.5" value="${pcv(u.toll || 0)}" style="width:4.6em"${dis}> %</label></div>`
+      + `<div class="ftax">${Object.entries(FBUD).map(([k, n]) => `<label>${n} <input type="number" data-uf="b.${k}" min="0" max="100" step="1" value="${pcv(B[k])}" style="width:4.4em"${u.bud && u.bud[k] != null ? ' class="chg"' : ''}${dis}> %</label>`).join('')}</div>`
+      + `<div class="tr w">เขตนี้ตั้งภาษี ด่าน และงบของตัวเองได้ ส่วนพันธมิตร คู่อริ การคว่ำบาตร ภาษีนำเข้า และระบอบเศรษฐกิจเป็นกฎหมายของ${esc(st.name)} ใช้ทั้งรัฐ ด่านทำให้ของจากนอกเขตแพงขึ้นในเขตนี้ คนในเขตจึงซื้อของในเขตมากขึ้น</div>`
+      + `<div class="btns"><button type="button" class="btn" data-aa="ureset"${dis}>ใช้อัตราและงบตามระดับของรัฐ</button></div></div>`;
+    const at = h.indexOf('<div class="erow"><label>ชื่อ'); return at >= 0 ? h.slice(0, at) + x + h.slice(at) : h + x;
   };
 }
+$('ecobody').addEventListener('change', e => {
+  if (ecoTab !== 'adm' || !editable) return; const el = e.target, f = el.dataset && el.dataset.uf, u = admById(ADM.sel); if (!f || !u) return;
+  const v = clamp((+el.value || 0) / 100, 0, 1);
+  admDo(() => { if (f === 'rate') u.rate = Math.min(0.5, v); else if (f === 'base') { if (LBASE[el.value]) u.base = el.value; } else if (f === 'toll') { if (v > 0) u.toll = v; else delete u.toll; } else if (f.startsWith('b.')) (u.bud || (u.bud = {}))[f.slice(2)] = v; });
+});
+$('ecobody').addEventListener('click', e => { if (ecoTab !== 'adm' || !editable) return; const b = e.target.closest ? e.target.closest('[data-aa="ureset"]') : null, u = admById(ADM.sel); if (!b || !u) return; admDo(() => { delete u.rate; delete u.base; delete u.bud; delete u.toll; }); });
 
 // ---- v0.19.5: a community put under another, from the community's own form ----
 // The owner asked why he could not simply say which city answers to which (25 Nov 2026). The units hold land, so a community
@@ -348,7 +371,7 @@ function admPutUnder(a, b) {
     ADM.stamp++; ADM.idx = null; const X = admIndex();
     for (let x = ub; x; x = X.upOf(x)) if (x === ua) { msg = `${vb.name} ขึ้นกับ ${va.name} อยู่ ให้ ${vb.name} ขึ้นกับที่อื่นก่อน`; return; }
     if (ub.t > ua.t) { ua.up = ub.id; return; }
-    const T = ua.t + 1; if (T > 2) { msg = `${va.name} เป็นที่ตั้งของ${ECO.admn[2]} ขึ้นตรงต่อรัฐได้อย่างเดียว`; return; }
+    const T = ua.t + 1; if (T > 2) { msg = `${va.name} เป็นที่ตั้งของ${admNames(ECO.states.find(x => x.id === sa))[2]} ขึ้นตรงต่อรัฐได้อย่างเดียว`; return; }
     let p = X.upOf(ub); while (p && p.t <= T) p = X.upOf(p);
     const c = { id: admNewId(), t: T, name: vb.name || '', up: p ? p.id : '', type: '', seat: b }; ECO.adm.push(c);
     ub.up = c.id; ua.up = c.id;
@@ -360,7 +383,7 @@ function admCityForm() {
   if (!r.st) { sl.innerHTML = '<option>อยู่นอกรัฐ</option>'; sl.disabled = true; note.textContent = 'ระบายเขตรัฐให้ชุมชนนี้ก่อน'; return; }
   const vc = visibleCities(), mine = vc.filter(c => c.id !== sel && ECO.cells[hexAt(c.x, c.y)] === r.st).sort((x, y) => (KIX[x.kind] != null ? KIX[x.kind] : 1) - (KIX[y.kind] != null ? KIX[y.kind] : 1) || (x.name || '').localeCompare(y.name || '', 'th')).slice(0, 400);
   const s = ECO.states.find(x => x.id === r.st), boss = r.u && r.u.seat && r.u.seat !== sel ? r.u : r.p, cur = boss ? (boss.seat && boss.seat !== sel ? boss.seat : 'u:' + boss.id) : '';   // a community that heads nothing answers to its manor's seat
-  let h = `<option value="">${esc(ECO.admn[3])} ${esc(s ? s.name : '')} โดยตรง</option>`;
+  let h = `<option value="">${esc(admNames(s)[3])} ${esc(s ? s.name : '')} โดยตรง</option>`;
   if (cur.startsWith('u:')) h += `<option value="${cur}">${esc(admTitle(boss))}</option>`;
   h += mine.map(c => `<option value="${esc(c.id)}">${esc(c.name || 'ไม่มีชื่อ')} · ${esc((CK[c.kind] || CK.city).name)}</option>`).join('');
   sl.innerHTML = h; sl.value = cur; sl.disabled = !editable;

@@ -48,9 +48,15 @@
 29s-ui.js
 29t-belief.js
 29u-admin.js
+29ua-gov.js
+29ub-coin.js
 29v-market.js
 29w-army.js
 29x-game.js
 29z-spec.js
+29zd-farm.js
 29y-typing.js
+29yb-hints.js
+29yc-detail.js
+29yd-massif.js
 30-api.js

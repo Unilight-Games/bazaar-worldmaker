@@ -62,7 +62,7 @@
     async importMap(file, keepId) {
       if (!file || file.format !== 'map-maker-engine' || !file.meta || !file.docs) throw new Error('ไฟล์นี้ไม่ใช่ไฟล์แผนที่ของ Bazaar Worldmaker');
       const m = file.meta, cols = m.cols | 0, rows = m.rows | 0;
-      if (!(cols >= 8 && cols <= 400 && rows >= 8 && rows <= 400)) throw new Error('ขนาดแผนที่ในไฟล์ไม่ถูกต้อง');
+      if (!(cols >= 8 && cols <= (MME.MAXDIM || 400) && rows >= 8 && rows <= (MME.MAXDIM || 400))) throw new Error('ขนาดแผนที่ในไฟล์ไม่ถูกต้อง');
       const id = keepId && typeof m.id === 'string' ? m.id : MME.newId();
       const meta = { id, title: String(m.title || 'แผนที่ที่นำเข้า').slice(0, 80), base: m.base === 'gresland' ? 'gresland' : 'blank', cols, rows, kmPerHex: Number(m.kmPerHex) > 0 ? Number(m.kmPerHex) : 10, created: m.created || Date.now(), updated: Date.now(), backup: Date.now(), thumb: typeof m.thumb === 'string' && m.thumb.startsWith('data:image/') ? m.thumb : '' };
       // store.keepBase: this page has no ground of its own for such a map (set by the shell). The file must bring one, or the

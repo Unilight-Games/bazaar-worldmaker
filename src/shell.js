@@ -2,7 +2,7 @@
 // the sheet for a new map, and the room around an open map.
 (function () {
   const MME = window.MME;
-  MME.VERSION = '0.20.1';
+  MME.VERSION = '0.21.0';
   MME.NAME = 'Bazaar Worldmaker';
   MME.GRESLAND_KM = 34;   // canon: the continent is about 12 million square kilometres, and the map draws it on 12,208 hexes
   const $ = id => document.getElementById(id);
@@ -243,23 +243,31 @@
   };
 
   // ---------- a new map ----------
-  const NM = { size: 'm', start: 'random', style: 'continent', climate: 'mixed', wind: 'W', rivers: 1, seed: 1, read: 'auto', fit: 'fit', cut: null, inv: false };
+  const NM = { cc: 720, cr: 468, size: 'm', start: 'random', style: 'continent', climate: 'mixed', wind: 'W', rivers: 1, seed: 1, read: 'auto', fit: 'fit', cut: null, inv: false };
   let nmPic = null;                                  // the picture a new map is read from: an ImageBitmap or an Image
   let nmGen = null, nmT = 0;
   const seg = (id, key, cb) => { for (const b of $(id).querySelectorAll('button')) b.onclick = () => { NM[key] = isNaN(+b.dataset.v) ? b.dataset.v : +b.dataset.v; syncSeg(id, key); cb && cb(); }; };
   const syncSeg = (id, key) => { for (const b of $(id).querySelectorAll('button')) b.setAttribute('aria-pressed', String(String(NM[key]) === b.dataset.v)); };
+  // v0.21.0: the sizes on offer, and one of the player's own measure (each side from MINDIM to MAXDIM hexes)
+  const nmDim = () => NM.size === 'c' ? { cols: NM.cc, rows: NM.cr } : MME.SIZES[NM.size];
   function nmSizes() {
-    $('nmSizes').innerHTML = Object.entries(MME.SIZES).map(([k, s]) => `<label class="sizeopt${NM.size === k ? ' on' : ''}"><input type="radio" name="nmSize" id="nmSize-${k}" value="${k}"${NM.size === k ? ' checked' : ''}><b>${s.name}</b><span>${s.cols} × ${s.rows} ช่อง</span><span>${esc(s.note)}</span></label>`).join('');
-    for (const r of $('nmSizes').querySelectorAll('input')) r.onchange = () => { NM.size = r.value; nmSizes(); nmPreview(); };
+    const heavy = d => d.cols * d.rows > 240 * 156 ? `<span class="heavy">หนักเครื่องราว ${Math.max(2, Math.round(d.cols * d.rows / (240 * 156)))} เท่าของขนาดใหญ่</span>` : '';
+    $('nmSizes').innerHTML = Object.entries(MME.SIZES).map(([k, s]) => `<label class="sizeopt${NM.size === k ? ' on' : ''}"><input type="radio" name="nmSize" id="nmSize-${k}" value="${k}"${NM.size === k ? ' checked' : ''}><b>${s.name}</b><span>${s.cols} × ${s.rows} ช่อง</span><span>${esc(s.note)}</span></label>`).join('')
+      + `<label class="sizeopt${NM.size === 'c' ? ' on' : ''}"><input type="radio" name="nmSize" id="nmSize-c" value="c"${NM.size === 'c' ? ' checked' : ''}><b>กำหนดเอง</b><span class="sizein"><input type="number" id="nmCols" min="${MME.MINDIM}" max="${MME.MAXDIM}" step="1" value="${NM.cc}" aria-label="จำนวนช่องตามแนวกว้าง"> × <input type="number" id="nmRows" min="${MME.MINDIM}" max="${MME.MAXDIM}" step="1" value="${NM.cr}" aria-label="จำนวนช่องตามแนวสูง"> ช่อง</span><span>ด้านละ ${MME.MINDIM} ถึง ${MME.MAXDIM} ช่อง</span>${NM.size === 'c' ? heavy(nmDim()) : ''}</label>`;
+    for (const r of $('nmSizes').querySelectorAll('input[name="nmSize"]')) r.onchange = () => { NM.size = r.value; nmSizes(); nmPreview(); };
+    for (const [id, k] of [['nmCols', 'cc'], ['nmRows', 'cr']]) { const el = $(id); el.onfocus = () => { if (NM.size !== 'c') { NM.size = 'c'; const r = $('nmSize-c'); if (r) r.checked = true; } }; el.onchange = () => { NM[k] = Math.max(MME.MINDIM, Math.min(MME.MAXDIM, Math.round(+el.value || NM[k]))); NM.size = 'c'; nmSizes(); nmPreview(); }; }
     nmKm();
   }
-  function nmKm() { const s = MME.SIZES[NM.size], km = Math.max(0.1, +$('nmKm').value || 30); $('nmKmNote').textContent = `แผนที่กว้างราว ${fmtKm(s.cols * 0.866 * km)} กม. สูงราว ${fmtKm(s.rows * km)} กม. พื้นที่ราว ${(Math.round(s.cols * s.rows * 0.866 * km * km / 1e5) / 10).toLocaleString('en-US')} ล้าน ตร.กม. รวมทะเล`; }
-  function nmOpts() { return { seed: NM.seed, style: NM.style, land: +$('nmLand').value / 100, relief: +$('nmRelief').value / 100, climate: NM.climate, wind: NM.wind, rivers: NM.rivers }; }
+  // v0.21.0: the more hexes, the shorter each (the owner, 26 Nov 2026): the scale starts so that the map spans about what a
+  // middle-sized map at 30 km spans, until the player writes a scale of their own
+  const kmFor = cols => Math.max(0.5, Math.min(30, Math.round(2 * 30 * 159 / cols) / 2)); // 30 km up to the medium width, then the same world spread over more hexes
+  function nmKm() { const s = nmDim(); if (!NM.kmOwn) $('nmKm').value = kmFor(s.cols); const km = Math.max(0.1, +$('nmKm').value || 30); $('nmKmNote').textContent = (NM.kmOwn ? '' : 'ตั้งตามขนาดแผนที่ ยิ่งช่องมาก แต่ละช่องยิ่งสั้น แก้เองได้ · ') + `แผนที่กว้างราว ${fmtKm(s.cols * 0.866 * km)} กม. สูงราว ${fmtKm(s.rows * km)} กม. พื้นที่ราว ${(Math.round(s.cols * s.rows * 0.866 * km * km / 1e5) / 10).toLocaleString('en-US')} ล้าน ตร.กม. รวมทะเล`; }
+  function nmOpts() { return { seed: NM.seed, style: NM.style, land: +$('nmLand').value / 100, relief: +$('nmRelief').value / 100, climate: NM.climate, wind: NM.wind, rivers: NM.rivers, km: Math.max(0.1, +$('nmKm').value || 30) }; }
   const PREV = { S: '#274559', L: '#4a7692', M: '#8d8273', g: '#a7b06e', s: '#c4b880', v: '#bbb56c', c: '#cdb988', h: '#929e6c', d: '#e3c78f', t: '#b7b7a0', n: '#e9edf0', f: '#4f6f52', o: '#5f8a4e', j: '#2f6b45', m: '#7f9a78', w: '#4d7361' };
   function nmPreview() {
     clearTimeout(nmT);
     nmT = setTimeout(() => {
-      const s = MME.SIZES[NM.size], cv = $('nmPrev'), c = cv.getContext('2d'); cv.width = s.cols * 2; cv.height = s.rows * 2 + 1;
+      const s = nmDim(), cv = $('nmPrev'), c = cv.getContext('2d'); cv.width = s.cols * 2; cv.height = s.rows * 2 + 1;
       c.fillStyle = PREV.S; c.fillRect(0, 0, cv.width, cv.height);
       $('nmRandom').hidden = NM.start !== 'random';
       $('nmImage').hidden = NM.start !== 'image'; $('nmSeedRow').hidden = $('nmGenHint').hidden = NM.start === 'image';
@@ -273,7 +281,7 @@
     }, 60);
   }
   function openNewMap() {
-    NM.seed = 1 + Math.floor(Math.random() * 99999); $('nmSeed').value = NM.seed; $('nmTitle').value = '';
+    NM.seed = 1 + Math.floor(Math.random() * 99999); $('nmSeed').value = NM.seed; $('nmTitle').value = ''; NM.kmOwn = false;
     nmSizes(); for (const [id, key] of [['nmStart', 'start'], ['nmStyle', 'style'], ['nmClimate', 'climate'], ['nmWind', 'wind'], ['nmRivers', 'rivers'], ['nmRead', 'read'], ['nmFit', 'fit']]) syncSeg(id, key);
     $('newVeil').hidden = false; nmPreview(); $('nmTitle').focus();
   }
@@ -314,12 +322,12 @@
   for (const id of ['nmLand', 'nmRelief']) $(id).oninput = () => { $(id + 'V').textContent = $(id).value + '%'; nmPreview(); };
   $('nmSeed').oninput = () => { NM.seed = Math.max(1, Math.floor(+$('nmSeed').value) || 1); nmPreview(); };
   $('nmReroll').onclick = () => { NM.seed = 1 + Math.floor(Math.random() * 99999); $('nmSeed').value = NM.seed; nmPreview(); };
-  $('nmKm').oninput = nmKm;
+  $('nmKm').oninput = () => { NM.kmOwn = true; nmKm(); nmPreview(); };   // the weather of the new land counts in km (v0.21.0)
   $('newBtn').onclick = openNewMap;
   $('nmCancel').onclick = () => { $('newVeil').hidden = true; };
   $('newVeil').addEventListener('pointerdown', e => { if (e.target === $('newVeil')) $('newVeil').hidden = true; });
   $('nmCreate').onclick = async () => {
-    const s = MME.SIZES[NM.size], id = MME.newId(), N = s.cols * s.rows;
+    const s = nmDim(), id = MME.newId(), N = s.cols * s.rows;
     const meta = { id, title: ($('nmTitle').value.trim() || 'แผนที่ใหม่').slice(0, 80), base: 'blank', cols: s.cols, rows: s.rows, kmPerHex: Math.max(0.1, Math.min(1000, +$('nmKm').value || 30)), created: Date.now(), updated: Date.now(), thumb: '' };
     let cells = '.'.repeat(N), rivers = [];
     if (NM.start === 'image') { if (!nmImg) { toast('เลือกรูปก่อนสร้างแผนที่'); return; } cells = nmImg.cells; meta.gen = { image: 1, read: nmImg.mode }; }
@@ -677,7 +685,7 @@
       const j = await joiner(); if (!j) throw new Error('หน้านี้ต่อห้องไม่ได้ในมุมมองนี้');
       const r = await MME.joinRoom({ join: j.join, code, name, device: myDevice(), onPeople, onEnd: why => closeMap(why), needBase: m => NOGRES && m.base === 'gresland' });
       const meta = { id: 'room-' + code.slice(0, 6), title: String(r.meta.title || 'แผนที่ของเพื่อน').slice(0, 80), base: r.meta.base === 'gresland' ? 'gresland' : 'blank', cols: r.meta.cols | 0, rows: r.meta.rows | 0, kmPerHex: +r.meta.kmPerHex || 10 };
-      if (!(meta.cols >= 8 && meta.cols <= 400 && meta.rows >= 8 && meta.rows <= 400)) { r.room.close(); throw new Error('แผนที่ของห้องนี้อ่านไม่ได้'); }
+      if (!(meta.cols >= 8 && meta.cols <= MME.MAXDIM && meta.rows >= 8 && meta.rows <= MME.MAXDIM)) { r.room.close(); throw new Error('แผนที่ของห้องนี้อ่านไม่ได้'); }
       if (r.base) lent.set(meta.id, r.base);          // the ground the owner handed over, held only while this page is in the room
       const ok = await mount(meta, r.db, r.room); if (ok) { cur.online = j.online; roomUI([]); try { r.room.status($('mapbox').dataset.mode); } catch (err) { /* said at the next change of tool */ } } else r.room.close();
     } catch (err) { toast(err && err.message ? err.message : 'เข้าห้องไม่ได้', 6000); }

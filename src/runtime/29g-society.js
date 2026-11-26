@@ -540,25 +540,25 @@ let reachKey = '', reachP = null;
 function reachSel() { if (!ECON || !ECON.hin) return -1; const id = mode === 'trade' ? tsel : mode === 'city' ? sel : null; return id ? ECON.cities.findIndex(c => c.id === id) : -1; }
 function reachOf(k) {
   const key = ECON.ver + '|' + k; if (key === reachKey && reachP) return reachP; reachKey = key;
-  const fi = new Path2D(), fo = new Path2D(), ei = new Path2D(), eo = new Path2D(), I = ECON.hin, O = ECON.hout; let ni = 0, no = 0;
+  const fi = new Path2D(), fo = new Path2D(), ei = new Path2D(), eo = new Path2D(), fw = new Path2D(), I = ECON.hin, O = ECON.hout; let ni = 0, no = 0, nw = 0;
   for (let i = 0; i < N; i++) {
-    const a = I[i] === k, b = O[i] === k; if (!a && !b) continue; if (isW(eff(i))) continue;
-    if (a) ni++; else no++; hexPath(a ? fi : fo, i, 1);
-    for (let j = 0; j < 6; j++) { const v = NB[i * 6 + j], same = v >= 0 && !isW(eff(v)) && (a ? I[v] === k : I[v] === k || O[v] === k); if (same) continue; const e = EDGE[j], e2 = (e + 1) % 6, P = a ? ei : eo; P.moveTo(CX[i] + R * COS[e], CY[i] + R * SIN[e]); P.lineTo(CX[i] + R * COS[e2], CY[i] + R * SIN[e2]); }
+    const a = I[i] === k, b = O[i] === k; if (!a && !b) continue; const wet = isW(eff(i)); if (wet && !a) continue;
+    if (wet) { nw++; hexPath(fw, i, 1); } else if (a) ni++; else no++; if (!wet) hexPath(a ? fi : fo, i, 1);   // v0.21.0: the fishing grounds are in the frame too
+    for (let j = 0; j < 6; j++) { const v = NB[i * 6 + j], same = v >= 0 && (a ? I[v] === k : (I[v] === k || O[v] === k) && !isW(eff(v))); if (same) continue; const e = EDGE[j], e2 = (e + 1) % 6, P = a ? ei : eo; P.moveTo(CX[i] + R * COS[e], CY[i] + R * SIN[e]); P.lineTo(CX[i] + R * COS[e2], CY[i] + R * SIN[e2]); }
   }
-  return reachP = { fi, fo, ei, eo, ni, no };
+  return reachP = { fi, fo, ei, eo, fw, ni, no, nw };
 }
 function reachDraw() {
   const k = reachSel(); if (k < 0) return; const P = reachOf(k), px = 1 / view.s;
   ctx.save(); ctx.setTransform(dpr * view.s, 0, 0, dpr * view.s, dpr * view.x, dpr * view.y); ctx.globalAlpha = 1;
-  ctx.fillStyle = 'rgba(255,206,110,.1)'; ctx.fill(P.fo); ctx.fillStyle = 'rgba(255,206,110,.28)'; ctx.fill(P.fi);
+  ctx.fillStyle = 'rgba(255,206,110,.1)'; ctx.fill(P.fo); ctx.fillStyle = 'rgba(255,206,110,.28)'; ctx.fill(P.fi); ctx.fillStyle = 'rgba(150,210,255,.22)'; ctx.fill(P.fw);
   ctx.lineCap = 'round'; ctx.setLineDash([Math.max(1.5, 4 * px), Math.max(1.5, 4 * px)]); ctx.strokeStyle = 'rgba(255,214,130,.7)'; ctx.lineWidth = Math.max(0.4, 1.2 * px); ctx.stroke(P.eo);
   ctx.setLineDash([]); ctx.strokeStyle = 'rgba(30,20,8,.75)'; ctx.lineWidth = Math.max(0.8, 3.4 * px); ctx.stroke(P.ei); ctx.strokeStyle = '#ffd27a'; ctx.lineWidth = Math.max(0.5, 1.8 * px); ctx.stroke(P.ei);
   ctx.restore();
 }
 { const under = drawUnderNames; drawUnderNames = function () { if (under) under(); reachDraw(); }; }
-{ const t = tradeCityHTML; tradeCityHTML = function (k) { const h = t(k); if (!ECON || !ECON.hin) return h; const P = reachOf(k), c = ECON.cities[k], line = `<div class="tr">เก็บเกี่ยวรอบเมือง <b>${P.ni}</b> ช่อง ไกลสุด ${c.reach} ช่อง <span class="w">และอีก ${P.no} ช่องที่ส่งคนไปหาของบางอย่าง เช่น ไม้ แร่ และของป่า (กรอบทองทึบกับกรอบประบนแผนที่)</span></div>`, at = h.indexOf('<h3>ประชากรและความเป็นอยู่</h3>'); return at >= 0 ? h.slice(0, at) + line + h.slice(at) : h + line; }; }
-{ const cf = ecoCityForm; ecoCityForm = function () { cf(); if (!sel || !ECON || !ECON.hin || !$('cfHint')) return; const k = ECON.cities.findIndex(c => c.id === sel); if (k < 0) return; const P = reachOf(k), tx = `เก็บเกี่ยวรอบเมือง ${P.ni} ช่อง ไกลสุด ${ECON.cities[k].reach} ช่อง (กรอบทองบนแผนที่)`, cur = $('cfHint').textContent.split(' · ').filter(x => !x.startsWith('เก็บเกี่ยวรอบเมือง')); $('cfHint').textContent = [...cur, tx].join(' · '); requestDraw(); }; }
+{ const t = tradeCityHTML; tradeCityHTML = function (k) { const h = t(k); if (!ECON || !ECON.hin) return h; const P = reachOf(k), c = ECON.cities[k], line = `<div class="tr">เก็บเกี่ยวรอบเมือง <b>${P.ni}</b> ช่อง${P.nw ? ` และจับปลาในน้ำ <b>${P.nw}</b> ช่อง` : ''} ไกลสุด ${c.reach} ช่อง <span class="w">และอีก ${P.no} ช่องที่ส่งคนไปหาของบางอย่าง เช่น ไม้ แร่ และของป่า (กรอบทองทึบกับกรอบประบนแผนที่)</span></div>`, at = h.indexOf('<h3>ประชากรและความเป็นอยู่</h3>'); return at >= 0 ? h.slice(0, at) + line + h.slice(at) : h + line; }; }
+{ const cf = ecoCityForm; ecoCityForm = function () { cf(); if (!sel || !ECON || !ECON.hin || !$('cfHint')) return; const k = ECON.cities.findIndex(c => c.id === sel); if (k < 0) return; const P = reachOf(k), tx = `เก็บเกี่ยวรอบเมือง ${P.ni} ช่อง${P.nw ? ' จับปลา ' + P.nw + ' ช่อง' : ''} ไกลสุด ${ECON.cities[k].reach} ช่อง (กรอบทองบนแผนที่)`, cur = $('cfHint').textContent.split(' · ').filter(x => !x.startsWith('เก็บเกี่ยวรอบเมือง')); $('cfHint').textContent = [...cur, tx].join(' · '); requestDraw(); }; }
 
 // ---------- one card for each state, one card for each city (v0.14.0, the owner: easy, friendly, not scattered) ----------
 // Everything about a state is set in one card in the states tab, in sections in the order a person thinks of them: what it is
@@ -586,8 +586,8 @@ ecoStatesHTML = function () {
     h += `<details class="efold stfold scard" data-fold="st${s.id}"${GDPV['st' + s.id] === 0 ? '' : ' open'}><summary><i class="sdot" style="background:${s.color}"></i>${esc(s.name)} <small>${ESYS[s.sys][0]}</small><span class="schips">${stateChips(s, cnt[s.id])}</span></summary><div class="eform" data-s="${s.id}">`
       + `<div class="btns sbtns"><button type="button" class="btn${ecoPaint === s.id ? ' on' : ''}" data-a="spaint"${dis}>${ecoPaint === s.id ? 'กำลังระบายเขตของรัฐนี้' : 'ระบายเขตของรัฐนี้'}</button><button type="button" class="btn" data-a="sgo">ดูบนแผนที่การค้า</button><small class="w">${cnt[s.id] || 0} ช่องบนแผนที่</small></div>`
       + `<div class="ssec"><h5>ชื่อ สี และเงิน</h5><div class="erow"><input type="color" data-f="scolor" value="${s.color}" aria-label="สีของรัฐ"${dis}><input type="text" data-f="sname" maxlength="60" value="${esc(s.name)}" style="flex:1"${dis}></div>`
-      + `<div class="erow"><label>สกุลเงิน <input type="text" data-f="scur" maxlength="30" value="${esc(s.cur)}" placeholder="${esc(ECO.central.name)}" style="width:8em"${dis}></label><label>1 หน่วย = <input type="number" data-f="srate" min="0.01" max="1000" step="0.05" value="${s.rate}"${dis}> ${esc(ECO.central.name)}</label></div>${b && Math.abs(b.fx) >= 0.001 ? `<div class="tr w">ปีนี้ค่าเงิน${b.fx > 0 ? 'แข็งขึ้น' : 'อ่อนลง'}ร้อยละ ${ecoPc(Math.abs(b.fx))} ตามดุลการค้า</div>` : ''}</div>`
-      + `<div class="ssec"><h5>ระบอบและกฎหมาย</h5>` + ecoIn('ระบอบเศรษฐกิจ', sel('ssys', ESYS, s.sys)) + `<div class="tr w">${ESYS[s.sys][1]}</div>`
+      + (typeof coinStateForm === 'function' && s.sys !== 'anar' ? coinStateForm(s) : '') + `</div>`
+      + `<div class="ssec"><h5>ระบอบและกฎหมาย</h5>` + (!anar && typeof govStateForm === 'function' ? govStateForm(s) : '') + ecoIn('ระบอบเศรษฐกิจ', sel('ssys', ESYS, s.sys)) + `<div class="tr w">${ESYS[s.sys][1]}</div>`
       + (anar ? `<div class="tr w">แรงงานทาส: ดินแดนที่ไม่มีรัฐค้าทาสเสรีเสมอ</div>` : ecoIn('แรงงานทาส', sel('sslave', ESLAVE, s.slave || 'abol')) + `<div class="tr w">${ESLAVE[s.slave || 'abol'][1]}</div>`)
       + (s.sys === 'soc' ? ecoCapHTML(s) : '') + `</div>`
       + (anar ? '' : `<div class="ssec"><h5>ผู้คนและการทำงาน</h5>` + ecoIn('คนย้ายเข้ากระจายตัว', sel('sspread', ESPREAD, s.spread || 'nat')) + `<div class="tr w">${ESPREAD[s.spread || 'nat'][1]}</div>`

@@ -8,8 +8,11 @@
   MME.SIZES = {
     s: { cols: 96, rows: 64, name: 'เล็ก', note: 'ภูมิภาคเดียว หรือเกาะใหญ่หนึ่งเกาะ' },
     m: { cols: 159, rows: 104, name: 'กลาง', note: 'ทวีปหนึ่งทวีป เท่าแผนที่เกรสแลนด์' },
-    l: { cols: 240, rows: 156, name: 'ใหญ่', note: 'หลายทวีป หรือโลกทั้งใบ' }
+    l: { cols: 240, rows: 156, name: 'ใหญ่', note: 'หลายทวีป หรือโลกทั้งใบ' },
+    xl: { cols: 560, rows: 364, name: 'ใหญ่พิเศษ', note: 'โลกทั้งใบแบบละเอียด หนักเครื่องราวห้าเท่าของขนาดใหญ่' }
   };
+  // v0.21.0: the owner asked for a larger canvas and one of his own measure, up to 1080 a side (26 Nov 2026)
+  MME.MAXDIM = 1080; MME.MINDIM = 16;
   MME.gridFor = (cols, rows) => ({ x0: X0, y0: Y0, R: R0, cols, rows, cmin: 0, kmin: 0, w: Math.ceil(2 * X0 + (cols - 1) * DX), h: Math.floor(Y0 + (rows - 0.5) * DY) });
 
   // flat-top hexes, odd columns half a row lower: the same lattice as the map runtime
@@ -238,6 +241,11 @@
   // 'mixed' | 'cold' | 'temperate' | 'hot', rivers 0..2 or -1 for none. Returns cells ('.' is sea) and the rivers.
   MME.generate = function (G, opt) {
     const L = lattice(G), N = L.N, o = opt || {}, seed = (o.seed | 0) || 1, rnd = rng(seed * 7919 + 3);
+    // v0.21.0: the weather counts in kilometres (the owner, 26 Nov 2026). Its numbers were set on a map of 30 km a hex: kr is how
+    // many of those one hex here spans. The latitudes the map spans come from its height in km (111 km a degree) around the middle
+    // of its climate, as the runtime reckons them (06-climate), and the swing of warmth from north to south grows with that span.
+    const km = Math.min(1000, Math.max(0.1, +o.km || 30)), kr = km / 30, mid = { cold: 60, temperate: 42, hot: 14 }[o.climate] || 38;
+    const span = Math.min(120, Math.max(6, L.rows * km / 111)), lat0 = mid + span / 2, kspan = Math.min(2.5, Math.max(0.3, span / (104 * 30 / 111)));
     const landShare = Math.min(0.75, Math.max(0.08, o.land == null ? 0.38 : o.land)), style = o.style || 'continent', relief = o.relief == null ? 0.5 : o.relief;
     const W = G.w, H = G.h, sc = Math.min(W, H);
     const blobs = [];
@@ -264,7 +272,7 @@
     for (let i = 0; i < N; i++) {
       if (kind[i]) continue;
       const x = L.CX[i], y = L.CY[i], rdg = 1 - Math.abs(2 * fbm(x / (sc * 0.42) + 3.1, y / (sc * 0.42) - 1.7, seed + 301, 4) - 1);
-      ms[i] = 0.45 * (e[i] - sea) / (emax - sea + 1e-6) + 0.75 * rdg * rdg * rdg + (dSea[i] >= 2 ? 0 : -0.5);
+      ms[i] = 0.45 * (e[i] - sea) / (emax - sea + 1e-6) + 0.75 * rdg * rdg * rdg + (dSea[i] * kr >= 2 ? 0 : -0.5);
       cand.push(i);
     }
     cand.sort((a, b) => ms[b] - ms[a]);
@@ -273,24 +281,28 @@
     for (let i = 0; i < N; i++) if (isM[i]) { let m = 0; for (let k = 0; k < 6; k++) { const v = L.NB[i * 6 + k]; if (v >= 0 && isM[v]) m++; } if (!m && hash2(i, 3, seed) < 0.7) isM[i] = 0; }   // few lone peaks
     const dM = distFrom(L, i => isM[i] === 1, 60);
     const height = new Float32Array(N);
-    for (let i = 0; i < N; i++) if (!kind[i]) height[i] = (e[i] - sea) * 3 + 0.05 * Math.min(dSea[i], 12) + (isM[i] ? 2 : 1.0 * Math.exp(-dM[i] / 2.5)) + 0.3 * fbm(L.CX[i] / 95, L.CY[i] / 95, seed + 401, 3) + 0.09 * vnoise(L.CX[i] / 24, L.CY[i] / 24, seed + 409);
-    // the weather: wind off the western sea loses its rain crossing the land and most of what is left on a range
-    const moist = new Float32Array(N), wind = o.wind === 'E' ? -1 : 1;
+    for (let i = 0; i < N; i++) if (!kind[i]) height[i] = (e[i] - sea) * 3 + 0.05 * Math.min(dSea[i] * kr, 12) + (isM[i] ? 2 : 1.0 * Math.exp(-dM[i] * kr / 2.5)) + 0.3 * fbm(L.CX[i] / 95, L.CY[i] / 95, seed + 401, 3) + 0.09 * vnoise(L.CX[i] / 24, L.CY[i] / 24, seed + 409);
+    // the weather: wind off the sea loses its rain crossing the land and most of what is left on a range, by the kilometre. The
+    // chosen wind blows over the belt of latitude the map's middle lies in; a row lying more than 8 degrees into another belt
+    // takes that belt's own wind, as on Earth (easterlies below 30 degrees and beyond 60, westerlies between)
+    const moist = new Float32Array(N), belt = la => { const a = Math.abs(la); return a < 30 || a >= 60 ? -1 : 1; }, keepL = Math.pow(0.986, kr), keepM = Math.pow(0.66, kr);
     for (let r = 0; r < L.rows; r++) {
+      const la = lat0 - span * (r + 0.5) / L.rows, toward = la + Math.sign(mid - la) * Math.min(8, Math.abs(mid - la));
+      const wind = belt(toward) === belt(mid) ? (o.wind === 'E' ? -1 : 1) : belt(la);
       let hum = 1;
       for (let s = 0; s < L.cols; s++) {
         const c = wind > 0 ? s : L.cols - 1 - s, i = r * L.cols + c;
-        if (kind[i] === 2) { hum = Math.min(1, hum + 0.12); continue; }
-        hum *= isM[i] ? 0.66 : 0.986; moist[i] = hum;
+        if (kind[i] === 2) { hum = Math.min(1, hum + 0.12 * kr); continue; }
+        hum *= isM[i] ? keepM : keepL; moist[i] = hum;
       }
     }
     const sm = new Float32Array(N);
-    for (let i = 0; i < N; i++) { if (kind[i]) continue; let t = moist[i] * 2, n = 2; for (let k = 0; k < 6; k++) { const v = L.NB[i * 6 + k]; if (v >= 0 && !kind[v]) { t += moist[v]; n++; } } sm[i] = 0.6 * t / n + 0.3 * Math.exp(-dSea[i] / 9) + 0.22 * (fbm(L.CX[i] / 210, L.CY[i] / 210, seed + 51, 3) - 0.5); }
+    for (let i = 0; i < N; i++) { if (kind[i]) continue; let t = moist[i] * 2, n = 2; for (let k = 0; k < 6; k++) { const v = L.NB[i * 6 + k]; if (v >= 0 && !kind[v]) { t += moist[v]; n++; } } sm[i] = 0.6 * t / n + 0.3 * Math.exp(-dSea[i] * kr / 9) + 0.22 * (fbm(L.CX[i] * kr / 210, L.CY[i] * kr / 210, seed + 51, 3) - 0.5); }
     const CLIM = { mixed: [-5, 33], cold: [-15, 24], temperate: [3, 19], hot: [15, 14] }[o.climate || 'mixed'] || [-9, 37];
     const cells = new Array(N).fill('.'), temp = new Float32Array(N);
     for (let i = 0; i < N; i++) {
       if (kind[i]) continue;
-      const lat = L.CY[i] / H, T = CLIM[0] + CLIM[1] * lat - 2.2 * Math.min(4, height[i]) + 3 * (fbm(L.CX[i] / 170, L.CY[i] / 170, seed + 71, 2) - 0.5), m = sm[i];
+      const lat = L.CY[i] / H, T = CLIM[0] + CLIM[1] * (0.5 + kspan * (lat - 0.5)) - 2.2 * Math.min(4, height[i]) + 3 * (fbm(L.CX[i] * kr / 170, L.CY[i] * kr / 170, seed + 71, 2) - 0.5), m = sm[i];
       temp[i] = T;
       let b;
       if (isM[i]) b = 'M';
@@ -416,13 +428,13 @@
   };
 
   // the ground a map's climate is read from when it has no survey of its own: height in metres and rain in millimetres a cycle
-  MME.synthClimate = function (L, eff, elev, rain) {
-    const N = L.N, dW = distFrom(L, i => WATER(eff(i))), dM = distFrom(L, i => eff(i) === 'M', 60), raw = new Float32Array(N);
+  MME.synthClimate = function (L, eff, elev, rain, km) {
+    const kr = Math.min(30, Math.max(0.02, (+km || 30) / 30)), N = L.N, dW = distFrom(L, i => WATER(eff(i))), dM = distFrom(L, i => eff(i) === 'M', 60), raw = new Float32Array(N);
     for (let i = 0; i < N; i++) {
       const b = eff(i);
       if (WATER(b)) { elev[i] = 0; raw[i] = 0; continue; }
       let nm = 0; if (b === 'M') for (let k = 0; k < 6; k++) { const v = L.NB[i * 6 + k]; if (v >= 0 && eff(v) === 'M') nm++; }
-      elev[i] = Math.round(b === 'M' ? 2600 + 330 * nm + 400 * hash2(i, 1, 9) : 40 + 55 * Math.min(dW[i], 12) + 1100 * Math.exp(-dM[i] / 2.2));
+      elev[i] = Math.round(b === 'M' ? 2600 + 330 * nm + 400 * hash2(i, 1, 9) : 40 + 55 * Math.min(dW[i] * kr, 12) + 1100 * Math.exp(-dM[i] * kr / 2.2));   // rising inland and toward the ranges by the kilometre (v0.21.0)
       raw[i] = 60 + 1050 * (RAINW[b] == null ? 1 : RAINW[b]);
     }
     for (let i = 0; i < N; i++) {

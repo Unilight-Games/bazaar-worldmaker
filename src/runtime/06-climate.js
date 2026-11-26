@@ -7,6 +7,9 @@
 const b64u16 = s => { const b = atob(s), a = new Uint16Array(b.length >> 1); for (let i = 0; i < a.length; i++) a[i] = b.charCodeAt(2 * i) | (b.charCodeAt(2 * i + 1) << 8); return a; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const CL = { cloud: 3000, stTop: 10200, stRing: 7600, lapseS: 6.5, lapseW: 3, rdry: 0.6, k: 6.8, sMean: 26 };
+// v0.21.0: on a map of our own world the weather counts in kilometres (the owner, 26 Nov 2026). Its numbers were set at 30 km a
+// hex; KMR is how many of those one hex spans. Gresland keeps the numbers it was tuned on.
+const KMH = clamp(ENV.meta && +ENV.meta.kmPerHex || 30, 0.1, 1000), KMR = BLANK ? clamp(KMH / 30, 0.02, 30) : 1;
 const CLW = BLANK ? 5 : CL.lapseW;   // how fast the cold season cools with height: in Gresland the cold pools in the lowlands (the lore), on Earth it does so far less
 const SYN = !D.clim;   // no surveyed heights and rain: both are read from the painted ground, afresh whenever it changes
 const CL_E = SYN ? new Uint16Array(N) : b64u16(D.clim.elev), CL_P0 = SYN ? new Uint16Array(N) : b64u16(D.clim.rain);
@@ -30,14 +33,14 @@ const WORD = {};                                   // the hexes in the order a w
 function clWindField(dir, gust, H) {
   const [dx, dy] = WDIR[dir], pr = new Float32Array(N); for (let i = 0; i < N; i++) pr[i] = CX[i] * dx + CY[i] * dy;
   let ord = WORD[dir]; if (!ord) { ord = WORD[dir] = new Int32Array(N); for (let i = 0; i < N; i++) ord[i] = i; ord.sort((a, b) => pr[a] - pr[b]); }
-  const M = new Float32Array(N), W = new Float32Array(N), base = 0.05 / clamp(gust || 1, 0.3, 3);
+  const M = new Float32Array(N), W = new Float32Array(N), base = 1 - Math.pow(1 - 0.05 / clamp(gust || 1, 0.3, 3), KMR), take = 1 - Math.pow(0.7, KMR);   // rain-out and uptake by the km
   let sum = 0, n = 0;
   for (let q = 0; q < N; q++) {
     const i = ord[q]; let mi = 0, hi = 0, ws = 0;
     for (let k = 0; k < 6; k++) { const v = NB[i * 6 + k]; if (v < 0) continue; const d = pr[i] - pr[v]; if (d > 0.01) { mi += M[v] * d; hi += (H[v] || 0) * d; ws += d; } }
     const land = !isNaN(H[i]);
     if (ws > 0) { mi /= ws; hi /= ws; } else { mi = land ? 0.55 : 0.9; hi = land ? H[i] : 0; }      // air that enters over the edge of the map
-    if (!land) { M[i] = mi + (1 - mi) * 0.3; continue; }
+    if (!land) { M[i] = mi + (1 - mi) * take; continue; }
     const rise = (H[i] - hi) / 1000, f = clamp(base + (rise > 0 ? 0.5 * rise : 0), 0, 0.85), r = mi * f / (1 + (rise < 0 ? -1.6 * rise : 0));
     W[i] = r; M[i] = Math.max(0, mi - 0.85 * r); sum += r; n++;
   }
@@ -53,12 +56,23 @@ function clWindField(dir, gust, H) {
 // stays the map's own until the owner picks another; a map begun as empty sea takes the belts.
 const GENWIND = BLANK && ENV.meta && ENV.meta.gen && WDIR[ENV.meta.gen.wind] ? ENV.meta.gen.wind : '';
 const clWindOf = s => (s.wind || CLO.set.wind || (BLANK ? GENWIND || 'auto' : ''));
+// v0.21.0: the wind a map was made for blows over the belt of latitude its middle lies in; where the map reaches more than 8
+// degrees into another belt, that belt's own wind takes over there, as the generator lays it (gen.js). The span comes from the
+// map's height in km, so the wind changes with the distance north and south (the owner, 26 Nov 2026).
+function genBelts(w, g, lat, fld) {
+  const mid = (clLat0() + clLat1()) / 2, bm = clBelt(mid), pick = new Uint8Array(N); let any = false;
+  for (let i = 0; i < N; i++) { const la = lat[i], to = la + Math.sign(mid - la) * Math.min(8, Math.abs(mid - la)); if (clBelt(to) !== bm) { pick[i] = 1; any = true; } }
+  if (!any) return fld(w, g);
+  const a = fld(w, g), e = fld('E', g), x = fld('W', g), o = new Float32Array(N);
+  for (let i = 0; i < N; i++) o[i] = !pick[i] ? a[i] : clBelt(lat[i]) === 'E' ? e[i] : x[i];
+  return o;
+}
 const clBelt = lat => { const a = Math.abs(lat); return a < 30 ? 'E' : a < 60 ? 'W' : 'E'; };
 // the parts of each hex's climate that the user cannot change: its rain, and the sea-level warmth of the two intervals.
 // Colder north, warmer south, milder by the sea, hotter summers in the rain shadow, and the warm current of Celestia's sea along
 // the south-east isles (my own, as for the plantations).
 function buildCLB() {
-  if (SYN) MME.synthClimate(LAT, eff, CL_E, CL_P0);
+  if (SYN) MME.synthClimate(LAT, eff, CL_E, CL_P0, BLANK ? KMH : 30);
   const GB = SYN ? eff : (i => BI[i]);
   const P0 = CL_P0, d = new Uint16Array(N).fill(999), q = [];
   for (let i = 0; i < N; i++) if (GB(i) === 'S' || GB(i) === 'i') { d[i] = 0; q.push(i); }
@@ -67,7 +81,7 @@ function buildCLB() {
   for (let i = 0; i < N; i++) {
     let pi = P0[i];
     if (!pi) { let t = 0, n = 0; for (let k = 0; k < 6; k++) { const v = NB[i * 6 + k]; if (v >= 0 && P0[v]) { t += P0[v]; n++; } } pi = n ? t / n : 600; }   // land raised from the sea takes the rain around it
-    const u = clamp((CY[i] * 1536 / G.h - 80) / 1420, 0, 1), c = 1 - Math.exp(-d[i] / 6), rain = (pi - 60) / 1400, dry = clamp((CL.rdry - rain) / CL.rdry, 0, 1);
+    const u = clamp((CY[i] * 1536 / G.h - 80) / 1420, 0, 1), c = 1 - Math.exp(-d[i] * KMR / 6), rain = (pi - 60) / 1400, dry = clamp((CL.rdry - rain) / CL.rdry, 0, 1);
     const warm = !SYN && CX[i] > 1650 && CY[i] > 1080 && d[i] <= 4 ? 2 : 0;
     // wet country stays cooler in the warm interval under its clouds
     p[i] = pi; dtr[i] = 7 + 9 * clamp(1 - rain, 0, 1) + 3 * c;
@@ -94,6 +108,9 @@ function climHeight(i) {
   if (isStan(i)) return i === stPeak() ? CL.stTop : Math.max(CL_E[i], CL.stRing);
   return b === 'M' && BI[i] !== 'M' ? Math.max(CL_E[i], 2600) : CL_E[i];          // a mountain the user painted stands as high as the ranges
 }
+// v0.21.0: a peak wears snow where its warmest season stays below 4°C at its height (my threshold). The year last worked out is
+// read if there is one, since the climate is not worked out again for every stroke of the brush; else the hex's own sums.
+function peakSnowClim(i) { const A = CL_ARR; return (A && A.ts && !isNaN(A.h[i]) ? A.ts[i] : climAt(i).ts) < 4; }
 const ARID = [[0.05, 'แห้งแล้งจัด'], [0.2, 'แห้งแล้ง'], [0.5, 'กึ่งแห้งแล้ง'], [0.65, 'กึ่งชุ่มชื้น'], [Infinity, 'ชุ่มชื้น']];
 const aridClass = ai => ARID.findIndex(([t]) => ai < t);
 function climAt(i) {
@@ -125,7 +142,7 @@ function climEnsure() {
   const SE = clSeasons(); A.seas = SE; A.S = null; A.aig = null; A.grow = null; A.heat = null; A.wind = null;
   if (SE) {
     const tot = SE.reduce((a, s) => a + s.len, 0) || 1, lat = CLB.lat, fields = {}, fld = (dir, g) => fields[dir + g] || (fields[dir + g] = clWindField(dir, g, A.h));
-    const Wk = SE.map(s => { const w = clWindOf(s), g = Math.round(clamp(s.gust || 1, 0.3, 3) * 20) / 20; if (!w || w === 'calm' || !WDIR[w] && !(w === 'auto' && lat)) return null; if (w !== 'auto') return fld(w, g); const a = fld('E', g), b = fld('W', g), o = new Float32Array(N); for (let i = 0; i < N; i++) o[i] = clBelt(lat[i]) === 'E' ? a[i] : b[i]; return o; });
+    const Wk = SE.map(s => { const w = clWindOf(s), g = Math.round(clamp(s.gust || 1, 0.3, 3) * 20) / 20; if (!w || w === 'calm' || !WDIR[w] && !(w === 'auto' && lat)) return null; if (w !== 'auto') return !s.wind && !CLO.set.wind && w === GENWIND && lat ? genBelts(w, g, lat, fld) : fld(w, g); const a = fld('E', g), b = fld('W', g), o = new Float32Array(N); for (let i = 0; i < N; i++) o[i] = clBelt(lat[i]) === 'E' ? a[i] : b[i]; return o; });
     A.wind = SE.map(s => clWindOf(s));
     A.S = SE.map(() => ({ t: new Float32Array(N), p: new Float32Array(N) })); A.aig = new Float32Array(N); A.grow = new Float32Array(N); A.heat = new Float32Array(N);
     const wt = new Float64Array(SE.length), WA = CLO.set.wa != null ? CLO.set.wa : 0.35, SOUTH = lat ? clLat0() + clLat1() < 0 : false; ss = 0; n = 0;   // SOUTH: most of the map lies south of the equator, so the seasons are named for the south
@@ -193,6 +210,9 @@ const EARTH_RULES = [
   ['reindeer', 'เนื้อกวางเรนเดียร์', 'protein', [['t', 0.035], ['n', 0.015]]],
   ['game', 'เนื้อกวางและสัตว์ป่า', 'protein', [[WOODS, 0.012]]],
   ['camel', 'อูฐและนมอูฐ', 'protein', [['dy', 0.02]]],
+  ['horses', 'ม้า', 'livestock', [['gs', 0.006]]],             // v0.21.0: beasts to plough, carry and ride (Claude's rates)
+  ['oxen', 'วัวควายใช้งาน', 'livestock', [['gvpr', 0.004]]],
+  ['mules', 'ล่อและลา', 'livestock', [['ycM', 0.002]]],
   ['seasalt', 'เกลือทะเล', 'salt', [['Si', 0.035]]],
   ['rocksalt', 'เกลือสินเธาว์', 'salt', [['M', 0.004], ['d', 0.012], ['y', 0.008]], 1],
   ['spice', 'พริกไทยและเครื่องเทศ', 'herbs', [['r', 0.02], ['j', 0.006]]],
@@ -279,6 +299,18 @@ const EGOODS = (BLANK ? EARTH_RULES.map(([id, name, cat, terms, far]) => [id, na
   ['pitch', 'ยางสนและน้ำมันดิน', 'fuel', H => 0.03 * SB(H, 'fk'), 'me'],
   ['peat', 'พีต', 'fuel', H => 0.05 * SB(H, 'mw'), 'me'],
   ['dung', 'มูลสัตว์แห้งและฟาง', 'fuel', H => 0.012 * SB(H, 'gvhepsc'), 'me'],
+  // v0.21.0: Claude's, not from the lore: beasts of work, and the goods the specialties named that this world's list lacked
+  // (the owner found specialties that made nothing on this map, 26 Nov 2026). Each can be switched off in the goods tab. The
+  // crops are kept thin, so that they come in where a community takes up their specialty and do not flood the market for fine goods.
+  ['horses', 'ม้าศึกและม้าต่าง', 'livestock', H => 0.006 * SB(H, 'gs'), 'claude'],
+  ['oxen', 'วัวควายใช้งาน', 'livestock', H => 0.004 * SB(H, 'gvpr'), 'claude'],
+  ['mules', 'ล่อและลา', 'livestock', H => 0.002 * SB(H, 'ycM'), 'claude'],
+  ['coal', 'ถ่านหิน', 'fuel', H => 0.012 * SB(H, 'M'), 'claude', 1],
+  ['whaleoil', 'น้ำมันวาฬ', 'fuel', H => 0.004 * H.sea, 'claude'],
+  ['tea', 'ชา', 'herbs', H => 0.004 * H.foot, 'claude'],
+  ['wine', 'องุ่น ไวน์ และมะกอก', 'luxury', H => 0.0015 * SB(H, 'scy'), 'claude'],
+  ['dyes', 'ครามและสีย้อม', 'cloth', H => 0.003 * SB(H, 'gpr'), 'claude'],
+  ['incense', 'กำยานและยางหอม', 'luxury', H => 0.001 * SB(H, 'dc'), 'claude'],
   ['stone', 'หินก่อสร้าง', 'stone', H => 0.06 * NOQ(H, 'M') + 0.02 * H.footNQ, 'me'],
   ['clay', 'ดินเหนียวและเครื่องปั้นดินเผา', 'stone', H => 0.025 * SB(H, 'mp') + 0.01 * H.riv, 'me'],
   ['iron', 'แร่เหล็ก', 'ore', H => 0.1 * NOQ(H, 'M') + 0.05 * SZ(H, 'M', 'H'), 'king', 1],
@@ -328,6 +360,7 @@ const EMADE = {
   ships: { def: 'เรือ' },
   books: { def: 'หนังสือและตำรา', T: 'ตำราและม้วนคัมภีร์ของนครการศึกษา' },
 };
+Object.assign(EMADE, { drink: { def: 'สุรา เบียร์ และไวน์' }, furniture: { def: 'เฟอร์นิเจอร์และของใช้ในบ้าน' }, build: { def: 'อิฐ ปูน และกระเบื้อง' }, fert: { def: 'ปุ๋ยคอกและปุ๋ยหมัก' }, feed: { def: 'อาหารสัตว์และฟางอัด' }, textile: { def: 'ผ้าทอและเสื้อผ้า' }, pottery: { def: 'เครื่องปั้นดินเผาและแก้ว' }, food: { def: 'อาหารแห้ง ของดอง และเนื้อเค็ม' }, medicine: { def: 'ยาและเครื่องสำอาง' }, jewelry: { def: 'เครื่องประดับ' } });   // v0.21.0
 if (BLANK) { EMADE.tools = { def: 'เครื่องมือและเครื่องใช้เหล็ก' }; EMADE.arms = { def: 'อาวุธและชุดเกราะ' }; EMADE.tech = { def: 'เครื่องจักรและเครื่องกล' }; EMADE.books = { def: 'หนังสือและตำรา' }; }
 // what the lore says a city is known for: its output of a category times a factor
 const ECANON = {
@@ -351,19 +384,27 @@ const HZ = new Float32Array(N);
 const EFAR = [2, 2, 1.5, 1.5, 1];
 // Each hex goes to the city that reaches it first, a populous city reaching as if its hexes were shorter (v0.14.1: a great
 // city hemmed in by towns used to work no more land than they did, however many it had to feed). c.claim is that weight.
-const HKEY = new Float32Array(N);
+const HKEY = new Float32Array(N), HWD = new Uint8Array(N);
+// v0.21.0: the fishing grounds (the owner, 26 Nov 2026: the harvest should reach into the sea, for there is fishing). Boats go out
+// from the shore over open water up to fishReach hexes (one was all a city had before), within the city's own reach; water is
+// crossed only to more water, so no field is worked across a strait.
+const fishReach = () => typeof TU === 'function' && typeof ETUNE !== 'undefined' && ETUNE.fishReach ? Math.max(1, Math.round(TU('fishReach'))) : 1;
 function eHinterland(cities, far) {
-  const own = new Int32Array(N).fill(-1), dist = new Float32Array(N).fill(1e9);
-  HN = 0; const s = ++stampN; HKEY.fill(1e9);
+  const own = new Int32Array(N).fill(-1), dist = new Float32Array(N).fill(1e9), FR = fishReach();
+  HN = 0; const s = ++stampN; HKEY.fill(1e9); HWD.fill(0);
   cities.forEach((c, k) => { const h = c.h; if (h < 0) return; if (0 < HKEY[h]) { dist[h] = 0; HKEY[h] = 0; own[h] = k; SEENS[h] = s; hpush(h, 0); } });
+  // a community's specialty, if its ground allows it (29z): its harvest leans toward what it is good at
+  const SPK = typeof specHex === 'function' && typeof specOf === 'function' ? cities.map(c => { const k2 = specOf(c.id); return k2 && !SPEC[k2][5] && specFits(c, k2) ? k2 : ''; }) : null;   // a workshop village does not lean
+  const spSea = SPK ? Math.round(TU('specSea')) : 0, spRoad = SPK ? TU('specRoad') : 1;
   while (HN) {
     const u = hpop(); if (DONES[u] === s) continue; DONES[u] = s;
-    if (isW(eff(u))) continue;                                     // water is claimed but not crossed
-    const k = own[u], reach = (cities[k].reach || EREACH[cities[k].ki]) * (far ? EFAR[cities[k].ki] : 1), w = cities[k].claim || 1;
+    const k = own[u], sk = SPK ? SPK[k] : '', wet = dist[u] > 0 && isW(eff(u)); if (wet && (far || HWD[u] >= FR + (sk && specHex(sk, u) ? spSea : 0))) continue;   // water is claimed, and crossed only by the boats
+    const reach = (cities[k].reach || EREACH[cities[k].ki]) * (far ? EFAR[cities[k].ki] : 1), w = cities[k].claim || 1;
     for (let j = 0; j < 6; j++) {
       const v = NB[u * 6 + j]; if (v < 0 || DONES[v] === s) continue;
-      const g = dist[u] + (eff(v) === 'M' ? 1.5 : 1); if (g > reach) continue;
-      const key = g / w; if (key < HKEY[v]) { HKEY[v] = key; dist[v] = g; own[v] = k; SEENS[v] = s; hpush(v, key); }
+      const vw = isW(eff(v)); if (wet && !vw) continue;
+      const g = dist[u] + (eff(v) === 'M' ? 1.5 : 1) * (sk && specHex(sk, v) ? spRoad : 1); if (g > reach) continue;
+      const key = g / w; if (key < HKEY[v]) { HKEY[v] = key; dist[v] = g; own[v] = k; SEENS[v] = s; HWD[v] = vw ? (wet ? HWD[u] + 1 : 1) : 0; hpush(v, key); }
     }
   }
   return { own, dist };

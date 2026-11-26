@@ -7,7 +7,23 @@
 // leaves the community as it was, and its card says why. The doubling, the seven in ten and the two hexes are Claude's
 // numbers, for the owner to tune. A better price for goods of a famous place was proposed too, but the year's trade prices
 // goods by their class, not one by one, so it waits for a market that knows them apart.
-const SPEC_MULT = 2, SPEC_OTHER = 0.7;
+const SPEC_MULT = 2, SPEC_OTHER = 0.7, SPEC_MADE = 2.5;
+// v0.21.0: the harvest of a community with a specialty reaches out to where its thing is found (the owner, 26 Nov 2026): a hex
+// that holds it costs its people specRoad of a step to reach, so the area leans that way and goes further there; a fishing or
+// salt village's boats go specSea hexes further out. A hex holds the thing when the specialty's own test of the ground passes
+// for that hex alone.
+Object.assign(ETUNE, { specRoad: [0.6, 0.2, 1, 0.05, 'ชุมชนที่มีความชำนาญเดินไปช่องที่มีของที่ตัวเองชำนาญด้วยระยะเท่านี้ของช่องปกติ พื้นที่เก็บเกี่ยวจึงเอียงเข้าหาแหล่งนั้นและไปได้ไกลกว่า', 'ประชากรและแรงงาน'], specSea: [2, 0, 6, 1, 'เรือของหมู่บ้านประมงทะเล นาเกลือทะเล ไข่มุก และล่าวาฬ ออกไปไกลกว่าชุมชนอื่นกี่ช่อง', 'ประชากรและแรงงาน'] });
+const SPECH = new Map(); let specHKey = '';
+function specHex(k, h) {
+  const key = painted.size + '|' + featStamp + '|' + ED.rivers.length; if (key !== specHKey) { SPECH.clear(); specHKey = key; }
+  const s = SPEC[k]; if (!s || h < 0) return false; const id = k + ':' + h; if (SPECH.has(id)) return SPECH.get(id);
+  const b = eff(h), o = { M: 0, sea: 0, sea1: 0, lake: 0, riv: 0, forest: 0, f: 0, j: 0, a: 0, o: 0, d: 0, cold: 0, wet: 0, grass: 0, dry: 0, farm: 0, u: 0, feat: new Set(), ruin: 0 };
+  if (isSea(b)) { o.sea = 1; o.sea1 = 1; } else if (b === 'L') o.lake = 1;
+  else { if (b === 'M') o.M = 1; if (FOREST.has(b)) o.forest = 3; if (b === 'f') o.f = 1; if (b === 'j') o.j = 1; if (b === 'a') o.a = 1; if (b === 'o' || b === 'k') o.o = 1; if (b === 'd') o.d = 1; if (b === 't' || b === 'n') o.cold = 1; if (b === 'w' || b === 'm') o.wet = 1; if ('gsvhe'.includes(b)) o.grass = 1; if ('scy'.includes(b)) o.dry = 1; if (b === 'p' || b === 'r') o.farm = 1; if (b === 'u') o.u = 1; if ((RV[h] === '1' && shownAt(h)) || URVH.has(h)) o.riv = 1; }
+  const fk = ECO.feat ? ECO.feat[h] : '.'; if (fk && fk !== '.' && featAt(h)) o.feat.add(fk);
+  for (const p of ptLike()) { if (p.k === 'ruin' && (p.h != null ? p.h : hexAt(p.x, p.y)) === h) o.ruin = 1; }
+  let r = false; try { r = !!s[3](o); } catch (err) { r = false; } SPECH.set(id, r); return r;
+}
 // what the ground two hexes out holds: kinds of ground counted, the sea and lakes, rivers, features and ruins
 function specGround(h) {
   const o = { M: 0, sea: 0, sea1: 0, lake: 0, riv: 0, forest: 0, f: 0, j: 0, a: 0, o: 0, d: 0, cold: 0, wet: 0, grass: 0, dry: 0, farm: 0, u: 0, feat: new Set(), ruin: 0 };
@@ -33,7 +49,7 @@ function specGround(h) {
 }
 // each specialty: its group, its name, the goods it lives by (those of Gresland and of our own world alike), what the ground
 // must hold, and that in words
-const SPECG = { mine: 'เหมืองและหิน', salt: 'เกลือ', water: 'น้ำ', wood: 'ป่า', crop: 'ไร่สินค้าราคาดี', herd: 'เลี้ยงสัตว์', other: 'อื่น ๆ' };
+const SPECG = { mine: 'เหมืองและหิน', salt: 'เกลือ', water: 'น้ำ', wood: 'ป่า', crop: 'ไร่สินค้าราคาดี', herd: 'เลี้ยงสัตว์', other: 'อื่น ๆ' , craft: 'ช่างฝีมือและของแปรรูป'};
 const SPEC = {
   iron: ['mine', 'หมู่บ้านเหมืองเหล็ก', ['iron'], g => g.M > 0, 'มีภูเขาไม่เกินสองช่อง'],
   copper: ['mine', 'เหมืองทองแดงและดีบุก', ['copper'], g => g.M > 0, 'มีภูเขาไม่เกินสองช่อง'],
@@ -75,6 +91,19 @@ const SPEC = {
   camel: ['herd', 'หมู่บ้านอูฐ', ['camel', 'drake'], g => g.d > 0, 'มีทะเลทรายใกล้ ๆ'],
   reindeer: ['herd', 'หมู่บ้านเลี้ยงเรนเดียร์', ['reindeer'], g => g.cold > 0, 'มีทุนดราหรือแดนหิมะใกล้ ๆ'],
   tannery: ['herd', 'หมู่บ้านฟอกหนัง', ['hides', 'bisonhide', 'drakehide'], g => g.grass > 0 && (g.riv > 0 || g.lake > 0), 'มีทุ่งหญ้าและน้ำใกล้ ๆ'],
+  // v0.21.0: beasts of work, and the workshops a village can live by (the sixth item: the class its workshops make SPEC_MADE times)
+  horses: ['herd', 'คอกม้า', ['horses'], g => g.grass > 0, 'มีทุ่งหญ้าใกล้ ๆ'],
+  oxen: ['herd', 'หมู่บ้านเลี้ยงวัวควายและล่อ', ['oxen', 'mules'], g => g.grass + g.farm > 0, 'มีทุ่งหญ้าหรือนาใกล้ ๆ'],
+  brewery: ['craft', 'โรงสุราและโรงเบียร์', [], g => g.farm + g.grass > 0, 'มีนาหรือทุ่งใกล้ ๆ', 'drink'],
+  carpenter: ['craft', 'หมู่บ้านช่างไม้', [], g => g.forest > 0, 'มีป่าใกล้ ๆ', 'furniture'],
+  kiln: ['craft', 'หมู่บ้านเตาอิฐและปูน', [], g => g.riv + g.lake + g.wet + g.M > 0, 'มีดินเหนียวริมน้ำหรือหินปูนใกล้ ๆ', 'build'],
+  fertvil: ['craft', 'หมู่บ้านทำปุ๋ย', [], g => g.grass + g.farm > 0, 'มีทุ่งหรือนาใกล้ ๆ', 'fert'],
+  feedvil: ['craft', 'หมู่บ้านทำอาหารสัตว์', [], g => g.grass + g.farm > 0, 'มีทุ่งหรือนาใกล้ ๆ', 'feed'],
+  weaver: ['craft', 'หมู่บ้านทอผ้า', [], g => true, 'ตั้งได้ทุกที่', 'textile'],
+  glass: ['craft', 'หมู่บ้านเครื่องปั้นและแก้ว', [], g => g.riv + g.lake + g.wet + g.d > 0, 'มีดินริมน้ำหรือทรายใกล้ ๆ', 'pottery'],
+  pickler: ['craft', 'หมู่บ้านของหมักดองและเนื้อเค็ม', [], g => g.sea1 + g.farm + g.grass > 0, 'มีทะเล นา หรือทุ่งใกล้ ๆ', 'food'],
+  apothecary: ['craft', 'หมู่บ้านหมอยา', [], g => g.forest + g.M > 0, 'มีป่าหรือภูเขาใกล้ ๆ', 'medicine'],
+  goldsmith: ['craft', 'หมู่บ้านช่างทอง', [], g => g.M + g.riv > 0, 'มีภูเขาหรือแม่น้ำใกล้ ๆ', 'jewelry'],
   relics: ['other', 'หมู่บ้านขุดซากเมืองเก่า', ['relics'], g => g.ruin > 0, 'มีซากเมืองเก่าใกล้ ๆ'],
 };
 ECO.spec = {};
@@ -85,7 +114,7 @@ function specMine(c) { const k = specOf(c.id); return !!k && SPEC[k][0] === 'min
 function specApply(cities, prod) {
   cities.forEach((c, k) => {
     const key = specOf(c.id); c.spec = ''; if (!key || !specFits(c, key)) return;
-    const own = new Set(SPEC[key][2]), P = prod[k]; c.spec = key;
+    const own = new Set(SPEC[key][2]), P = prod[k]; c.spec = key; if (SPEC[key][5]) return;   // a workshop village keeps its harvest; its trade is in the plan (09)
     for (const [id, v] of P) { const cat = catOf(id); if (!ERAW.includes(cat)) continue; P.set(id, v * (own.has(id) ? SPEC_MULT : SPEC_OTHER)); }
   });
 }
@@ -104,18 +133,19 @@ function specForm() {
   // what the ground allows, the trades whose goods its harvest already brings in first, the largest first
   const r0 = ECON ? ECON.cities.findIndex(x => x.id === sel) : -1, P0 = r0 >= 0 ? ECON.prod[r0] : null;
   const worth = k => { if (!P0) return 0; let w = 0; for (const id of SPEC[k][2]) { const v = P0.get(id) || 0, g = ecoGood(id); if (v > 0 && g && ECAT[g.cat]) w += v * ECAT[g.cat].v; } return w; };
-  const fitAll = Object.keys(SPEC).filter(k => specFits(c, k)), fit = fitAll.filter(k => worth(k) > 0).sort((a, b) => worth(b) - worth(a)), thin = fitAll.filter(k => !(worth(k) > 0));
+  const fitAll = Object.keys(SPEC).filter(k => specFits(c, k)), craft = fitAll.filter(k => SPEC[k][5]), fit = fitAll.filter(k => !SPEC[k][5] && worth(k) > 0).sort((a, b) => worth(b) - worth(a)), thin = fitAll.filter(k => !SPEC[k][5] && !(worth(k) > 0));
   const opt = k => `<option value="${k}"${k === cur ? ' selected' : ''}>${esc(SPEC[k][1])}</option>`;
   let h = `<label>ความชำนาญ <select id="cfSpecSel"${ro}><option value="">ไม่มี (เก็บทุกอย่างรอบตัว)</option>`;
   if (fit.length) h += `<optgroup label="เหมาะ และพื้นที่มีสินค้านี้อยู่แล้ว">${fit.map(opt).join('')}</optgroup>`;
   if (thin.length) h += `<optgroup label="พื้นที่เหมาะ แต่ยังไม่มีสินค้านี้">${thin.map(opt).join('')}</optgroup>`;
+  if (craft.length) h += `<optgroup label="ช่างฝีมือ ทำของแปรรูป">${craft.map(opt).join('')}</optgroup>`;
   for (const [g, gn] of Object.entries(SPECG)) { const rest = Object.keys(SPEC).filter(k => SPEC[k][0] === g && !fitAll.includes(k)); if (rest.length) h += `<optgroup label="${esc(gn)} (พื้นที่ไม่เหมาะ)">${rest.map(opt).join('')}</optgroup>`; }
   h += '</select></label>';
   let note = '';
   if (cur) {
     const ok = fitAll.includes(cur), r = ECON ? ECON.cities.find(x => x.id === sel) : null, P = r && ECON.prod ? ECON.prod[ECON.cities.indexOf(r)] : null;
-    note = ok ? `${SPEC[cur][1]}: ผลผลิต${SPEC[cur][2].filter(id => ecoGood(id)).map(id => ecoGood(id).name).slice(0, 3).join(' ')} ×${SPEC_MULT} ของอื่นที่เก็บได้ ×${SPEC_OTHER}` : `ยังไม่มีผล ต้อง${SPEC[cur][4]}`;
-    if (ok && P && !SPEC[cur][2].some(id => (P.get ? P.get(id) : P[id]) > 0)) note += ' · พื้นที่ที่ชุมชนนี้เก็บเกี่ยวยังไม่มีสินค้านี้เลย';
+    note = ok && SPEC[cur][5] ? `${SPEC[cur][1]}: โรงงานทำ${ECAT[SPEC[cur][5]] ? ECAT[SPEC[cur][5]].name : ''}ได้ ×${SPEC_MADE} (หมู่บ้านได้มากกว่านี้ถึง ×${SPEC_MADE * 3.2}) วัตถุดิบที่เก็บได้ไม่ลด` : ok ? `${SPEC[cur][1]}: ผลผลิต${SPEC[cur][2].filter(id => ecoGood(id)).map(id => ecoGood(id).name).slice(0, 3).join(' ')} ×${SPEC_MULT} ของอื่นที่เก็บได้ ×${SPEC_OTHER}` : `ยังไม่มีผล ต้อง${SPEC[cur][4]}`;
+    if (ok && P && !SPEC[cur][5] && !SPEC[cur][2].some(id => (P.get ? P.get(id) : P[id]) > 0)) note += ' · พื้นที่ที่ชุมชนนี้เก็บเกี่ยวยังไม่มีสินค้านี้เลย';
   } else if (fit.length) note = 'เหมาะกับ ' + fit.slice(0, 3).map(k => SPEC[k][1]).join(' ') + (fit.length > 3 ? ' และอื่น ๆ' : '');
   box.innerHTML = h + `<span class="lbl">${esc(note)}</span>`;
 }

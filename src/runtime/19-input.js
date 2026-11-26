@@ -2,7 +2,7 @@
 const toMap = (ex, ey) => { const r = cv.getBoundingClientRect(); return [(ex - r.left - view.x) / view.s, (ey - r.top - view.y) / view.s]; };
 function clampView() {
   const pl = padL(), w = box.clientWidth - padR() - pl, h = boxH();
-  view.s = Math.max(fitS, Math.min(fitS * 6, view.s));
+  view.s = Math.max(fitS, Math.min(Math.max(fitS * 6, SHK > 1 ? 2.5 : 0), view.s));   // v0.21.0: the largest maps zoom in as close as a large one
   const mw = G.w * view.s, mh = G.h * view.s;      // a map smaller than the room left by the panels sits in its middle; a larger one may be dragged until its edge shows
   view.x = mw <= w + 0.5 ? pl + (w - mw) / 2 : Math.min(pl, Math.max(pl + w - mw, view.x));
   view.y = mh <= h + 0.5 ? (h - mh) / 2 : Math.min(0, Math.max(h - mh, view.y));
@@ -112,7 +112,7 @@ cv.addEventListener('pointermove', e => {
   if (pinch) {
     if (ptrs.size < 2) return;
     const [a, b] = [...ptrs.values()], r = cv.getBoundingClientRect();
-    const s = Math.max(fitS, Math.min(fitS * 6, pinch.s * Math.hypot(a[0] - b[0], a[1] - b[1]) / pinch.d));
+    const s = Math.max(fitS, Math.min(Math.max(fitS * 6, SHK > 1 ? 2.5 : 0), pinch.s * Math.hypot(a[0] - b[0], a[1] - b[1]) / pinch.d));
     const mx = (pinch.m[0] - r.left - pinch.vx) / pinch.s, my = (pinch.m[1] - r.top - pinch.vy) / pinch.s;
     view.s = s; view.x = (a[0] + b[0]) / 2 - r.left - mx * s; view.y = (a[1] + b[1]) / 2 - r.top - my * s; clampView(); requestDraw(); return;
   }

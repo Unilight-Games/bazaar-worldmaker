@@ -70,7 +70,7 @@ const cropEl = document.createElement('div'); cropEl.className = 'tripbox cropbo
 for (const ev of ['pointerdown', 'wheel', 'click', 'keydown']) cropEl.addEventListener(ev, e => e.stopPropagation());
 function cropCard() {
   cropEl.hidden = !CROP.on; if (!CROP.on) return; cropEl.style.right = (padR() + 56) + 'px'; const rc = cropRect(), km = ENV.meta && +ENV.meta.kmPerHex || 34;
-  const ok = rc && rc.cols >= 8 && rc.rows >= 8 && rc.cols <= 400 && rc.rows <= 400;
+  const ok = rc && rc.cols >= 8 && rc.rows >= 8 && rc.cols <= 1080 && rc.rows <= 1080;
   cropEl.innerHTML = `<div class="mmhead"><h3>ตัดส่วนแผนที่เป็นแผนที่ใหม่</h3><button type="button" class="btn" data-cr="close">ปิด</button></div>`
     + `<p class="hint">ลากกรอบบนแผนที่ครอบส่วนที่ต้องการ ลากซ้ำเพื่อเปลี่ยนกรอบ ลากด้วยปุ่มกลางหรือกด Space ค้างเพื่อเลื่อนแผนที่</p>`
     + (rc ? `<div class="tr">ขนาด <b>${rc.cols} × ${rc.rows}</b> ช่อง <span class="w">ราว ${fmtKm(rc.cols * km * 0.866)} × ${fmtKm(rc.rows * km)} กม.</span></div>` + (ok ? '' : '<div class="tr w">แผนที่ใหม่ต้องกว้างและสูงอย่างน้อย 8 ช่อง และไม่เกิน 400 ช่อง</div>') : '')

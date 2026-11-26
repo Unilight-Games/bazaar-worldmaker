@@ -63,8 +63,8 @@ let szCv = null, szKey = '';
 function szSheet() {
   let hsh = 0; for (let i = 0; i < N; i++) if (ECO.szc[i]) hsh = (Math.imul(hsh, 31) + i * 7 + ECO.szc[i].charCodeAt(0)) | 0;
   const key = szStamp + '|' + hsh + '|' + ECO.sz.map(z => z.col).join(''); if (key === szKey && szCv) return szCv; szKey = key;
-  if (!szCv) { szCv = document.createElement('canvas'); szCv.width = Math.max(1, Math.ceil(G.w / 2)); szCv.height = Math.max(1, Math.ceil(G.h / 2)); }
-  const c = szCv.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, szCv.width, szCv.height); c.setTransform(0.5, 0, 0, 0.5, 0, 0);
+  if (!szCv) { szCv = document.createElement('canvas'); szCv.width = Math.max(1, Math.ceil(G.w / (2 * SHK))); szCv.height = Math.max(1, Math.ceil(G.h / (2 * SHK))); }
+  const c = szCv.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, szCv.width, szCv.height); c.setTransform(0.5 / SHK, 0, 0, 0.5 / SHK, 0, 0);
   for (const z of ECO.sz) {
     c.save(); c.beginPath(); let any = false; for (let i = 0; i < N; i++) if (ECO.szc[i] === z.id) { hexPath(c, i, 1.01); any = true; } if (!any) { c.restore(); continue; }
     c.fillStyle = z.col; c.globalAlpha = 0.16; c.fill(); c.clip(); c.globalAlpha = 0.55; c.strokeStyle = z.col; c.lineWidth = 0.9;
@@ -78,7 +78,7 @@ function szSheet() {
 }
 // corner e of a hex, as hexPath walks them; the side shared with neighbour a runs from corner EDGE[a] to the next
 function szCorner(i, e) { const t = (e % 6) * Math.PI / 3; return [CX[i] + R * Math.cos(t), CY[i] + R * Math.sin(t)]; }
-{ const dg = drawOverGround; drawOverGround = function (c, w, h, live) { if (dg) dg(c, w, h, live); if (ECO.sz.length && szShown()) { const s = szSheet(); c.drawImage(s, 0, 0, s.width * 2, s.height * 2); } }; }
+{ const dg = drawOverGround; drawOverGround = function (c, w, h, live) { if (dg) dg(c, w, h, live); if (ECO.sz.length && szShown()) { const s = szSheet(); c.drawImage(s, 0, 0, s.width * 2 * SHK, s.height * 2 * SHK); } }; }
 const szShown = () => SZVIEW.on;
 const SZVIEW = { on: true };
 try { SZVIEW.on = localStorage.getItem('mme-sz-shown') !== '0'; } catch (err) { /* shown */ }

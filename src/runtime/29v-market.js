@@ -16,7 +16,7 @@ const MK = { stamp: -1, regions: [], at: null };
 // v0.19.0: a price for one piece too. A portion (a person's year of a good) holds this many pieces of the good's usual unit; the
 // counts are Claude's reading of what one person uses in a year (grain about 200 kg, a weapon kept a year, a ship shared by many),
 // and each can be changed in the market window.
-const MKUNIT0 = { grain: ['กก.', 200], protein: ['กก.', 60], salt: ['กก.', 6], herbs: ['กก.', 3], timber: ['ท่อน', 5], fuel: ['มัด', 100], stone: ['ก้อน', 20], ore: ['กก.', 50], cloth: ['ผืน', 4], mana: ['ก้อน', 2], rare: ['บาท (น้ำหนัก)', 20], luxury: ['ชิ้น', 5], tools: ['ชิ้น', 2], arms: ['ชิ้น', 1], tech: ['ชิ้น', 1], ships: ['ลำ', 0.01], books: ['เล่ม', 3] };
+const MKUNIT0 = { grain: ['กก.', 200], protein: ['กก.', 60], salt: ['กก.', 6], herbs: ['กก.', 3], timber: ['ท่อน', 5], fuel: ['มัด', 100], stone: ['ก้อน', 20], ore: ['กก.', 50], cloth: ['ผืน', 4], mana: ['ก้อน', 2], rare: ['บาท (น้ำหนัก)', 20], luxury: ['ชิ้น', 5], tools: ['ชิ้น', 2], arms: ['ชิ้น', 1], tech: ['ชิ้น', 1], ships: ['ลำ', 0.01], books: ['เล่ม', 3] , livestock: ['ตัว', 0.5], drink: ['ไห', 2], furniture: ['ชิ้น', 1], build: ['ก้อน', 100], fert: ['กระสอบ', 4], feed: ['กระสอบ', 4], textile: ['ผืน', 3], pottery: ['ใบ', 10], food: ['ไห', 2], medicine: ['ขวด', 5], jewelry: ['ชิ้น', 0.2] };
 ECO.munit = {};
 const mkUnit = cat => { const o = ECO.munit[cat], d = MKUNIT0[cat] || ['ชิ้น', 1]; return [o && o[0] || d[0], o && o[1] > 0 ? o[1] : d[1]]; };
 const mkPiece = x => x >= 100 ? Math.round(x).toLocaleString('th-TH') : x >= 1 ? x.toFixed(2) : x >= 0.01 ? x.toFixed(3) : x.toPrecision(2);
@@ -45,7 +45,7 @@ function mkBuild() {
   const imp = regions.map(() => ({})), exp = regions.map(() => ({})), sell = regions.map(() => ({}));
   for (const f of E.flows) { if (f.cat === 'labor') continue; const a = reg[f.from], b = reg[f.to]; (sell[a][f.cat] || (sell[a][f.cat] = new Map())).set(f.from, ((sell[a][f.cat] && sell[a][f.cat].get(f.from)) || 0) + f.amt); if (a === b) continue; exp[a][f.cat] = (exp[a][f.cat] || 0) + f.amt; imp[b][f.cat] = (imp[b][f.cat] || 0) + f.amt; }
   for (const R of regions) for (const cat of cats) {
-    let sup = 0, dem = 0, pw = 0, pd = 0; for (const k of R.cities) { sup += supply[k][cat] || 0; const d = E.need[k][cat] || 0; dem += d; pw += (E.P1[k][cat] || 1) * Math.max(d, 0.01); pd += Math.max(d, 0.01); }
+    let sup = 0, dem = 0, pw = 0, pd = 0, lo = Infinity, hi = 0; for (const k of R.cities) { sup += supply[k][cat] || 0; const d = E.need[k][cat] || 0; dem += d; pw += (E.P1[k][cat] || 1) * Math.max(d, 0.01); pd += Math.max(d, 0.01); if (d > 0.001 || (supply[k][cat] || 0) > 0.001) { const pk = (E.P1[k][cat] || 1) * ECAT[cat].v * per; lo = Math.min(lo, pk); hi = Math.max(hi, pk); } }   // v0.21.0: the cheapest and dearest town too
     const I = imp[R.j][cat] || 0, X = exp[R.j][cat] || 0, P = pw / pd * ECAT[cat].v * per; if (!(sup > 0.001 || dem > 0.001 || I > 0.001)) continue;
     const k0 = MKSEAS[cat] || 0, rows = seas.map(s => ({ s, sup: sup * s.len * (1 + k0 * (s.g - 1)), dem: dem * s.len, imp: I * s.len, exp: X * s.len }));
     let run = 0, low = 0; for (const r of rows) { run += r.sup + r.imp - r.dem - r.exp; low = Math.min(low, run); }
@@ -53,7 +53,7 @@ function mkBuild() {
     for (const r of rows) { r.stock0 = st; const have = r.sup + r.imp + 0.5 * st, want = r.dem + r.exp; raw.push(Math.pow(Math.max(1e-6, want) / Math.max(1e-6, have), 0.4)); st = Math.max(0, st + r.sup + r.imp - r.dem - r.exp); r.stock1 = st; }
     const mean = raw.reduce((a, x, i) => a + x * rows[i].s.len, 0) || 1; rows.forEach((r, i) => { r.price = P * clamp(raw[i] / mean, 0.4, 2.5); });
     const sellers = [...(sell[R.j][cat] || new Map())].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, q]) => ({ id: E.cities[k].id, name: E.cities[k].name, q }));
-    R.cat[cat] = { sup, dem, imp: I, exp: X, P, rows, sellers };
+    R.cat[cat] = { sup, dem, imp: I, exp: X, P, rows, sellers, lo: isFinite(lo) ? lo : P, hi: hi || P };
   }
   // the whole map as one more region
   const all = { j: -1, hub: -1, name: 'ทั้งแผนที่', cities: E.cities.map((c, k) => k), cat: {} };
@@ -61,7 +61,7 @@ function mkBuild() {
     const parts = regions.map(R => R.cat[cat]).filter(Boolean); if (!parts.length) continue;
     const rows = seas.map((s, i) => { const o = { s, sup: 0, dem: 0, imp: 0, exp: 0, stock0: 0, stock1: 0, price: 0 }; let w = 0; for (const p of parts) { const r = p.rows[i]; for (const f of ['sup', 'dem', 'stock0', 'stock1']) o[f] += r[f]; o.price += r.price * Math.max(r.dem, 0.01); w += Math.max(r.dem, 0.01); } o.price /= w || 1; return o; });
     const sell = new Map(); for (const p of parts) for (const x of p.sellers) sell.set(x.id, (sell.get(x.id) || { ...x, q: 0 })), sell.get(x.id).q += x.q;
-    all.cat[cat] = { sup: parts.reduce((a, p) => a + p.sup, 0), dem: parts.reduce((a, p) => a + p.dem, 0), imp: 0, exp: 0, P: rows.reduce((a, r) => a + r.price * r.s.len, 0), rows, sellers: [...sell.values()].sort((a, b) => b.q - a.q).slice(0, 8) };
+    all.cat[cat] = { lo: Math.min(...parts.map(p => p.lo)), hi: Math.max(...parts.map(p => p.hi)), sup: parts.reduce((a, p) => a + p.sup, 0), dem: parts.reduce((a, p) => a + p.dem, 0), imp: 0, exp: 0, P: rows.reduce((a, r) => a + r.price * r.s.len, 0), rows, sellers: [...sell.values()].sort((a, b) => b.q - a.q).slice(0, 8) };
   }
   MK.stamp = E.ver; MK.regions = [all, ...regions]; MK.seas = seas; return MK;
 }
@@ -70,7 +70,9 @@ function mkBuild() {
 const mkEl = document.createElement('div'); mkEl.className = 'mmodal'; mkEl.hidden = true;
 mkEl.innerHTML = `<div class="mmcard mkcard" role="dialog" aria-modal="true" aria-labelledby="mkTitle"><div class="mmhead"><h3 id="mkTitle">ตลาดสินค้ากลาง</h3><button type="button" class="btn" id="mkClose">ปิด</button></div><div id="mkBody"></div></div>`;
 $('mapbox').appendChild(mkEl);
-const MKV = { r: 0, s: -1, cat: null };
+const MKV = { r: 0, s: -1, cat: null, k: '', d: -1 };   // k, d: the column the goods are ordered by and which way (v0.21.0, the owner's ask)
+// the columns that order the table, each read from the season shown: the goods' share of trade when none is chosen
+const MKSORT = { sup: (C, r) => r.sup + r.imp, dem: (C, r) => r.dem + r.exp, stock: (C, r) => r.stock0, price: (C, r) => r.price, piece: (C, r, cat) => r.price / mkUnit(cat)[1] };
 function mkOpen() { MKV.s = -1; mkEl.hidden = false; mkRender(); }
 function mkClose() { mkEl.hidden = true; }
 $('mkClose').onclick = mkClose; mkEl.addEventListener('pointerdown', e => { if (e.target === mkEl) mkClose(); e.stopPropagation(); });
@@ -83,20 +85,28 @@ function mkSpark(vals, w, h, col) {
   const pts = vals.map((v, i) => [n > 1 ? 4 + i * (w - 8) / (n - 1) : w / 2, h - 4 - (v - lo) / sp * (h - 8)]);
   return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><polyline fill="none" stroke="${col}" stroke-width="2" points="${pts.map(p => p.join(',')).join(' ')}"/>${pts.map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="2.5" fill="${col}"/>`).join('')}</svg>`;
 }
+// a column head that orders the table: a first press orders it high to low, the next low to high; the goods' head goes back to the
+// order by trade
+function mkHead(k, label, tip) {
+  const on = MKV.k === k, arrow = k && on ? (MKV.d < 0 ? ' ▼' : ' ▲') : '', srt = on ? (k ? (MKV.d < 0 ? 'descending' : 'ascending') : 'other') : 'none';
+  const t = (tip ? tip + ' · ' : '') + (k ? (on && MKV.d < 0 ? 'กดเพื่อเรียงจากต่ำไปสูง' : 'กดเพื่อเรียงจากสูงไปต่ำ') : 'กดเพื่อกลับไปเรียงตามมูลค่าการค้า');
+  return `<button type="button" class="mkh mks${k ? ' r' : ''}${on ? ' on' : ''}" data-mks="${k}" aria-sort="${srt}" title="${esc(t)}">${label}${arrow}</button>`;
+}
 function mkRender() {
   const body = $('mkBody'); const M = mkBuild(); if (!M) { body.innerHTML = '<p class="hint">ยังไม่มีชุมชนหรือการค้าบนแผนที่</p>'; return; }
   if (MKV.r >= M.regions.length) MKV.r = 0; const R = M.regions[MKV.r], si = mkSeasonIdx(M), coin = esc(ECO.central.name);
   let h = `<div class="erow"><label>ตลาด <select id="mkReg">${M.regions.map((x, i) => `<option value="${i}"${i === MKV.r ? ' selected' : ''}>${esc(x.name)}${x.j >= 0 ? ` (${x.cities.length} ชุมชน)` : ''}</option>`).join('')}</select></label>`
     + `<div class="seg" id="mkSeas">${M.seas.map((s, i) => `<button type="button" data-si="${i}" aria-pressed="${i === si}">${esc(s.name)}</button>`).join('')}</div></div>`
     + (M.seas.length === 1 ? `<p class="hint">แผนที่นี้ยังไม่แบ่งฤดู ตัวเลขเป็นของทั้งปี แบ่งฤดูได้ในโหมดภูมิอากาศ</p>` : '')
-    + `<div class="mktbl"><div class="mkh">สินค้า</div><div class="mkh r">อุปทาน</div><div class="mkh r">อุปสงค์</div><div class="mkh r">สต็อกต้นฤดู</div><div class="mkh r">ราคาต่อส่วน</div><div class="mkh r">ราคาต่อชิ้น</div><div class="mkh">ผู้ขายหลัก</div>`;
+    + `<div class="mktbl">${mkHead('', 'สินค้า', 'เรียงตามมูลค่าการค้าของสินค้า (ค่าตั้งต้น)')}${mkHead('sup', 'อุปทาน')}${mkHead('dem', 'อุปสงค์')}${mkHead('stock', 'สต็อกต้นฤดู')}${mkHead('price', 'ราคาเฉลี่ยต่อส่วน', 'ค่าเฉลี่ยของราคาในทุกชุมชนในตลาดนี้ ถ่วงด้วยปริมาณที่แต่ละชุมชนซื้อ')}${mkHead('piece', 'ราคาเฉลี่ยต่อชิ้น', 'ค่าเฉลี่ยถ่วงด้วยปริมาณที่ซื้อ เช่นเดียวกัน')}<div class="mkh">ผู้ขายหลัก</div>`;
   const cats = Object.keys(R.cat).sort((a, b) => R.cat[b].dem * R.cat[b].P - R.cat[a].dem * R.cat[a].P);
+  if (MKV.k && MKSORT[MKV.k]) { const f = MKSORT[MKV.k], v = cat => f(R.cat[cat], R.cat[cat].rows[si], cat); cats.sort((a, b) => MKV.d * (v(a) - v(b))); }
   for (const cat of cats) {
     const C = R.cat[cat], r = C.rows[si], d = C.P > 0 ? r.price / C.P - 1 : 0, on = MKV.cat === cat;
     h += `<button type="button" class="mkrow${on ? ' on' : ''}" data-cat="${cat}"><span><i class="sdot" style="background:${ECAT[cat].col}"></i>${esc(ECAT[cat].name)}</span><span class="r">${mkN(r.sup + r.imp)}</span><span class="r">${mkN(r.dem + r.exp)}</span><span class="r">${mkN(r.stock0)}</span><span class="r">${mkPr(r.price)} <small class="${d > 0.02 ? 'up' : d < -0.02 ? 'dn' : ''}">${d > 0.02 ? '▲' : d < -0.02 ? '▼' : '·'}${Math.abs(Math.round(d * 100))}%</small></span><span class="r">${(() => { const [u, n] = mkUnit(cat); return mkPiece(r.price / MKP / n) + ' <small>/' + esc(u) + '</small>'; })()}</span><span class="w">${C.sellers.slice(0, 3).map(x => esc(x.name || 'ไม่มีชื่อ')).join(' · ')}</span></button>`;
     if (on) {
       h += `<div class="mkdet"><div class="mkplot"><div><b>ราคา</b> ${mkSpark(C.rows.map(x => x.price), 220, 54, 'var(--brass)')}</div><div><b>สต็อก</b> ${mkSpark(C.rows.map(x => x.stock0), 220, 54, '#7fb6ff')}</div></div>`
-        + `<div class="tr w">ราคาเฉลี่ยทั้งปี ${mkPr(C.P)} ${coin} ต่อส่วน · ทั้งปีผลิต ${mkN(C.sup)} ใช้ ${mkN(C.dem)}${C.imp ? ` · ซื้อเข้าจากตลาดอื่น ${mkN(C.imp)}` : ''}${C.exp ? ` · ขายออก ${mkN(C.exp)}` : ''}</div>`
+        + `<div class="tr w">ราคาเฉลี่ยทั้งปี ${mkPr(C.P)} ${coin} ต่อส่วน (เฉลี่ยจากราคาในทุกชุมชน ถ่วงด้วยปริมาณที่แต่ละชุมชนซื้อ ถูกสุด ${mkPr(C.lo)} แพงสุด ${mkPr(C.hi)}) · ทั้งปีผลิต ${mkN(C.sup)} ใช้ ${mkN(C.dem)}${C.imp ? ` · ซื้อเข้าจากตลาดอื่น ${mkN(C.imp)}` : ''}${C.exp ? ` · ขายออก ${mkN(C.exp)}` : ''}</div>`
         + (() => { const [u, n] = mkUnit(cat); return `<div class="erow"><span class="lbl">หนึ่งส่วนเท่ากับ</span><input type="number" data-mu="n" data-cat="${cat}" min="0.0001" step="any" value="${n}" style="width:6em"${editable ? '' : ' disabled'}><input type="text" data-mu="u" data-cat="${cat}" maxlength="20" value="${esc(u)}" style="width:7em"${editable ? '' : ' disabled'}><span class="w">ราคาต่อ${esc(u)} ${mkPiece(C.P / MKP / n)} ${coin} เฉลี่ยทั้งปี</span></div>`; })()
         + `<div class="tr"><b>ชุมชนที่ขาย</b> <span class="w">${C.sellers.map(x => `<a href="#" data-mkc="${esc(x.id)}">${esc(x.name || 'ไม่มีชื่อ')}</a> ${mkN(x.q)}`).join(' · ') || 'ไม่มี'}</span></div></div>`;
     }
@@ -112,6 +122,7 @@ $('mkBody').addEventListener('change', e => {
 });
 $('mkBody').addEventListener('click', e => {
   const s = e.target.closest('#mkSeas button'); if (s) { MKV.s = +s.dataset.si; mkRender(); return; }
+  const hd = e.target.closest('[data-mks]'); if (hd) { const k = hd.dataset.mks; if (!k) MKV.k = ''; else if (MKV.k === k) MKV.d = -MKV.d; else { MKV.k = k; MKV.d = -1; } mkRender(); return; }
   const a = e.target.closest('[data-mkc]'); if (a) { e.preventDefault(); const v = visibleCities().find(c => c.id === a.dataset.mkc); if (v) { mkClose(); if (typeof admFocusXY === 'function') admFocusXY(v.x, v.y); setMode('trade'); if (typeof tradeSelectCity === 'function') tradeSelectCity(v.id); } return; }
   const r = e.target.closest('[data-cat]'); if (r) { MKV.cat = MKV.cat === r.dataset.cat ? null : r.dataset.cat; mkRender(); }
 });

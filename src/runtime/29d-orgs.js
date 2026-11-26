@@ -9,10 +9,33 @@ function orgCities(cities) {
   for (const o of ECO.orgs) for (const id of o.seats) { const c = by.get(id); if (c) (c.org || (c.org = [])).push(o); }
 }
 function orgFor(o, cat) { return !o.cat || o.cat === cat; }
-function orgProd(c, cat) { if (!c.org) return 1; let f = 1; for (const o of c.org) if (o.prod > 0 && orgFor(o, cat)) f += o.prod; return Math.min(4, f); }
-function orgVal(c, cat) { if (!c.org) return 0; let f = 0; for (const o of c.org) if (o.val > 0 && orgFor(o, cat)) f += o.val; return Math.min(3, f); }
-function orgWell(c) { if (!c.org) return 0; let f = 0; for (const o of c.org) f += o.well || 0; return Math.min(1, f); }
-function orgHaulOf(c) { if (!c.org) return 0; let f = 0; for (const o of c.org) f += o.haul || 0; return Math.min(0.9, f); }
+// v0.21.0: an organisation is founded at a head office and opens branches from there (the owner, 26 Nov 2026). The head office
+// works harder than a branch (orgHq times its numbers), and every branch sends a share of the worth it adds home to it.
+Object.assign(ETUNE, {
+  orgHq: [1.5, 1, 4, 0.1, 'สำนักงานใหญ่ขององค์กรทำงานได้กี่เท่าของสาขา', 'องค์กร'],
+  orgRemit: [0.01, 0, 0.1, 0.002, 'สาขาส่งกำไรเข้าสำนักงานใหญ่ปีละเท่านี้ของ GDP ของเมืองสาขา คูณกำลังขององค์กร (ผลผลิตบวกมูลค่าที่เพิ่ม ไม่เกินหนึ่ง)', 'องค์กร'],
+});
+const orgAt = (o, c) => o.hq && c && c.id === o.hq ? TU('orgHq') : 1;
+function orgProd(c, cat) { if (!c.org) return 1; let f = 1; for (const o of c.org) if (o.prod > 0 && orgFor(o, cat)) f += o.prod * orgAt(o, c); return Math.min(4, f); }
+function orgVal(c, cat) { if (!c.org) return 0; let f = 0; for (const o of c.org) if (o.val > 0 && orgFor(o, cat)) f += o.val * orgAt(o, c); return Math.min(3, f); }
+function orgWell(c) { if (!c.org) return 0; let f = 0; for (const o of c.org) f += (o.well || 0) * orgAt(o, c); return Math.min(1, f); }
+function orgHaulOf(c) { if (!c.org) return 0; let f = 0; for (const o of c.org) f += (o.haul || 0) * orgAt(o, c); return Math.min(0.9, f); }
+// the branches' remittance home, before the books of the states are drawn
+let ORGREM = new Map();
+{
+  const sa = socApply; socApply = function (rows) {
+    ORGREM = new Map();
+    if (ECO.orgs.length && rows && rows.length && TU('orgRemit') > 0) {
+      const by = new Map(rows.map(r => [r.c.id, r]));
+      for (const o of ECO.orgs) {
+        const home = o.hq ? by.get(o.hq) : null; if (!home) continue; const k = Math.min(1, (o.prod || 0) + (o.val || 0)); if (!(k > 0)) continue; let sum = 0;
+        for (const id of o.seats) { if (id === o.hq) continue; const r = by.get(id); if (!r) continue; const x = Math.min(Math.max(0, r.inc) * 0.2, TU('orgRemit') * k * r.gdp); r.inc -= x; sum += x; }
+        home.inc += sum; ORGREM.set(o.id, sum);
+      }
+    }
+    return sa(rows);
+  };
+}
 function orgHaul(a, b) { return 1 - (orgHaulOf(a) + orgHaulOf(b)) / 2; }   // a line pays less at each end that has such a house
 function orgNet(a, b, cat) { if (!a.org || !b.org || a === b) return null; for (const o of a.org) if (o.net && orgFor(o, cat) && b.org.includes(o)) return o.id; return null; }
 
@@ -25,19 +48,20 @@ function orgValues(rows) {
   const per = ECO.central.per;
   E.cities.forEach((c, k) => {
     if (!c.org) return;
+    if (c.org.some(o => !out.has(o.id))) return;      // the year was worked out before the organisations changed
     for (const o of c.org) out.get(o.id).seats++;
     for (const cat of ECATS) {
       const mk = E.MK[k][cat]; if (!mk || !(mk[0] > 0)) continue; const val = mk[0] * (E.P1[k][cat] || 1) * ECAT[cat].v * per, f = orgProd(c, cat);
       for (const o of c.org) { if (!orgFor(o, cat)) continue; const v = out.get(o.id); if (o.prod > 0 && f > 1) v.made += val * o.prod / f; if (o.val > 0) v.worth += val * o.val; }
     }
-    const r = rows && rows[k]; if (r) for (const o of c.org) if (o.well > 0) out.get(o.id).help += o.well * r.gdp;
+    const r = rows && rows[k]; if (r) for (const o of c.org) if (o.well > 0 && out.has(o.id)) out.get(o.id).help += o.well * r.gdp;
   });
   for (const f of E.flows) {
     const a = E.cities[f.from], b = E.cities[f.to], cat = ECAT[f.cat]; if (!cat) continue;
     if (f.org && out.has(f.org)) out.get(f.org).fee += TU('orgFee') * f.amt * (E.P1[f.to][f.cat] || 1) * cat.v * per;
     const ha = orgHaulOf(a), hb = orgHaulOf(b), h = (ha + hb) / 2; if (!(h > 0)) continue;
     const saved = f.amt * f.cost * cat.bulk * EKAPPA * ECOX.km * h / (1 - h) * per;   // what the same way would have cost without the houses
-    for (const [c, hc] of [[a, ha], [b, hb]]) if (hc > 0) for (const o of c.org) if (o.haul > 0) out.get(o.id).saved += saved * (hc / (ha + hb)) * (o.haul / c.org.reduce((s, x) => s + (x.haul || 0), 0));
+    for (const [c, hc] of [[a, ha], [b, hb]]) if (hc > 0) for (const o of c.org) if (o.haul > 0 && out.has(o.id)) out.get(o.id).saved += saved * (hc / (ha + hb)) * (o.haul / c.org.reduce((s, x) => s + (x.haul || 0), 0));
   }
   for (const [id, v] of out) { v.year = v.made + v.worth + v.saved + v.fee + v.help; v.value += v.year * TU('orgYears'); }
   return out;
@@ -49,7 +73,7 @@ function orgTableHTML(rows) {
 let orgPick = null;                                  // the organisation whose houses a click on a city sets up or takes down
 function ecoOrgsHTML() {
   let h = `<div class="btns" style="margin:0 0 8px"><button type="button" class="btn" data-a="onew"${ECO.orgs.length >= 60 ? ' disabled' : ''}>เพิ่มองค์กร</button></div>`;
-  if (!ECO.orgs.length) return h + `<p class="note">ยังไม่มีองค์กร เพิ่มองค์กรแล้วกดปุ่มแปะบนแผนที่ จากนั้นคลิกเมืองที่องค์กรนั้นมีสาขา คลิกซ้ำเพื่อถอนสาขา เมืองหนึ่งมีหลายองค์กรได้</p>`;
+  if (!ECO.orgs.length) return h + `<p class="note">ยังไม่มีองค์กร เพิ่มองค์กรแล้วคลิกเมืองบนแผนที่เพื่อตั้งสำนักงานใหญ่ จากนั้นคลิกเมืองอื่นเพื่อแยกสาขา คลิกซ้ำเพื่อถอนสาขา เมืองหนึ่งมีหลายองค์กรได้</p>`;
   const E = ECON, rows = E ? ecoIncome(ecoGdp()) : null, V = orgValues(rows), names = new Map(visibleCities().map(c => [c.id, c.name || 'เมืองไม่มีชื่อ']));
   const pct = (o, f, label, max) => `<label>${label} <input type="number" data-f="${f}" min="0" max="${max}" step="1" value="${Math.round(o[f] * 1000) / 10}"> %</label>`;
   for (const o of ECO.orgs) {
@@ -58,13 +82,15 @@ function ecoOrgsHTML() {
       + `<div class="erow"><label>ชนิด <select data-f="okind">${Object.entries(OKIND).map(([k, z]) => `<option value="${k}"${k === o.kind ? ' selected' : ''}>${z[0]}</option>`).join('')}</select></label><label>ทำงานกับ <select data-f="ocat"><option value="">สินค้าทุกประเภท</option>${ECATS.map(c => `<option value="${c}"${c === o.cat ? ' selected' : ''}>${esc(ECAT[c].name)}</option>`).join('')}</select></label></div>`
       + `<div class="erow">${pct(o, 'prod', 'เพิ่มผลผลิต', 200)}${pct(o, 'val', 'เพิ่มมูลค่าสินค้า', 200)}${pct(o, 'well', 'ยกความเป็นอยู่', 100)}${pct(o, 'haul', 'ลดค่าขนส่ง', 90)}</div>`
       + `<div class="erow"><label><input type="checkbox" data-f="onet"${o.net ? ' checked' : ''}> สาขาค้ากันเองข้ามกรอบของรัฐ</label><label>ทุนตั้งต้น <input type="number" data-f="obase" min="0" step="1000" value="${o.base || 0}" style="width:8em"> ${esc(ECO.central.name)}</label></div>`
-      + `<div class="tr w">สาขา ${seats.length} เมือง${seats.length ? ' ' + seats.map(id => `<span class="ochip">${esc(names.get(id))}${editable ? `<button type="button" data-a="oseat" data-c="${esc(id)}" aria-label="ถอนสาขาที่ ${esc(names.get(id))}">×</button>` : ''}</span>`).join('') : ''}</div>`
-      + `<div class="erow"><label>เพิ่มสาขา <select data-f="oadd"><option value="">เลือกเมือง</option>${free.map(([id, n]) => `<option value="${esc(id)}">${esc(n)}</option>`).join('')}</select></label><button type="button" class="btn${orgPick === o.id ? ' on' : ''}" data-a="opick">${orgPick === o.id ? 'กำลังแปะ คลิกเมืองบนแผนที่' : 'แปะบนแผนที่'}</button></div>`
+      + `<div class="erow"><label>สำนักงานใหญ่ <select data-f="ohq"><option value="">ยังไม่ตั้ง</option>${[...names].sort((a, b) => a[1].localeCompare(b[1], 'th')).map(([id, n]) => `<option value="${esc(id)}"${id === o.hq ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></label>${o.hq && ORGREM.get(o.id) ? `<span class="lbl">สาขาส่งกำไรเข้าปีละ ${ecoNumF(ORGREM.get(o.id))}</span>` : ''}</div>`
+      + (o.hq ? `<div class="tr w">สาขา ${seats.length - 1} เมือง${seats.length > 1 ? ' ' + seats.filter(id => id !== o.hq).map(id => `<span class="ochip">${esc(names.get(id))}${editable ? `<button type="button" data-a="oseat" data-c="${esc(id)}" aria-label="ถอนสาขาที่ ${esc(names.get(id))}">×</button>` : ''}</span>`).join('') : ''}</div>`
+        + `<div class="erow"><label>แยกสาขาไปที่ <select data-f="oadd"><option value="">เลือกเมือง</option>${free.map(([id, n]) => `<option value="${esc(id)}">${esc(n)}</option>`).join('')}</select></label><button type="button" class="btn${orgPick === o.id ? ' on' : ''}" data-a="opick">${orgPick === o.id ? 'กำลังแปะ คลิกเมืองบนแผนที่' : 'แปะสาขาบนแผนที่'}</button></div>`
+        : `<div class="tr w">ตั้งสำนักงานใหญ่ก่อน แล้วจึงแยกสาขาไปเมืองอื่น เลือกจากรายการ หรือกดปุ่มแล้วคลิกเมืองบนแผนที่</div><div class="btns"><button type="button" class="btn${orgPick === o.id ? ' on' : ''}" data-a="opick">${orgPick === o.id ? 'คลิกเมืองที่จะเป็นสำนักงานใหญ่' : 'ตั้งสำนักงานใหญ่บนแผนที่'}</button></div>`)
       + `<div class="tr">สร้างมูลค่าปีละ <b>${ecoNumF(v.year)}</b> ${esc(ECO.central.name)} มูลค่าองค์กร <b>${ecoNumF(v.value)}</b></div>`
       + `<div class="tr w">ผลผลิตที่เพิ่ม ${ecoNumF(v.made)} · มูลค่าที่เพิ่ม ${ecoNumF(v.worth)} · ค่าขนที่ประหยัด ${ecoNumF(v.saved)} · ค่าธรรมเนียมเครือข่าย ${ecoNumF(v.fee)} · ความช่วยเหลือ ${ecoNumF(v.help)}</div>`
       + `<div class="btns"><button type="button" class="btn warn" data-a="odel">ลบองค์กรนี้</button></div></div>`;
   }
-  return h + `<p class="note">เพิ่มผลผลิตคูณของที่เมืองทำได้ในประเภทที่องค์กรทำงานด้วย เพิ่มมูลค่าสินค้านับเข้า GDP ของเมืองโดยไม่เปลี่ยนปริมาณ ยกความเป็นอยู่เพิ่มรายได้ของคนในเมืองเป็นสัดส่วนของ GDP ลดค่าขนส่งลดค่าเดินทางของเส้นที่ปลายข้างนั้นมีสาขา ปลายละครึ่งของตัวเลข สาขาที่ค้ากันเองข้ามกรอบของรัฐไม่ต้องผ่านศูนย์ของศักดินา เมืองศูนย์กลางของสังคมนิยม คนกลางของคู่อริ หรือกำแพงภาษี โดยจ่ายค่าธรรมเนียมให้องค์กรร้อยละ ${ecoPc(TU('orgFee'))} มูลค่าองค์กรคือทุนตั้งต้นบวกมูลค่าที่สร้างต่อปี ${TU('orgYears')} ปี ตัวเลขสองตัวหลังแก้ได้ที่แท็บตัวเลข</p>`;
+  return h + `<p class="note">เพิ่มผลผลิตคูณของที่เมืองทำได้ในประเภทที่องค์กรทำงานด้วย เพิ่มมูลค่าสินค้านับเข้า GDP ของเมืองโดยไม่เปลี่ยนปริมาณ ยกความเป็นอยู่เพิ่มรายได้ของคนในเมืองเป็นสัดส่วนของ GDP ลดค่าขนส่งลดค่าเดินทางของเส้นที่ปลายข้างนั้นมีสาขา ปลายละครึ่งของตัวเลข สำนักงานใหญ่ทำงานได้ ${TU('orgHq')} เท่าของสาขา และสาขาส่งกำไรเข้าสำนักงานใหญ่ร้อยละ ${ecoPc(TU('orgRemit'))} ของ GDP เมืองสาขาคูณกำลังขององค์กร สาขาที่ค้ากันเองข้ามกรอบของรัฐไม่ต้องผ่านศูนย์ของศักดินา เมืองศูนย์กลางของสังคมนิยม คนกลางของคู่อริ หรือกำแพงภาษี โดยจ่ายค่าธรรมเนียมให้องค์กรร้อยละ ${ecoPc(TU('orgFee'))} มูลค่าองค์กรคือทุนตั้งต้นบวกมูลค่าที่สร้างต่อปี ${TU('orgYears')} ปี ตัวเลขสองตัวหลังแก้ได้ที่แท็บตัวเลข</p>`;
 }
 const __erOrg = ecoRender;
 ecoRender = function () {
@@ -81,7 +107,7 @@ $('ecobody').addEventListener('click', e => {
   if (a === 'gsortc') { const k = b.dataset.k; if (GDPV.k === k) GDPV.d = -GDPV.d; else { GDPV.k = k; GDPV.d = k === 'name' ? 1 : -1; } gdpKeep(); ecoRender(); return; }
   if (!editable || a[0] !== 'o') return;
   const o = b.closest('[data-org]') ? ECO.orgs.find(x => x.id === b.closest('[data-org]').dataset.org) : null;
-  if (a === 'onew') { if (ECO.orgs.length >= 60) return; const z = OKIND.guild, id = 'o' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); ECO.orgs.push({ id, name: 'องค์กรที่ ' + (ECO.orgs.length + 1), kind: 'guild', color: SCOLS[(ECO.orgs.length * 3 + 3) % SCOLS.length], cat: '', ...z[1], base: 0, seats: [] }); orgPick = id; }
+  if (a === 'onew') { if (ECO.orgs.length >= 60) return; const z = OKIND.guild, id = 'o' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); ECO.orgs.push({ id, name: 'องค์กรที่ ' + (ECO.orgs.length + 1), kind: 'guild', color: SCOLS[(ECO.orgs.length * 3 + 3) % SCOLS.length], cat: '', ...z[1], base: 0, seats: [], hq: '' }); orgPick = id; }
   else if (a === 'odel' && o) { ECO.orgs = ECO.orgs.filter(x => x !== o); if (orgPick === o.id) orgPick = null; }
   else if (a === 'opick' && o) { orgPick = orgPick === o.id ? null : o.id; ecoRender(); return; }
   else if (a === 'oseat' && o) { o.seats = o.seats.filter(id => id !== b.dataset.c); }
@@ -102,7 +128,8 @@ $('ecobody').addEventListener('change', e => {
   else if (f === 'haul') o.haul = clamp((num || 0) / 100, 0, 0.9);
   else if (f === 'onet') o.net = el.checked ? 1 : 0;
   else if (f === 'obase') o.base = clamp(num || 0, 0, 1e12);
-  else if (f === 'oadd' && el.value && !o.seats.includes(el.value) && o.seats.length < 400) o.seats.push(el.value);
+  else if (f === 'oadd' && o.hq && el.value && !o.seats.includes(el.value) && o.seats.length < 400) o.seats.push(el.value);
+  else if (f === 'ohq') { o.hq = el.value || ''; if (o.hq && !o.seats.includes(o.hq)) o.seats.unshift(o.hq); if (!o.hq) o.seats = []; }
   else return;
   ecoChanged(false);
   if (el.tagName === 'SELECT' || el.type === 'checkbox' || el.type === 'color') ecoRender();
@@ -113,7 +140,10 @@ box.addEventListener('pointerdown', e => {
   if (mode !== 'econ' || ecoTab !== 'orgs' || !orgPick || !editable || e.button !== 0 || spaceDown || e.target !== cv) return;
   const [mx, my] = toMap(e.clientX, e.clientY), c = cityAt(mx, my), o = ECO.orgs.find(x => x.id === orgPick); if (!c || !o) return;
   e.stopPropagation(); e.preventDefault();
-  if (o.seats.includes(c.id)) o.seats = o.seats.filter(id => id !== c.id); else if (o.seats.length < 400) o.seats.push(c.id);
+  if (!o.hq) { o.hq = c.id; if (!o.seats.includes(c.id)) o.seats.unshift(c.id); flash(`ตั้งสำนักงานใหญ่ของ${o.name}ที่${c.name || 'เมืองนี้'}แล้ว คลิกเมืองอื่นเพื่อแยกสาขา`); }
+  else if (c.id === o.hq && o.seats.length > 1) { flash('นี่คือสำนักงานใหญ่ ถอนสาขาอื่นก่อน หรือย้ายสำนักงานใหญ่ที่การ์ดขององค์กร'); return; }
+  else if (c.id === o.hq) { o.hq = ''; o.seats = []; }
+  else if (o.seats.includes(c.id)) o.seats = o.seats.filter(id => id !== c.id); else if (o.seats.length < 400) o.seats.push(c.id);
   ecoChanged(false); ecoRender();
 }, true);
 // the houses on the map: a small diamond for each organisation beside its city, in the economy and the trade views
@@ -128,6 +158,7 @@ function orgDraw(px) {
       const x = c.x + (i - (Math.min(os.length, 5) - 1) / 2) * r * 2.3, y = c.y + r * 2.6;
       ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y); ctx.closePath();
       ctx.fillStyle = o.color; ctx.fill(); ctx.lineWidth = Math.max(0.8, 1.4 * px); ctx.strokeStyle = orgPick === o.id ? '#fff' : 'rgba(15,17,20,.85)'; ctx.stroke();
+      if (o.hq === c.id) { ctx.beginPath(); ctx.arc(x, y, r * 1.55, 0, 2 * Math.PI); ctx.lineWidth = Math.max(0.8, 1.6 * px); ctx.strokeStyle = '#ffe9a8'; ctx.stroke(); }   // the head office wears a ring
     });
   }
 }

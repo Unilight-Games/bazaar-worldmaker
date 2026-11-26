@@ -32,7 +32,7 @@ const W = +(process.env.W || 1536), H = +(process.env.H || 602), TAG = process.e
     });
     await page.screenshot({ path: `shots/lesson-${TAG}/${String(n + 1).padStart(2, '0')}-${r.id}.png` });
     rows.push(r);
-    if (await page.evaluate(() => { const p = JSON.parse(localStorage.getItem('mme-tutor')), b = document.getElementById('tuAct'); return MME.TUTOR.chapters[p.at[0]].steps[p.at[1]].act === 'states' && !b.disabled; })) { await page.click('#tuAct'); await page.waitForTimeout(2200); }
+    if (await page.evaluate(() => { const p = JSON.parse(localStorage.getItem('mme-tutor')), b = document.getElementById('tuAct'); return !!MME.TUTOR.chapters[p.at[0]].steps[p.at[1]].act && !b.disabled; })) { await page.click('#tuAct'); await page.waitForTimeout(2200); }
     await page.click('#tuNext'); await page.waitForTimeout(250);
   }
   fs.writeFileSync(`shots/lesson-${TAG}/audit.json`, JSON.stringify(rows, null, 1));

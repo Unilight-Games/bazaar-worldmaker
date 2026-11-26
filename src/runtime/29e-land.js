@@ -30,6 +30,7 @@ const landReachHex = () => Math.max(1, Math.round(TU('landReach')));
 const LAND_INT = 2.5;                                 // how much more a hex yields at the hardest farming (Claude's number)
 Object.assign(ETUNE, {
   reachMul: [1, 0.25, 2, 0.05, 'ระยะที่ชุมชนเก็บเกี่ยว คูณจากค่าตั้งต้น (หมู่บ้าน 4 ช่อง ถึงเมืองหลวง 7 ช่อง) ลดลงแล้วผลผลิตลดด้วย เพราะผลผลิตตั้งไว้ต่อช่อง', 'ประชากรและแรงงาน'],
+  fishReach: [2, 1, 8, 1, 'เรือประมงของชุมชนออกจากฝั่งไปได้ไกลสุดกี่ช่อง (ช่องทะเลและทะเลสาบเหล่านี้นับเป็นพื้นที่เก็บเกี่ยว ให้ปลาและเกลือทะเล)', 'ประชากรและแรงงาน'],
   landReach: [LAND_REACH, 1, 30, 1, 'ไร่นาของชุมชนแผ่ออกไกลสุดกี่ช่อง ก่อนจะทำนาเข้มข้นขึ้นแทน (ไร่ที่แผ่ไกลก็ขยายพื้นที่เก็บเกี่ยวของชุมชนด้วย)', 'ประชากรและแรงงาน'],
   intMax: [LAND_INT, 1, 5, 0.1, 'ทำนาเข้มข้นได้มากสุดกี่เท่าของผลผลิตปกติต่อช่อง ก่อนที่อาหารจะเริ่มขาด (ทดน้ำ ปลูกสองรอบ ใส่ปุ๋ยคอก)', 'ประชากรและแรงงาน'],
   intWell: [3, 0, 20, 0.5, 'ความเป็นอยู่ที่ลดลงต่อการทำนาเข้มข้นขึ้นหนึ่งเท่า (งานหนักขึ้น)', 'ประชากรและแรงงาน'],
@@ -216,7 +217,7 @@ function landPaint() {
   const lines = (list, col, w) => { if (!list.length) return; c.lineCap = 'butt'; c.strokeStyle = col; c.lineWidth = w; for (let a = 0; a < list.length; a += 4000) { c.beginPath(); for (let k = a; k < Math.min(list.length, a + 4000); k++) { const q = list[k]; c.moveTo(q[0], q[1]); c.lineTo(q[2], q[3]); } c.stroke(); } };
   lines(G2.furrow, 'rgba(92,78,40,.36)', 1 / 3); lines(G2.hedge, 'rgba(86,104,58,.7)', 0.55); lines(G2.hedge2, 'rgba(70,92,52,.8)', 0.55);
   for (const r of BRIV) for (const u of riverRuns(r)) strokeRiver(c, u.q, r.w, r.s, u.a, u.b);
-  for (const r of userRiversSorted()) { const d = RDER.get(r.id); if (d) strokeRiver(c, d.q, d.w, d.s); }
+  for (const r of userRiversSorted()) { const d = RDER.get(r.id); if (d) strokeRiver(c, d.q, d.w, d.c ? 'c' : d.s); }
   // the small things on the ground, each kind laid down in one go: stumps, stacks of logs, garden plots, farmsteads
   const fl = flat.filter(f => clearOfWater('broad', f[2], f[3])), of = k => fl.filter(f => f[1] === k), ells = (list, dy, rx, ry, fill, line) => { if (!list.length) return; c.beginPath(); for (const f of list) { c.moveTo(f[2] + rx, f[3] + dy); c.ellipse(f[2], f[3] + dy, rx, ry, 0, 0, 2 * Math.PI); } c.fillStyle = fill; c.fill(); if (line) { c.strokeStyle = line; c.lineWidth = 1 / 3; c.stroke(); } };
   const shapes = (list, ptsOf, fill, line) => { if (!list.length) return; c.beginPath(); for (const f of list) { const q = ptsOf(f[2], f[3]); c.moveTo(q[0][0], q[0][1]); for (let k = 1; k < q.length; k++) c.lineTo(q[k][0], q[k][1]); c.closePath(); } c.fillStyle = fill; c.fill(); if (line) { c.strokeStyle = line; c.lineWidth = 1 / 3; c.stroke(); } };
@@ -252,7 +253,7 @@ function landSheet() {                               // the sheet as the year no
   if (key !== landKey) { landKey = key; const t0 = performance.now(); try { landPaint(); } catch (err) { console.error('land sheet', err); } landMs = performance.now() - t0; }   // a sheet that fails to paint leaves the last one lying
   return landAny ? landCv : null;
 }
-drawOverGround = function (c, w, h) { const cvs = landSheet(); if (cvs) c.drawImage(cvs, 0, 0, w, h); };
+drawOverGround = function (c, w, h, live) { const cvs = landSheet(); if (cvs) c.drawImage(cvs, 0, 0, w, h); if (live && mode !== 'terrain' && mode !== 'river') massifDraw(c, !!cvs); };   // v0.21.0: the ranges seen from afar (29yd), over the cities' land
 { const under = drawUnderNames; drawUnderNames = function () { tierSync(); if (under) under(); }; }
 function landTipHTML(id) {                           // the hover card's line for a hex of the cities' land
   const L = LAND; if (!landOn || !L || !ECON || L.ver !== ECON.ver || mode === 'terrain' || mode === 'river') return '';
@@ -321,7 +322,7 @@ $('ecobody').addEventListener('change', e => {
   if (f === 'tier') { tierSet(el.value); if (el.value === 'own') { const t = $('ecobody').querySelector('input[data-f="total"]'); if (t) { t.focus(); t.select(); } } return; }
   else if (f === 'total') { if (ecoPeople(el.value) >= 100 && document.activeElement === el) el.blur(); tierTyped(el); return; }
   else if (f === 'unit') { ECO.tier = ''; ECO.total = 0; ECO.cpp = clamp(ECO.central.per / ECO.unit, 1e-6, 1e9); }   // a head set by hand: the level lets go
-  else if (f === 'cenper') { ECO.cpp = clamp(ECO.central.per / ECO.unit, 1e-6, 1e9); }
+  else if (f === 'cenper' || f === 'cenyear') { ECO.cpp = clamp(ECO.central.per / ECO.unit, 1e-6, 1e9); }
   else return;
   ecoChanged(true); ecoRender();
 });

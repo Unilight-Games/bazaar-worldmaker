@@ -1,5 +1,7 @@
 // ---------- the hex lattice (flat-top hexes, odd columns half a row lower) ----------
 const R = G.R, DX = 1.5 * R, DY = Math.sqrt(3) * R, COLS = G.cols, ROWS = G.rows, N = COLS * ROWS;
+// v0.21.0: on a map larger than the large canvas the drawing sheets are made coarser, so they keep to the memory of a large map
+const SHK = Math.max(1, Math.sqrt(G.w * G.h / 7.2e6));
 const cOf = id => id % COLS + G.cmin, kOf = id => ((id / COLS) | 0) + G.kmin, odd = c => (c & 1) === 1;
 const CX = new Float32Array(N), CY = new Float32Array(N);
 for (let id = 0; id < N; id++) { const c = cOf(id); CX[id] = G.x0 + c * DX; CY[id] = G.y0 + kOf(id) * DY + (odd(c) ? DY / 2 : 0); }

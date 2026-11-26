@@ -28,6 +28,26 @@ const CULT = {
   hospitable: { name: 'ต้อนรับแขก', why: 'ดึงนักท่องเที่ยวมากขึ้น', fx: { att: 0.15 } },
   communal: { name: 'รวมหมู่', why: 'ความเป็นอยู่ +3 ชนชั้นกลางลด 2%', fx: { well: 3, mid: -0.02 } },
   insular: { name: 'ปิดตัว', why: 'ความเป็นอยู่ +1 ค้ากับต่างวัฒนธรรมเสียค่าขนเพิ่มเป็นสองเท่า', fx: { well: 1 }, close: 1 },
+  // v0.21.0: more marks (the owner, 26 Nov 2026: not enough variety). stab is the stability of the community (29m); the rest as above
+  honor: { name: 'ถือศักดิ์ศรี', why: 'เสถียรภาพ +2 ทำอาวุธได้มากขึ้น 10%', fx: { arms: 1.1, stab: 2 } },
+  frugal: { name: 'มัธยัสถ์', why: 'ซื้อของหายากน้อยลง 30% ความเป็นอยู่ +1', fx: { well: 1 }, need: { luxury: 0.7 } },
+  urban: { name: 'ชาวเมือง', why: 'ชนชั้นกลางเพิ่ม 3% ดึงนักท่องเที่ยว', fx: { mid: 0.03, att: 0.05 } },
+  agrarian: { name: 'ชาวนา', why: 'ความเป็นอยู่ +1 ชนชั้นกลางลด 2%', fx: { well: 1, mid: -0.02 } },
+  woodland: { name: 'ชาวป่า', why: 'เก็บเกี่ยวได้ไกลขึ้นหนึ่งช่อง ใช้ไม้มากขึ้น', fx: { reach: 1 }, need: { timber: 1.1 } },
+  story: { name: 'นักเล่าเรื่อง', why: 'ผลิตตำราเพิ่ม ดึงนักท่องเที่ยว', fx: { books: 0.15, att: 0.05 } },
+  guildcraft: { name: 'ช่างสืบตระกูล', why: 'งานช่างเพิ่ม 10% ชนชั้นกลางเพิ่ม 2%', fx: { ind: 1.1, mid: 0.02 } },
+  ancestral: { name: 'บูชาบรรพบุรุษ', why: 'เสถียรภาพ +2 ศักดิ์สิทธิ์ขึ้นเล็กน้อย', fx: { stab: 2, holy: 0.3 } },
+  matri: { name: 'สืบสายแม่', why: 'ความเป็นอยู่ +1 เสถียรภาพ +1', fx: { well: 1, stab: 1 } },
+  equal: { name: 'เสมอภาค', why: 'ชนชั้นกลางเพิ่ม 3% ความเป็นอยู่ +1', fx: { mid: 0.03, well: 1 } },
+  ranked: { name: 'ลำดับชั้นเข้มงวด', why: 'เสถียรภาพ +3 ชนชั้นกลางลด 3% ความเป็นอยู่ −1', fx: { stab: 3, mid: -0.03, well: -1 } },
+  cosmo: { name: 'เปิดรับคนต่างถิ่น', why: 'ค้ากับต่างวัฒนธรรมไม่เสียค่าขนเพิ่ม ดึงนักท่องเที่ยวมาก เสถียรภาพ −1', fx: { att: 0.08, stab: -1 }, open: 1 },
+  xeno: { name: 'รังเกียจคนนอก', why: 'เสถียรภาพ +2 นักท่องเที่ยวน้อยลง ค้ากับต่างวัฒนธรรมแพงเป็นสองเท่า', fx: { stab: 2, att: -0.05 }, close: 1 },
+  feast: { name: 'งานเลี้ยงฉลอง', why: 'ความเป็นอยู่ +1.5 ซื้อของหายากและเนื้อนมมากขึ้น', fx: { well: 1.5 }, need: { luxury: 1.2, protein: 1.1 } },
+  riders: { name: 'นักขี่ม้า', why: 'ทำอาวุธได้มากขึ้น 15% เก็บเกี่ยวได้ไกลขึ้นหนึ่งช่อง', fx: { arms: 1.15, reach: 1 } },
+  merc: { name: 'ทหารรับจ้าง', why: 'ทำอาวุธได้มากขึ้นหนึ่งในสี่ ความเป็นอยู่ −0.5', fx: { arms: 1.25, well: -0.5 } },
+  engineer: { name: 'ช่างกล', why: 'งานช่างเพิ่ม 20% ใช้เชื้อเพลิงมากขึ้น', fx: { ind: 1.2 }, need: { fuel: 1.15 } },
+  literate: { name: 'อ่านออกเขียนได้ทั่วไป', why: 'ผลิตตำราเพิ่ม ชนชั้นกลางเพิ่ม 2%', fx: { books: 0.25, mid: 0.02 } },
+  riverfolk: { name: 'ชาวลุ่มน้ำ', why: 'ชุมชนติดน้ำขึ้นลำดับชุมทางหนึ่งขั้น กินปลามากขึ้น', fx: { portRank: 1 }, need: { protein: 1.1 } },
 };
 const RELT = {
   pilgrim: { name: 'แสวงบุญมาก', why: 'คนออกแสวงบุญบ่อยขึ้นครึ่งหนึ่ง', pilg: 1.5 },
@@ -38,7 +58,28 @@ const RELT = {
   tolerant: { name: 'ใจกว้าง', why: 'ค้ากับต่างศาสนาไม่เสียค่าขนเพิ่ม ผู้แสวงบุญของศาสนาอื่นมาได้ครึ่งหนึ่ง', open: 1 },
   dietary: { name: 'ข้อห้ามอาหาร', why: 'กินเนื้อสัตว์น้อยลงหนึ่งในสี่ กินธัญพืชมากขึ้น', need: { protein: 0.75, grain: 1.1 } },
   temple: { name: 'สร้างศาสนสถานใหญ่', why: 'ต้องการหินและของหายากมากขึ้น ศักดิ์สิทธิ์ขึ้นเล็กน้อย', fx: { holy: 0.5 }, need: { stone: 1.15, luxury: 1.1 } },
+  charity: { name: 'ทำบุญให้ทาน', why: 'ความเป็นอยู่ +1.5 ชนชั้นกลางลด 1%', fx: { well: 1.5, mid: -0.01 } },
+  prophecy: { name: 'รอคอยคำทำนาย', why: 'ศักดิ์สิทธิ์ขึ้น เสถียรภาพ −2', fx: { holy: 0.5, stab: -2 } },
+  pacifist: { name: 'อหิงสา', why: 'ทำอาวุธน้อยลง 30% ความเป็นอยู่ +1 เสถียรภาพ +2', fx: { arms: 0.7, well: 1, stab: 2 } },
+  zealot: { name: 'ขยายศาสนาด้วยดาบ', why: 'ทำอาวุธได้มากขึ้นหนึ่งในสี่ เสถียรภาพ −1', fx: { arms: 1.25, stab: -1 } },
+  priestly: { name: 'ชนชั้นนักบวช', why: 'เสถียรภาพ +2 ชนชั้นกลางลด 2%', fx: { stab: 2, mid: -0.02 } },
+  ancestors: { name: 'บูชาบรรพชน', why: 'เสถียรภาพ +2', fx: { stab: 2 } },
+  relics: { name: 'บูชาพระธาตุ', why: 'ศักดิ์สิทธิ์ขึ้นมาก ดึงนักท่องเที่ยว', fx: { holy: 0.8, att: 0.05 } },
+  fasting: { name: 'ถือศีลอด', why: 'กินธัญพืชและเนื้อสัตว์น้อยลงราวหนึ่งในสิบ ความเป็นอยู่ +0.5', fx: { well: 0.5 }, need: { grain: 0.92, protein: 0.9 } },
+  veggie: { name: 'มังสวิรัติ', why: 'กินเนื้อสัตว์ครึ่งเดียว กินธัญพืชมากขึ้น 15%', need: { protein: 0.5, grain: 1.15 } },
+  nousury: { name: 'ห้ามดอกเบี้ย', why: 'ชนชั้นกลางลด 2% เสถียรภาพ +1', fx: { mid: -0.02, stab: 1 } },
+  work: { name: 'ขยันคือบุญ', why: 'งานช่างเพิ่ม 10% ชนชั้นกลางเพิ่ม 2%', fx: { ind: 1.1, mid: 0.02 } },
+  omen: { name: 'โหราศาสตร์และการทำนาย', why: 'ดึงนักท่องเที่ยว ผลิตตำราเพิ่มเล็กน้อย', fx: { att: 0.05, books: 0.05 } },
+  water: { name: 'น้ำศักดิ์สิทธิ์', why: 'ศักดิ์สิทธิ์ขึ้น ดึงนักท่องเที่ยว', fx: { holy: 0.4, att: 0.04 } },
+  mystic: { name: 'ลัทธิลึกลับ', why: 'ผลิตตำราเพิ่ม ศักดิ์สิทธิ์ขึ้น เสถียรภาพ −1', fx: { books: 0.1, holy: 0.3, stab: -1 } },
+  mission: { name: 'ส่งธรรมทูต', why: 'ผลิตตำราเพิ่มเล็กน้อย ดึงนักท่องเที่ยว', fx: { books: 0.05, att: 0.03 } },
+  stupa: { name: 'มหาเจดีย์', why: 'ใช้หินมากขึ้นหนึ่งในสี่ ศักดิ์สิทธิ์ขึ้นมาก ดึงนักท่องเที่ยว', fx: { holy: 0.6, att: 0.05 }, need: { stone: 1.25 } },
+  hermit: { name: 'ปลีกวิเวก', why: 'ความเป็นอยู่ +1 ซื้อของหายากน้อยลง 20%', fx: { well: 1 }, need: { luxury: 0.8 } },
+  warmonk: { name: 'นักบวชนักรบ', why: 'ทำอาวุธได้มากขึ้น 10% ผลิตตำราเพิ่ม', fx: { arms: 1.1, books: 0.1 } },
+  offering: { name: 'บูชายัญ', why: 'ศักดิ์สิทธิ์ขึ้น เสถียรภาพ +1 ใช้เนื้อสัตว์มากขึ้น', fx: { holy: 0.5, stab: 1 }, need: { protein: 1.1 } },
 };
+// what the marks of a community's culture and faith do to how settled it is (29m)
+function belStab(b) { const out = []; if (!b) return out; if (b.cul) for (const t of b.cul.tr) { const z = CULT[t]; if (z && z.fx && z.fx.stab) out.push([b.cul.name + ' (' + z.name + ')', z.fx.stab]); } if (b.rel) for (const t of b.rel.tr) { const z = RELT[t]; if (z && z.fx && z.fx.stab) out.push([b.rel.name + ' (' + z.name + ')', z.fx.stab]); } return out; }
 const BELCOLS = ['#c8553d', '#3d7ec8', '#5aa05a', '#c8a03d', '#8a5ac8', '#3db0a8', '#c85a96', '#7a8a3d', '#d07a2a', '#4a5ac0', '#a03d5a', '#5a8a7a'];
 ECO.cul = []; ECO.culc = new Array(N).fill(''); ECO.rel = []; ECO.relc = new Array(N).fill(''); ECO.ccul = {}; ECO.crel = {};
 let belCv = null, belSheetKey = '';
@@ -81,7 +122,7 @@ function belChanged(tables) { BEL.stamp++; BEL.city.clear(); belSheetKey = ''; e
   const lc = ecoLinkCost; ecoLinkCost = function (L, cities) {
     const c = lc(L, cities); L.belFar = 0; if (!ECO.cul.length && !ECO.rel.length) return c;
     const A = belCity(cities[L.ia].id), B = belCity(cities[L.ib].id); let k = 0;
-    if (A.cul && B.cul && A.cul !== B.cul) { const op = A.cul.tr.includes('merchant') || B.cul.tr.includes('merchant'), cl = A.cul.tr.includes('insular') || B.cul.tr.includes('insular'); if (!op || cl) k += TU('culFar') * (cl ? 2 : 1); }
+    if (A.cul && B.cul && A.cul !== B.cul) { const op = A.cul.tr.some(t => CULT[t] && CULT[t].open) || B.cul.tr.some(t => CULT[t] && CULT[t].open), cl = A.cul.tr.some(t => CULT[t] && CULT[t].close) || B.cul.tr.some(t => CULT[t] && CULT[t].close); if (!op || cl) k += TU('culFar') * (cl ? 2 : 1); }
     if (A.rel && B.rel && A.rel !== B.rel && !A.rel.tr.includes('tolerant') && !B.rel.tr.includes('tolerant')) k += TU('relFar');
     L.belFar = k; return c * (1 + k);
   };
@@ -124,7 +165,7 @@ const relPilgRate = r => { const R = belCity(r.c.id).rel; return R && R.tr.inclu
 // ---- the document ----
 {
   const ld = ecoLoad, sr = ecoSerial;
-  const clean = (list, T) => { const out = []; for (const o of (Array.isArray(list) ? list : []).slice(0, 60)) { if (!o || typeof o.id !== 'string' || !/^[a-z0-9]{1,16}$/.test(o.id) || out.some(x => x.id === o.id)) continue; out.push({ id: o.id, name: ecoStr(o.name, 60) || 'ไม่มีชื่อ', col: HEXC.test(o.col) ? o.col : BELCOLS[out.length % BELCOLS.length], tr: (Array.isArray(o.tr) ? o.tr : []).filter(t => T[t]).slice(0, 12), tithe: o.tithe != null ? clamp(+o.tithe || 0, 0, 0.3) : 0.05, seat: ecoStr(o.seat, 120), orgs: (Array.isArray(o.orgs) ? o.orgs : []).filter(x => typeof x === 'string').slice(0, 60) }); } return out; };
+  const clean = (list, T) => { const out = []; for (const o of (Array.isArray(list) ? list : []).slice(0, 60)) { if (!o || typeof o.id !== 'string' || !/^[a-z0-9]{1,16}$/.test(o.id) || out.some(x => x.id === o.id)) continue; out.push({ id: o.id, name: ecoStr(o.name, 60) || 'ไม่มีชื่อ', col: HEXC.test(o.col) ? o.col : BELCOLS[out.length % BELCOLS.length], tr: (Array.isArray(o.tr) ? o.tr : []).filter(t => T[t]).slice(0, 24), tithe: o.tithe != null ? clamp(+o.tithe || 0, 0, 0.3) : 0.05, seat: ecoStr(o.seat, 120), orgs: (Array.isArray(o.orgs) ? o.orgs : []).filter(x => typeof x === 'string').slice(0, 60) }); } return out; };
   const cells = (src, list) => { const a = new Array(N).fill(''); if (src && typeof src === 'object') for (const [id, l] of Object.entries(src)) { if (!list.some(x => x.id === id) || !Array.isArray(l)) continue; for (const i of l.slice(0, N)) if (Number.isInteger(i) && i >= 0 && i < N) a[i] = id; } return a; };
   ecoLoad = function (b) {
     ld(b); b = b || {};
@@ -148,15 +189,15 @@ const relPilgRate = r => { const R = belCity(r.c.id).rel; return R && R.tr.inclu
 const belShown = () => mode === 'econ' && (ecoTab === 'cul' || ecoTab === 'rel') ? ecoTab : mode === 'econ' && ecoTab === 'adm' ? '' : BEL.view === 'cul' || BEL.view === 'rel' ? BEL.view : '';
 function belSheet(k) {
   const key = k + '|' + BEL.stamp + '|' + belList(k).map(x => x.col).join(''); if (key === belSheetKey && belCv) return belCv; belSheetKey = key;
-  if (!belCv) { belCv = document.createElement('canvas'); belCv.width = Math.max(1, Math.ceil(G.w / 3)); belCv.height = Math.max(1, Math.ceil(G.h / 3)); }
-  const c = belCv.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, belCv.width, belCv.height); c.setTransform(1 / 3, 0, 0, 1 / 3, 0, 0);
+  if (!belCv) { belCv = document.createElement('canvas'); belCv.width = Math.max(1, Math.ceil(G.w / (3 * SHK))); belCv.height = Math.max(1, Math.ceil(G.h / (3 * SHK))); }
+  const c = belCv.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, belCv.width, belCv.height); c.setTransform(1 / (3 * SHK), 0, 0, 1 / (3 * SHK), 0, 0);
   const a = belCells(k);
   for (const o of belList(k)) { c.beginPath(); let any = false; for (let i = 0; i < N; i++) if (a[i] === o.id) { hexPath(c, i, 1.03); any = true; } if (any) { c.fillStyle = o.col; c.fill(); } }
   c.strokeStyle = 'rgba(20,20,24,.7)'; c.lineWidth = 1.2; c.beginPath();
   for (let i = 0; i < N; i++) { if (!a[i]) continue; for (let j = 0; j < 6; j++) { const v = NB[i * 6 + j]; if (v < 0 || a[v] === a[i] || (!a[v] && isW(eff(v)))) continue; const e = EDGE[j], t0 = e * Math.PI / 3, t1 = (e + 1) * Math.PI / 3; c.moveTo(CX[i] + R * Math.cos(t0), CY[i] + R * Math.sin(t0)); c.lineTo(CX[i] + R * Math.cos(t1), CY[i] + R * Math.sin(t1)); } }
   c.stroke(); return belCv;
 }
-{ const dg = drawOverGround; drawOverGround = function (c, w, h, live) { if (dg) dg(c, w, h, live); const k = live ? belShown() : ''; if (!k || !belList(k).length) return; const s = belSheet(k); c.save(); c.globalAlpha = 0.42; c.drawImage(s, 0, 0, s.width * 3, s.height * 3); c.restore(); }; }
+{ const dg = drawOverGround; drawOverGround = function (c, w, h, live) { if (dg) dg(c, w, h, live); const k = live ? belShown() : ''; if (!k || !belList(k).length) return; const s = belSheet(k); c.save(); c.globalAlpha = 0.42; c.drawImage(s, 0, 0, s.width * 3 * SHK, s.height * 3 * SHK); c.restore(); }; }
 {
   const top = drawOnTop; drawOnTop = function (c, px) {
     if (top) top(c, px); const k = belShown(); if (!k) return; const a = belCells(k);

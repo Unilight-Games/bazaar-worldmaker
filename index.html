@@ -207,6 +207,10 @@ canvas.measuring { cursor: crosshair; }
 .mktbl { display: grid; grid-template-columns: minmax(150px, 1.4fr) repeat(5, minmax(70px, .8fr)) minmax(110px, 1.3fr); gap: 0 10px; font-size: .86rem; margin-top: 6px; }
 .mkh { font-weight: 600; color: var(--muted); padding: 4px 0; border-bottom: 1px solid var(--line); }
 .mkh.r, .mkrow .r { text-align: right; }
+.mkh.mks { background: none; border: 0; border-bottom: 1px solid var(--line); font: inherit; font-weight: 600; color: var(--muted); cursor: pointer; text-align: left; border-radius: 0; }
+.mkh.mks.r { text-align: right; }
+.mkh.mks:hover, .mkh.mks:focus-visible { color: var(--text); }
+.mkh.mks.on { color: var(--brass); }
 .mkrow { display: contents; cursor: pointer; font: inherit; color: inherit; background: none; border: 0; }
 .mkrow > span { padding: 5px 0; border-bottom: 1px solid rgba(255, 255, 255, .05); }
 .mkrow:hover > span, .mkrow.on > span { background: rgba(207, 169, 94, .08); }
@@ -268,6 +272,16 @@ aside .card h2 { position: relative; }
 .minitog.open { padding: 0 7px; line-height: 1.5; opacity: .75; }
 .minitog:hover { opacity: 1; }
 #mapbox.bare .minitog { display: none !important; }
+/* v0.21.0: the keys of the tool in hand, on the map */
+.keyhint { position: absolute; z-index: 5; left: 50%; transform: translateX(-50%); bottom: 54px; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 12px; max-width: min(92%, 760px); background: rgba(20, 21, 26, .9); border: 1px solid rgba(207, 169, 94, .5); border-radius: 7px; padding: 4px 10px; font-size: .8rem; color: var(--text); pointer-events: none; box-shadow: 0 3px 10px rgba(0, 0, 0, .4); }
+.keyhint[hidden] { display: none; }
+.keyhint .kh { white-space: nowrap; color: var(--muted); }
+.keyhint .kh.on { color: #bfe8ff; }
+.keyhint kbd { font-family: inherit; font-size: .74rem; color: var(--text); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; margin: 0 1px; background: rgba(255, 255, 255, .05); }
+.keyhint .kh.on kbd { border-color: #8fd4ff; color: #e6f6ff; background: rgba(120, 200, 255, .18); }
+.polset.gtr { justify-content: flex-start; }
+.polset.gtr { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5em, 1fr)); gap: 2px 10px; }
+.eform select { max-width: 100%; }
 
 /* ---------- Bazaar Worldmaker: the menu, the library and the room, in the map's own ink and brass ---------- */
 :root { --good: #7cc47f; --warn: #e2748a; --panel2: #262a33; }
@@ -864,6 +878,10 @@ b.warn { color: var(--warn); font-weight: 600; }
 #nmImage .rowx { align-items: center; flex-wrap: wrap; }
 #nmInv[aria-pressed=true] { background: var(--brass); color: #1a1508; }
 #nmSeedRow[hidden], #nmGenHint[hidden], #nmImage[hidden] { display: none; }
+/* v0.21.0: a size of the player's own */
+.sizeopt .sizein { display: flex; align-items: center; gap: 4px; margin: 3px 0; color: var(--text); }
+.sizeopt .sizein input { position: static; opacity: 1; width: 4.6em; padding: 2px 4px; background: var(--paper, #1b1e25); color: var(--text); border: 1px solid var(--line); border-radius: 4px; font: inherit; }
+.sizeopt .heavy { color: #e8b26a; }
 </style>
 </head>
 <body>
@@ -1230,18 +1248,18 @@ b.warn { color: var(--warn); font-weight: 600; }
 <section class="method"><div class="card" id="method"></div></section>
 </template>
 <script>window.MME_BUILD = "web"; window.MME_NO_GRESLAND = true;</script>
-<script src="firebase-config.js?v=0.20.1"></script>
-<script src="engine/gen.js?v=0.20.1"></script>
-<script src="engine/store.js?v=0.20.1"></script>
-<script src="engine/backup.js?v=0.20.1"></script>
-<script src="engine/net.js?v=0.20.1"></script>
-<script src="engine/fire.js?v=0.20.1"></script>
-<script src="engine/defaults.js?v=0.20.1"></script>
-<script src="engine/runtime.js?v=0.20.1"></script>
-<script src="engine/shell.js?v=0.20.1"></script>
-<script src="engine/hub.js?v=0.20.1"></script>
-<script src="engine/policy.js?v=0.20.1"></script>
-<script src="engine/tutor-lines.js?v=0.20.1"></script>
-<script src="engine/tutor.js?v=0.20.1"></script>
+<script src="firebase-config.js?v=0.21.0"></script>
+<script src="engine/gen.js?v=0.21.0"></script>
+<script src="engine/store.js?v=0.21.0"></script>
+<script src="engine/backup.js?v=0.21.0"></script>
+<script src="engine/net.js?v=0.21.0"></script>
+<script src="engine/fire.js?v=0.21.0"></script>
+<script src="engine/defaults.js?v=0.21.0"></script>
+<script src="engine/runtime.js?v=0.21.0"></script>
+<script src="engine/shell.js?v=0.21.0"></script>
+<script src="engine/hub.js?v=0.21.0"></script>
+<script src="engine/policy.js?v=0.21.0"></script>
+<script src="engine/tutor-lines.js?v=0.21.0"></script>
+<script src="engine/tutor.js?v=0.21.0"></script>
 </body>
 </html>

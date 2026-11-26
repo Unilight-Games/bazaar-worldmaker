@@ -89,6 +89,7 @@
   let on = false, ci = 0, si = 0, s0 = null, taskDone = false, typeT = 0, pollT = 0, full = '', spots = [];
   const rt = () => MME.shell.cur && MME.shell.cur.practice ? MME.shell.cur.rt : null;
   const state = () => { const r = rt(); try { return r ? r.state() : null; } catch (err) { return null; } };
+  const ACTS = { town: 'เปิดการ์ดของเมืองตัวอย่าง', unit: 'แบ่งรัฐแล้วเลือกเขตตัวอย่าง' };   // v0.21.0: what her other buttons do
   const TESTS = {
     view: (a, b) => a.view.join() !== b.view.join(),
     undo: (a, b) => a.undo > b.undo || a.land !== b.land,
@@ -144,7 +145,7 @@
     pose(bk && st.poseBk ? st.poseBk : st.pose); say(bk && st.textBk ? st.textBk : st.text);
     taskDone = false; s0 = state();
     const tk = $('tuTask'); tk.hidden = !st.task; tk.className = 'tu-task'; if (st.task) tk.textContent = T.taskLabel[st.task] || '';
-    const act = $('tuAct'); act.hidden = !st.act; if (st.act === 'states') { act.textContent = 'วางรัฐตัวอย่างสามรัฐ'; act.disabled = !!(s0 && s0.states > 0); }
+    const act = $('tuAct'); act.hidden = !st.act; if (st.act === 'states') { act.textContent = 'วางรัฐตัวอย่างสามรัฐ'; act.disabled = !!(s0 && s0.states > 0); } else if (st.act) { act.textContent = ACTS[st.act] || 'ลองดู'; act.disabled = false; }
     $('tuTocBox').hidden = true;
     refit();                                        // her box is as tall as this line needs: the options beside her get what is left
     setTimeout(() => spot(st.spot), 60);
@@ -179,7 +180,7 @@
   $('tuMin').onclick = () => { root.hidden = true; chip.hidden = false; clearSpots(); document.body.classList.remove('tutoring'); refit(); };
   chip.onclick = () => { root.hidden = false; chip.hidden = true; document.body.classList.add('tutoring'); refit(); spot(CH[ci].steps[si].spot); };
   $('tuQuit').onclick = () => quit('');
-  $('tuAct').onclick = async () => { const st = CH[ci].steps[si]; if (st.act === 'states') { $('tuAct').disabled = true; const ok = await seedStates(); if (!ok) { pose('guilty'); say('แผนที่นี้มีรัฐอยู่แล้ว เราไม่วางทับงานของเจ้า', false); } } };
+  $('tuAct').onclick = async () => { const st = CH[ci].steps[si]; if (st.act && st.act !== 'states') { const r = MME.shell.cur && MME.shell.cur.rt; let ok = false; try { ok = !!(r && r.tutorPick && r.tutorPick(st.act)); } catch (err) { ok = false; } if (!ok) { pose('guilty'); say(st.act === 'unit' ? 'แผนที่นี้ยังไม่มีรัฐ กลับไปบทรัฐแล้วกดวางรัฐตัวอย่างก่อนนะ' : 'แผนที่นี้ยังไม่มีชุมชนให้เปิด', false); } setTimeout(() => spot(st.spot), 500); return; } if (st.act === 'states') { $('tuAct').disabled = true; const ok = await seedStates(); if (!ok) { pose('guilty'); say('แผนที่นี้มีรัฐอยู่แล้ว เราไม่วางทับงานของเจ้า', false); } } };
   document.addEventListener('keydown', e => {
     if (!on || root.hidden || e.key !== 'Enter' || e.ctrlKey || e.metaKey || e.altKey) return;
     const t = e.target; if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;

@@ -150,7 +150,7 @@ const stPeak = () => ED.stan != null ? ED.stan : D.stpeak;
 const isStan = i => ED.stan == null ? STAN.has(i) : i === ED.stan || (eff(i) === 'M' && ring1(ED.stan).includes(i));
 function drawPeak(c, i) {
   let deg = 0; for (let j = 0; j < 6; j++) { const v = NB[i * 6 + j]; if (v >= 0 && eff(v) === 'M') deg++; }
-  const big = deg >= 2, st = isStan(i), isl = ZO[i] === 'K', snowy = !isl && (CX[i] < 220 || ZO[i] === 'H' || (CY[i] < 380 && CX[i] < 1040) || st);
+  const big = deg >= 2, st = isStan(i), isl = ZO[i] === 'K', snowy = BLANK ? peakSnowClim(i) : !isl && (CX[i] < 220 || ZO[i] === 'H' || (CY[i] < 380 && CX[i] < 1040) || st);   // v0.21.0: a map of our own world by its climate; the old reckoning was Gresland's corners
   peak(c, CX[i] + (vnoise(CX[i], CY[i], 7, 1) - 0.5) * 2, CY[i], st ? 1.15 : isl ? (deg >= 1 ? 1 : 0.92) : big ? 1 : 0.8, (snowy && big) || st);
 }
 function drawStanther(c, at, alpha) {
@@ -212,6 +212,13 @@ function strokeRiver(c, q, w, s, capA = true, capB = true) {     // a cut end (c
   const path = () => { c.beginPath(); c.moveTo(q[0][0], q[0][1]); for (let i = 1; i < q.length; i++) c.lineTo(q[i][0], q[i][1]); };
   const end = (col, r) => { for (const [p, on] of [[q[0], capA], [q[q.length - 1], capB]]) if (on) { c.beginPath(); c.arc(p[0], p[1], r, 0, 2 * Math.PI); c.fillStyle = col; c.fill(); } };
   c.lineJoin = 'round'; c.lineCap = 'butt';
+  if (s === 'c') {                                   // a canal: stone banks, deep water, and a lock gate every few reaches
+    c.lineJoin = 'miter'; path(); c.strokeStyle = 'rgb(92,84,70)'; c.lineWidth = w + 3.2; c.stroke(); path(); c.strokeStyle = 'rgb(176,164,134)'; c.lineWidth = w + 1.8; c.stroke();
+    path(); c.strokeStyle = 'rgb(62,140,190)'; c.lineWidth = w; c.stroke();
+    let run = 0; c.beginPath();
+    for (let i = 1; i < q.length; i++) { const ax = q[i - 1][0], ay = q[i - 1][1], dx = q[i][0] - ax, dy = q[i][1] - ay, L = Math.hypot(dx, dy); if (!L) continue; const ux = dx / L, uy = dy / L; for (let t = 9 - run; t < L; t += 9) { const x = ax + ux * t, y = ay + uy * t; c.moveTo(x - uy * (w / 2 + 1.2), y + ux * (w / 2 + 1.2)); c.lineTo(x + uy * (w / 2 + 1.2), y - ux * (w / 2 + 1.2)); } run = (run + L) % 9; }
+    c.strokeStyle = 'rgb(60,48,34)'; c.lineWidth = 0.7; c.stroke(); c.lineJoin = 'round'; return;
+  }
   if (s) { path(); c.strokeStyle = 'rgb(124,166,190)'; c.lineWidth = w * 0.85; c.stroke(); end('rgb(124,166,190)', w * 0.85 / 2); return; }
   path(); c.strokeStyle = 'rgb(44,72,94)'; c.lineWidth = w + 1.2; c.stroke();
   path(); c.strokeStyle = 'rgb(84,136,172)'; c.lineWidth = w; c.stroke(); end('rgb(84,136,172)', w / 2);
@@ -261,7 +268,8 @@ function riverRuns(r) {                             // the stretches of a map ri
 }
 let US = sampler(), URVH = new Set();
 const RDER = new Map();                        // derived geometry of the user's rivers, by id
-function derive(r) { const k = RK[r.kind] || RK.river, q = smoothLine(r.pts); RDER.set(r.id, { q, w: k.w, s: k.s, bb: bbox(q, k.w + 1.5) }); }
+const canalLine = p => p.map(q => [q[0], q[1]]);   // a canal keeps the straight reaches it was drawn with
+function derive(r) { const k = RK[r.kind] || RK.river, q = k.c ? canalLine(r.pts) : smoothLine(r.pts); RDER.set(r.id, { q, w: k.w, s: k.s, c: k.c || 0, bb: bbox(q, k.w + 1.5) }); }
 function buildUserSamples() {
   US = sampler(); URVH = new Set();
   for (const r of ED.rivers) { const d = RDER.get(r.id); addSamples(US, d.q, (d.s ? d.w : d.w + 1.2) / 2, -1); }

@@ -36,12 +36,12 @@ function eWaterways() {
     if (xs.length > 1) eRiverRun(xs, ys, runs, r.w >= NAVBIG ? 2 : 1);
   }
   for (const r of ED.rivers) {
-    if (r.kind !== 'big' && r.kind !== 'river') continue;
+    if (r.kind !== 'big' && r.kind !== 'river' && r.kind !== 'canal') continue;   // v0.21.0: a canal carries sea-going ships
     const d = RDER.get(r.id); if (!d) continue;
     const xs = [], ys = [];                          // the drawn line, half a unit apart, so no hex on it is skipped
     for (let i = 0; i < d.q.length - 1; i++) { const a = d.q[i], b = d.q[i + 1], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.5)); for (let s = 0; s < n; s++) { xs.push(a[0] + (b[0] - a[0]) * s / n); ys.push(a[1] + (b[1] - a[1]) * s / n); } }
     const e = d.q[d.q.length - 1]; xs.push(e[0]); ys.push(e[1]);
-    eRiverRun(xs, ys, runs, r.kind === 'big' ? 2 : 1);
+    eRiverRun(xs, ys, runs, r.kind === 'big' || r.kind === 'canal' ? 2 : 1);
   }
   for (let i = 0; i < N; i++) if (NPC[i]) { NPX[i] /= NPC[i]; NPY[i] /= NPC[i]; } else { NPX[i] = CX[i]; NPY[i] = CY[i]; }
   // a river that ends a step short of the sea, a lake or another river flows on into it: each end of a stretch is joined to the

@@ -95,8 +95,8 @@ let bhazeCv = null, bhazeKey = '';
 function bhazeSheet() {
   let hsh = 0; for (let i = 0; i < N; i += 3) hsh = (Math.imul(hsh, 31) + ECO.cells[i].charCodeAt(0)) | 0; const key = hsh + '|' + ECO.states.map(s => s.color).join('');
   if (key === bhazeKey && bhazeCv) return bhazeCv; bhazeKey = key;
-  if (!bhazeCv) { bhazeCv = document.createElement('canvas'); bhazeCv.width = Math.max(1, Math.ceil(G.w / 3)); bhazeCv.height = Math.max(1, Math.ceil(G.h / 3)); }
-  const c = bhazeCv.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, bhazeCv.width, bhazeCv.height); c.setTransform(1 / 3, 0, 0, 1 / 3, 0, 0);
+  if (!bhazeCv) { bhazeCv = document.createElement('canvas'); bhazeCv.width = Math.max(1, Math.ceil(G.w / (3 * SHK))); bhazeCv.height = Math.max(1, Math.ceil(G.h / (3 * SHK))); }
+  const c = bhazeCv.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, bhazeCv.width, bhazeCv.height); c.setTransform(1 / (3 * SHK), 0, 0, 1 / (3 * SHK), 0, 0);
   for (const s of ECO.states) {
     c.beginPath(); let any = false;
     for (let i = 0; i < N; i++) { if (ECO.cells[i] !== s.id || isW(eff(i))) continue; for (let j = 0; j < 6; j++) { const v = NB[i * 6 + j]; if (v < 0 || ECO.cells[v] === s.id || isW(eff(v))) continue; const e = EDGE[j], t0 = e * Math.PI / 3, t1 = (e + 1) * Math.PI / 3; c.moveTo(CX[i] + R * Math.cos(t0), CY[i] + R * Math.sin(t0)); c.lineTo(CX[i] + R * Math.cos(t1), CY[i] + R * Math.sin(t1)); any = true; } }
@@ -108,7 +108,7 @@ function bhazeSheet() {
 {
   const dg = drawOverGround; drawOverGround = function (c, w, h, live) {
     if (dg) dg(c, w, h, live); if (!live) return;
-    if (ECO.states.length && (mode === 'view' || mode === 'trade' || mode === 'econ')) { const s = bhazeSheet(); c.save(); c.imageSmoothingEnabled = true; c.drawImage(s, 0, 0, s.width * 3, s.height * 3); c.restore(); }
+    if (ECO.states.length && (mode === 'view' || mode === 'trade' || mode === 'econ')) { const s = bhazeSheet(); c.save(); c.imageSmoothingEnabled = true; c.drawImage(s, 0, 0, s.width * 3 * SHK, s.height * 3 * SHK); c.restore(); }
     if (clSeas) { const S = clSeasons(), z = S && S.find(x => x.id === clSeas); if (z) { const [r, g, b, a] = SEASLIGHT(z.warm); c.save(); c.fillStyle = `rgba(${r},${g},${b},${a})`; c.fillRect(0, 0, G.w, G.h); c.restore(); } }
   };
 }

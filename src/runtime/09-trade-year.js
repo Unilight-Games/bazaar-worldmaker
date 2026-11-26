@@ -59,8 +59,12 @@ function econCompute() {
       tech: [1.2, 1, 0.3, 0.5, 0][c.ki] * ({ X: 1.3, S: 1.4, H: 1.2, G: 0.9, T: 0.5 }[z] || 0.1),
       ships: c.port === 2 ? 1 : c.port === 1 ? 0.4 : 0,
       books: (z === 'T' ? 3 : 1) * ([1, 0.5, 0.2, 0.1, 0][c.ki] + c.fx.books),
+      // v0.21.0: farm goods are made in the villages, fine goods in the great towns
+      fert: [0.3, 0.4, 0.8, 0.5, 3][c.ki], feed: [0.3, 0.4, 0.8, 1, 3][c.ki], drink: [1, 1, 1, 0.8, 1.5][c.ki], food: [1, 1, 1.1, 1.4, 1.2][c.ki],
+      medicine: [1.2, 1, 0.6, 0.6, 0.5][c.ki], jewelry: [1.5, 1, 0.4, 0.2, 0][c.ki], build: [1, 1, 1, 1.2, 0.8][c.ki],
     };
-    for (const m of EMADEC) { const v = ind * EWORK[m].base * (spec[m] != null ? spec[m] : 1) * (cn[m] || 1) * orgProd(c, m) * socMake(c, m); if (v > 0.01) p[m] = v; }
+    const sm = c.spec && typeof SPEC !== 'undefined' && SPEC[c.spec] ? SPEC[c.spec][5] : '';   // v0.21.0: a workshop village (29z)
+    for (const m of EMADEC) { const v = ind * EWORK[m].base * (spec[m] != null ? spec[m] : 1) * (cn[m] || 1) * orgProd(c, m) * socMake(c, m) * (m === sm ? SPEC_MADE * [1, 1, 1.4, 2, 3.2][c.ki] : 1); if (v > 0.01) p[m] = v; }   // a village that lives by one craft works at it like a town
     for (const m in p) for (const [cat, q] of Object.entries(EWORK[m].in)) need[k][cat] += p[m] * q;
     return p;
   });

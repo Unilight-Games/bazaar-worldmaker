@@ -593,3 +593,7 @@ b.warn { color: var(--warn); font-weight: 600; }
 #nmImage .rowx { align-items: center; flex-wrap: wrap; }
 #nmInv[aria-pressed=true] { background: var(--brass); color: #1a1508; }
 #nmSeedRow[hidden], #nmGenHint[hidden], #nmImage[hidden] { display: none; }
+/* v0.21.0: a size of the player's own */
+.sizeopt .sizein { display: flex; align-items: center; gap: 4px; margin: 3px 0; color: var(--text); }
+.sizeopt .sizein input { position: static; opacity: 1; width: 4.6em; padding: 2px 4px; background: var(--paper, #1b1e25); color: var(--text); border: 1px solid var(--line); border-radius: 4px; font: inherit; }
+.sizeopt .heavy { color: #e8b26a; }

@@ -14,6 +14,7 @@ const ECAT = {   // name, colour, value of a load, bulk (what a load pays per un
   stone: { name: 'หินและดินปั้น', col: '#b9ae9a', v: 0.7, bulk: 1.6 },
   ore: { name: 'แร่', col: '#9a9aa6', v: 1.4, bulk: 1.3 },
   cloth: { name: 'เส้นใย หนัง และเชือก', col: '#c9a0d0', v: 3, bulk: 0.45 },
+  livestock: { name: 'ปศุสัตว์และสัตว์ใช้งาน', col: '#b08a5a', v: 3, bulk: 0.5 },   // v0.21.0: horses, oxen and mules: they walk to market
   mana: { name: 'ศิลาเวทและวัสดุมานา', col: '#7fb6ff', v: 6, bulk: 0.35 },
   rare: { name: 'โลหะมีค่าและโลหะหายาก', col: '#f2d48a', v: 10, bulk: 0.35 },
   luxury: { name: 'ของหายาก', col: '#e58fb8', v: 8, bulk: 0.15 },
@@ -22,6 +23,17 @@ const ECAT = {   // name, colour, value of a load, bulk (what a load pays per un
   tech: { name: 'เครื่องกลและอุปกรณ์เวท', col: '#6ad0c8', v: 10, bulk: 0.4, made: true },
   ships: { name: 'เรือ', col: '#5a90b4', v: 8, bulk: 0.05, made: true },
   books: { name: 'ตำราและความรู้', col: '#dccca2', v: 6, bulk: 0.2, made: true },
+  // v0.21.0: ten more workshops (the owner, 26 Nov 2026: the goods were too few; liquor, furniture, building stuff and fertiliser)
+  drink: { name: 'สุราและเครื่องดื่มหมัก', col: '#b5654a', v: 3, bulk: 0.5, made: true },
+  furniture: { name: 'เฟอร์นิเจอร์และของใช้ในบ้าน', col: '#8b5e3c', v: 3, bulk: 0.9, made: true },
+  build: { name: 'วัสดุก่อสร้าง อิฐ ปูน และกระเบื้อง', col: '#c2703d', v: 1.2, bulk: 1.5, made: true },
+  fert: { name: 'ปุ๋ย', col: '#7a8a3a', v: 0.8, bulk: 1.2, made: true },
+  feed: { name: 'อาหารสัตว์', col: '#c9b25a', v: 0.6, bulk: 1.1, made: true },
+  textile: { name: 'ผ้าและเสื้อผ้า', col: '#b07ac9', v: 4, bulk: 0.4, made: true },
+  pottery: { name: 'เครื่องปั้นและเครื่องแก้ว', col: '#d9b38c', v: 2, bulk: 0.8, made: true },
+  food: { name: 'อาหารแปรรูปและของหมักดอง', col: '#d98f4a', v: 2.2, bulk: 0.6, made: true },
+  medicine: { name: 'ยาและเครื่องสำอาง', col: '#6fc9a0', v: 7, bulk: 0.1, made: true },
+  jewelry: { name: 'เครื่องประดับ', col: '#f0c860', v: 12, bulk: 0.05, made: true },
   labor: { name: 'แรงงาน (ทาส)', col: '#d0343c', v: 1, bulk: 0.5, people: true },   // people bought and sold (v0.13.0): no ground yields it and no workshop makes it; the year's slave trade fills its books
 };
 // on a map of our own world the class that is mana in Gresland is crude oil, priced with gems and gold as the owner ruled; coal burns with the other fuels
@@ -43,6 +55,9 @@ const ENEED = {                                    // loads a head needs a year,
   cloth: [0.18, 0.15, 0.12, 0.12, 0.08], mana: [0.16, 0.1, 0.04, 0.08, 0.01], rare: [0.05, 0.03, 0.01, 0.01, 0], luxury: [0.14, 0.08, 0.03, 0.02, 0.01],
   tools: [0.1, 0.1, 0.1, 0.08, 0.1], arms: [0.12, 0.08, 0.03, 0.35, 0.01], tech: [0.06, 0.04, 0.01, 0.04, 0], ships: [0.04, 0.03, 0.015, 0.01, 0.01],
   books: [0.03, 0.02, 0.005, 0.004, 0], labor: [0, 0, 0, 0, 0],
+  livestock: [0.02, 0.02, 0.02, 0.06, 0.03],
+  drink: [0.04, 0.03, 0.025, 0.04, 0.02], furniture: [0.03, 0.025, 0.02, 0.012, 0.008], build: [0.07, 0.06, 0.035, 0.09, 0.012], fert: [0.003, 0.003, 0.01, 0.006, 0.02], feed: [0.006, 0.006, 0.012, 0.025, 0.02],
+  textile: [0.05, 0.04, 0.03, 0.03, 0.02], pottery: [0.03, 0.025, 0.02, 0.012, 0.012], food: [0.05, 0.04, 0.025, 0.06, 0.012], medicine: [0.02, 0.012, 0.006, 0.012, 0.003], jewelry: [0.012, 0.006, 0.0025, 0.001, 0],
 };
 // the workshops: loads a head turns out at full supply, and what one load takes
 const EWORK = {
@@ -51,6 +66,17 @@ const EWORK = {
   tech: { base: 0.05, in: { mana: 0.8, ore: 0.3, rare: 0.2 } },
   ships: { base: 0.05, in: { timber: 2, fuel: 0.4, cloth: 0.3 } },
   books: { base: 0.04, in: { timber: 0.3, cloth: 0.05 } },
+  // v0.21.0: what a load of each new workshop takes (Claude's numbers)
+  drink: { base: 0.04, in: { grain: 0.6, herbs: 0.05 } },
+  furniture: { base: 0.03, in: { timber: 1, cloth: 0.1 } },
+  build: { base: 0.06, in: { stone: 1, fuel: 0.4 } },
+  fert: { base: 0.035, in: { stone: 0.3, fuel: 0.2, protein: 0.1 } },
+  feed: { base: 0.04, in: { grain: 0.7 } },
+  textile: { base: 0.045, in: { cloth: 1 } },
+  pottery: { base: 0.03, in: { stone: 0.6, fuel: 0.5 } },
+  food: { base: 0.045, in: { grain: 0.4, protein: 0.4, salt: 0.15 } },
+  medicine: { base: 0.013, in: { herbs: 1, luxury: 0.05 } },
+  jewelry: { base: 0.007, in: { rare: 0.5, luxury: 0.2 } },
 };
 if (BLANK) { ENEED.mana = ENEED.mana.map(x => x * 0.4); EWORK.tech.in = { mana: 0.3, fuel: 0.5, ore: 0.3, rare: 0.2 }; }   // oil is dear and scarce: a head burns less of it, and machines run on coal too (my numbers)
 const SB = (H, s) => { let t = 0; for (const ch of s) t += H.b[ch] || 0; return t; };                   // land of these kinds

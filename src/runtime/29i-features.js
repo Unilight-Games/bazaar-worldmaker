@@ -228,7 +228,7 @@ const FEATG = {
 // mines of the communities do. A feature now tints its hexes toward its colour on a small sheet laid over the map smoothly, so the
 // edges melt into the ground around and the trees and peaks under it still show; its sign is drawn smaller and fainter, and in a
 // wide patch only on about half of its hexes. FEAT_TINT is how far the ground goes toward the feature's colour (Claude's number).
-const FEAT_TINT = 0.55, FEAT_ALPHA = 0.5, FEAT_SHEET = 6;
+const FEAT_TINT = 0.55, FEAT_ALPHA = 0.5, FEAT_SHEET = 6 * SHK;
 let featCv = null, featKey = '';
 const featRGB = h => { const n = parseInt(String(h).slice(1), 16); return [n >> 16, n >> 8 & 255, n & 255]; };
 const featGround = b => RCOL[b] || (b === 'S' ? [44, 74, 100] : b === 'L' ? [74, 118, 146] : RCOL.g);
@@ -273,7 +273,7 @@ function featRivers(c) {
   c.clip(); x0 -= R; y0 -= R; x1 += R; y1 += R;
   const near = bb => !bb || !(bb[2] < x0 || bb[0] > x1 || bb[3] < y0 || bb[1] > y1);
   for (const r of BRIV) if (near(r.bb)) for (const u of riverRuns(r)) strokeRiver(c, u.q, r.w, r.s, u.a, u.b);
-  for (const r of userRiversSorted()) { const d = RDER.get(r.id); if (d && near(d.bb)) strokeRiver(c, d.q, d.w, d.s); }
+  for (const r of userRiversSorted()) { const d = RDER.get(r.id); if (d && near(d.bb)) strokeRiver(c, d.q, d.w, d.c ? 'c' : d.s); }
   c.restore();
 }
 { const dg = drawOverGround; drawOverGround = function (c, w, h, live) { if (dg) dg(c, w, h, live); featDraw(c); featRivers(c); }; }

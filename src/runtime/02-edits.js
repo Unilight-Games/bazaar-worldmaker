@@ -28,6 +28,7 @@ const RK = {
   big: { name: 'แม่น้ำใหญ่', w: 4.0, s: 0 }, river: { name: 'แม่น้ำ', w: 2.5, s: 0 },
   stream: { name: 'ลำน้ำเล็ก', w: 1.5, s: 0 }, seasonal: { name: 'ลำน้ำตามฤดูกาล', w: 1.6, s: 1 },
   searv: { name: 'แม่น้ำตามฤดูกาล', w: 2.4, s: 1 },   // v0.18.5: a river that runs only in the wet part of the year
+  canal: { name: 'คลองขุด', w: 2.6, s: 0, c: 1 },     // v0.21.0: a cut made by hands, drawn straight between stone banks; sea-going ships pass, as through Panama
 };
 const CK = {
   capital: { name: 'เมืองหลวง', r: 4.2, min: 3.6, f: { min: 11, max: 16, base: 14 }, wt: 700 },
